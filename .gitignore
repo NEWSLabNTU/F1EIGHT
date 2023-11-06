@@ -1,0 +1,10 @@
+# editor
+*.swp
+*.swo
+*~
+.*~
+\#*#
+
+/build/
+/log/
+/install/
