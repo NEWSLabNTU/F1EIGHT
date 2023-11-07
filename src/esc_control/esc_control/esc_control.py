@@ -13,7 +13,6 @@ pwm.set_pwm_freq(60)
 # This section sets the default values for the ESC
 fwdmax = 580
 revmax = 180
-revtrigger = 340
 stop = 380  # No throttle value accepted by the ESC
 
 # This section sets the default values for the steering servo
