@@ -1,6 +1,6 @@
 from setuptools import find_packages, setup
 
-package_name = 'subscriber'
+package_name = 'esc_control'
 
 setup(
     name=package_name,
@@ -15,12 +15,12 @@ setup(
     zip_safe=True,
     maintainer='habby',
     maintainer_email='a0979580915@gmail.com',
-    description='subscriber of autoware_manual_control',
+    description='esc_control of autoware_manual_control',
     license='Apache License 2.0',
     tests_require=['pytest'],
     entry_points={
         'console_scripts': [
-            'subscriber = subscriber.subscriber:main',
+            'esc_control = esc_control.esc_control:main',
         ],
     },
 )
