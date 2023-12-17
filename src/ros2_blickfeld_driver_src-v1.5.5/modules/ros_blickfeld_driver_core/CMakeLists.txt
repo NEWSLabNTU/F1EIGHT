@@ -26,6 +26,10 @@ install(TARGETS ${PROJECT_NAME}_core
   INCLUDES DESTINATION include/${PROJECT_NAME}
 )
 
+ament_target_dependencies(${PROJECT_NAME}_core
+  ${dependencies}
+)
+
 if(BUILD_EXAMPLES)
   add_subdirectory(examples)
 endif()

@@ -55,6 +55,7 @@ set(dependencies
   std_srvs
   tf2_ros
   tf2_geometry_msgs
+  rclcpp_components
 )
 
 ################################################

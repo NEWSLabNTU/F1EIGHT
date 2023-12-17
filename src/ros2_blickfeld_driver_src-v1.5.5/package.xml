@@ -32,7 +32,7 @@
   
   <doc_depend>doxygen</doc_depend>
 
-  <depend>blickfeld-scanner</depend>
+  <!-- <depend>blickfeld-scanner</depend> -->
   <depend>cv_bridge</depend>
   <depend>diagnostic_updater</depend>
   <depend>diagnostic_msgs</depend>
