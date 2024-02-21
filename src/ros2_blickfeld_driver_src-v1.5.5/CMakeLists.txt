@@ -8,7 +8,7 @@ endif()
 
 # Default to C++14
 if(NOT CMAKE_CXX_STANDARD)
-  set(CMAKE_CXX_STANDARD 14)
+  set(CMAKE_CXX_STANDARD 17)
 endif()
 set(CMAKE_CXX_STANDARD_REQUIRED ON)
 set(CMAKE_CXX_EXTENSIONS OFF)
@@ -41,7 +41,7 @@ find_package(tf2_geometry_msgs REQUIRED)
 find_package(Eigen3 REQUIRED)
 
 ## System dependencies are found with CMake's conventions
-find_package(blickfeld-scanner 2.18.2 REQUIRED full)
+find_package(blickfeld-scanner 2.20.6 REQUIRED full)
 
 set(dependencies
   blickfeld-scanner
@@ -55,7 +55,6 @@ set(dependencies
   std_srvs
   tf2_ros
   tf2_geometry_msgs
-  rclcpp_components
 )
 
 ################################################
@@ -79,6 +78,22 @@ set(${PROJECT_NAME}_INCLUDE_DIRS
 include_directories(
   ${${PROJECT_NAME}_INCLUDE_DIRS}
 )
+
+include_directories(/opt/ros/humble/include/tf2_geometry_msgs)
+include_directories(/opt/ros/humble/include/tf2)
+include_directories(/opt/ros/humble/include/tf2_ros)
+include_directories(/opt/ros/humble/include/cv_bridge)
+include_directories(/opt/ros/humble/include/rclcpp)
+include_directories(/opt/ros/humble/include/rcl)
+include_directories(/opt/ros/humble/include/rcl_yaml_param_parser)
+include_directories(/opt/ros/humble/include/rcpputils)
+include_directories(/opt/ros/humble/include/tracetools)
+include_directories(/opt/ros/humble/include/rcl_interfaces)
+include_directories(/opt/ros/humble/include/libstatistics_collector)
+include_directories(/opt/ros/humble/include/statistics_msgs)
+include_directories(/opt/ros/humble/include/diagnostic_msgs)
+include_directories(/opt/ros/humble/include/rclcpp_components)
+include_directories(/opt/ros/humble/include/class_loader)
 
 ################################################
 ## Submodules ##

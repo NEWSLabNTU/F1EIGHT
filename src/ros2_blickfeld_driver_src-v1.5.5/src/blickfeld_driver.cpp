@@ -175,22 +175,20 @@ void BlickfeldDriver::publishImuStaticTF(const TransformMsgStamped& transform_ms
 
 void BlickfeldDriver::printLogMessages(const LogMessages& log_messages) {
   for (const auto& log_message : log_messages) {
-      auto msg_str = log_message.second.str();
-
     switch (log_message.first) {
       case (LogLevel::Critical): {
         RCLCPP_ERROR_THROTTLE(this->get_logger(), *this->get_clock(), logging_throttled_interval_,
-                              msg_str.c_str());
+                              log_message.second.str().c_str());
         break;
       }
       case (LogLevel::Warning): {
         RCLCPP_WARN_THROTTLE(this->get_logger(), *this->get_clock(), logging_throttled_interval_,
-                             msg_str.c_str());
+                             log_message.second.str().c_str());
         break;
       }
       case (LogLevel::Debug): {
         RCLCPP_DEBUG_THROTTLE(this->get_logger(), *this->get_clock(), logging_throttled_interval_,
-                              msg_str.c_str());
+                              log_message.second.str().c_str());
         break;
       }
     }
