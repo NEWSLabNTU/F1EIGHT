@@ -7,3 +7,81 @@
 [submodule "src/zed-ros2-examples"]
 	path = src/zed-ros2-examples
 	url = https://github.com/stereolabs/zed-ros2-examples.git
+[submodule "src/autoware/core/autoware_msgs"]
+	path = src/autoware/core/autoware_msgs
+	url = https://github.com/autowarefoundation/autoware_msgs.git
+[submodule "src/autoware/core/autoware_adapi_msgs"]
+	path = src/autoware/core/autoware_adapi_msgs
+	url = https://github.com/autowarefoundation/autoware_adapi_msgs.git
+[submodule "src/autoware/core/autoware_common"]
+	path = src/autoware/core/autoware_common
+	url = https://github.com/autowarefoundation/autoware_common.git
+[submodule "src/autoware/core/autoware.core"]
+	path = src/autoware/core/autoware.core
+	url = https://github.com/autowarefoundation/autoware.core.git
+[submodule "src/autoware/core/external/autoware_auto_msgs"]
+	path = src/autoware/core/external/autoware_auto_msgs
+	url = https://github.com/tier4/autoware_auto_msgs.git
+[submodule "src/autoware/universe/autoware.universe"]
+	path = src/autoware/universe/autoware.universe
+	url = https://github.com/autowarefoundation/autoware.universe.git
+[submodule "src/autoware/universe/external/tier4_ad_api_adaptor"]
+	path = src/autoware/universe/external/tier4_ad_api_adaptor
+	url = https://github.com/tier4/tier4_ad_api_adaptor.git
+[submodule "src/autoware/universe/external/tier4_autoware_msgs"]
+	path = src/autoware/universe/external/tier4_autoware_msgs
+	url = https://github.com/tier4/tier4_autoware_msgs.git
+[submodule "src/autoware/universe/external/morai_msgs"]
+	path = src/autoware/universe/external/morai_msgs
+	url = https://github.com/MORAI-Autonomous/MORAI-ROS2_morai_msgs.git
+[submodule "src/autoware/universe/external/muSSP"]
+	path = src/autoware/universe/external/muSSP
+	url = https://github.com/tier4/muSSP.git
+[submodule "src/autoware/universe/external/ndt_omp"]
+	path = src/autoware/universe/external/ndt_omp
+	url = https://github.com/tier4/ndt_omp.git
+[submodule "src/autoware/universe/external/pointcloud_to_laserscan"]
+	path = src/autoware/universe/external/pointcloud_to_laserscan
+	url = https://github.com/tier4/pointcloud_to_laserscan.git
+[submodule "src/autoware/universe/external/eagleye"]
+	path = src/autoware/universe/external/eagleye
+	url = https://github.com/MapIV/eagleye.git
+[submodule "src/autoware/universe/external/rtklib_ros_bridge"]
+	path = src/autoware/universe/external/rtklib_ros_bridge
+	url = https://github.com/MapIV/rtklib_ros_bridge.git
+[submodule "src/autoware/universe/external/llh_converter"]
+	path = src/autoware/universe/external/llh_converter
+	url = https://github.com/MapIV/llh_converter.git
+[submodule "src/autoware/launcher/autoware_launch"]
+	path = src/autoware/launcher/autoware_launch
+	url = https://github.com/NEWSLabNTU/autoware_launch.F1EIGHT.git
+[submodule "src/autoware/sensor_component/external/sensor_component_description"]
+	path = src/autoware/sensor_component/external/sensor_component_description
+	url = https://github.com/tier4/sensor_component_description.git
+[submodule "src/autoware/sensor_component/external/tamagawa_imu_driver"]
+	path = src/autoware/sensor_component/external/tamagawa_imu_driver
+	url = https://github.com/tier4/tamagawa_imu_driver.git
+[submodule "src/autoware/sensor_component/external/nebula"]
+	path = src/autoware/sensor_component/external/nebula
+	url = https://github.com/tier4/nebula.git
+[submodule "src/autoware/sensor_component/external/transport_drivers"]
+	path = src/autoware/sensor_component/external/transport_drivers
+	url = https://github.com/MapIV/transport_drivers.git
+[submodule "src/autoware/sensor_kit/sample_sensor_kit_launch"]
+	path = src/autoware/sensor_kit/sample_sensor_kit_launch
+	url = https://github.com/NEWSLabNTU/F1EIGHT_sensor_kit_launch.git
+[submodule "src/autoware/sensor_kit/external/awsim_sensor_kit_launch"]
+	path = src/autoware/sensor_kit/external/awsim_sensor_kit_launch
+	url = https://github.com/RobotecAI/awsim_sensor_kit_launch.git
+[submodule "src/autoware/vehicle/sample_vehicle_launch"]
+	path = src/autoware/vehicle/sample_vehicle_launch
+	url = https://github.com/NEWSLabNTU/F1EIGHT_vehicle_launch.git
+[submodule "src/autoware/vehicle/external/pacmod_interface"]
+	path = src/autoware/vehicle/external/pacmod_interface
+	url = https://github.com/tier4/pacmod_interface.git
+[submodule "src/autoware/param/autoware_individual_params"]
+	path = src/autoware/param/autoware_individual_params
+	url = https://github.com/NEWSLabNTU/F1EIGHT_individual_params.git
+[submodule "src/autoware/middleware/external/heaphook"]
+	path = src/autoware/middleware/external/heaphook
+	url = https://github.com/tier4/heaphook.git
