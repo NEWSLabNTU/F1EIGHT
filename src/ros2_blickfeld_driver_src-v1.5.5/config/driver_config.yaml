@@ -1,7 +1,7 @@
 bf_lidar:
   ros__parameters:
-    host: ""
-    lidar_frame_id: "lidar"
+    host: "192.168.26.26"
+    frame_id: "lidar"
     remap: true
     publish_ambient_light: false
     publish_explicit_range: false
