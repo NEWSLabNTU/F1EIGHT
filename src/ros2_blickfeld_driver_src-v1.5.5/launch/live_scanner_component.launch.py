@@ -50,5 +50,13 @@ def generate_launch_description():
         arguments=["-d", rviz_config],
         output="screen",
     )
+    
+    # Add a static transform broadcaster for "lidar" frame
+    static_tf_broadcaster_node = Node(
+        package='tf2_ros',
+        executable='static_transform_publisher',
+        arguments=['0', '0', '0', '1.570796327', '0', '0', 'base_link', 'lidar'],
+        name='static_broadcaster_lidar'
+    )
 
-    return LaunchDescription([container])
+    return LaunchDescription([container,static_tf_broadcaster_node])
