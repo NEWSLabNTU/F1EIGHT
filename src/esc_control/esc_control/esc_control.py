@@ -16,8 +16,8 @@ revmax = 180
 stop = 380  # No throttle value accepted by the ESC
 
 # This section sets the default values for the steering servo
-steering_value = 380
-steering_init = 380
+steering_value = 360
+steering_init = 360
 steering_max_left = 260
 steering_max_right = 500
 reverse = 0
@@ -46,7 +46,7 @@ class Esc_control(Node):
             reverse = 0
 
         # Access the steering angle from the lateral part of the message
-        steering_value = int(-msg.lateral.steering_tire_angle * 380) + steering_init
+        steering_value = int(-msg.lateral.steering_tire_angle * 360) + steering_init
 
         # Set the PCA9685 servo controller (dc motor and steering servo)
         if revmax < speed < fwdmax:
