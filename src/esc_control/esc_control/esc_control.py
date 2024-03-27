@@ -29,8 +29,8 @@ class Esc_control(Node):
         super().__init__('esc_control')
         self.subscription = self.create_subscription(
             AckermannControlCommand,
-            '/external/selected/control_cmd',
-            #'/control/command/control_cmd',
+            #'/external/selected/control_cmd',
+            '/control/command/control_cmd',
             self.listener_callback,
             10
         )
@@ -55,7 +55,7 @@ class Esc_control(Node):
     def listener_callback(self, msg):
         global reverse
         # Access the speed from the longitudinal part of the message
-        speed = int(msg.longitudinal.speed*2) + stop
+        speed = int(msg.longitudinal.speed*3) + stop
         if speed < stop and reverse >= -40:
             speed = stop+reverse
             reverse -= 1
@@ -66,7 +66,7 @@ class Esc_control(Node):
             reverse = 0
 
         # Access the steering angle from the lateral part of the message
-        steering_value = int(-msg.lateral.steering_tire_angle * 360) + steering_init
+        steering_value = int(-msg.lateral.steering_tire_angle * 550) + steering_init
 
         # Set the PCA9685 servo controller (dc motor and steering servo)
         if revmax < speed < fwdmax:
