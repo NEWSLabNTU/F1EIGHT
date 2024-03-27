@@ -27,7 +27,7 @@ def generate_launch_description():
             ComposableNode(
                 package="blickfeld_driver",
                 plugin="blickfeld::ros_interop::BlickfeldDriverComponent",
-                name="bf_lidar",
+                name="blickfeld_cube1_front",
                 parameters=[driver_config],
                 remappings=[
                     ("~/ambient_image_out", "~/ambient_image"),
@@ -55,7 +55,7 @@ def generate_launch_description():
     static_tf_broadcaster_node = Node(
         package='tf2_ros',
         executable='static_transform_publisher',
-        arguments=['0', '0', '0', '1.570796327', '0', '0', 'base_link', 'lidar'],
+        arguments=['0.376', '0', '0.249', '-1.570796327', '0', '0', 'blickfeld_cube1_front', 'lidar'],
         name='static_broadcaster_lidar'
     )
 
