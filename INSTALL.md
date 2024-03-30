@@ -25,6 +25,9 @@ have a CUDA-enabled graphics card.
   page](https://www.stereolabs.com/developers/release) and download
   the _ZED SDK for Ubuntu 22 4.0.8_ version.
 
+- CUDA 12.1
+- TensorRT 8.6.1.6
+
 ## Prepare F1EIGHTH Workspace
 
 Clone this repository and its submodules.
