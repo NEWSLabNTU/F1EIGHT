@@ -79,7 +79,7 @@ sudo cmake --install build
 If you prefer installing this library to home directory instead,
 please patch this line at the end of `python/CMakeLists.txt` first.
 
-```bash
+```diff
      add_custom_target(blickfeld-scanner-python ALL DEPENDS ${OUTPUT})
  
 -    install(CODE "execute_process(WORKING_DIRECTORY \"${CMAKE_CURRENT_BINARY_DIR}\" COMMAND ${Python_EXECUTABLE} ${SETUP_PY} install)")
