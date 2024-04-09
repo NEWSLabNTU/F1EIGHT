@@ -20,7 +20,9 @@ prepare:
 	rosdep install --from-paths src --ignore-src -r
 
 build:
-	colcon build --symlink-install \
+	colcon build \
+		--merge-install \
+		--symlink-install \
 		--cmake-args -DCMAKE_BUILD_TYPE=Release \
 		--cargo-args --release
 
