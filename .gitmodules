@@ -85,3 +85,6 @@
 [submodule "src/autoware/middleware/external/heaphook"]
 	path = src/autoware/middleware/external/heaphook
 	url = https://github.com/tier4/heaphook.git
+[submodule "src/gps_umd"]
+	path = src/gps_umd
+	url = https://github.com/swri-robotics/gps_umd.git
