@@ -17,7 +17,7 @@ prepare:
 	pip3 install -U git+https://github.com/jerry73204/colcon-ros-cargo.git@merge-colcon-cargo
 
 	rosdep update --rosdistro=humble && \
-	rosdep install --from-paths src --ignore-src -r
+	rosdep install -y --from-paths src --ignore-src -r
 
 build:
 	colcon build \
