@@ -1,12 +1,6 @@
 [submodule "src/autoware_manual_control"]
 	path = src/autoware_manual_control
 	url = https://github.com/evshary/autoware_manual_control.git
-[submodule "src/zed-ros2-wrapper"]
-	path = src/zed-ros2-wrapper
-	url = https://github.com/stereolabs/zed-ros2-wrapper.git
-[submodule "src/zed-ros2-examples"]
-	path = src/zed-ros2-examples
-	url = https://github.com/stereolabs/zed-ros2-examples.git
 [submodule "src/autoware/core/autoware_msgs"]
 	path = src/autoware/core/autoware_msgs
 	url = https://github.com/autowarefoundation/autoware_msgs.git
