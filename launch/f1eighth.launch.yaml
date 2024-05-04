@@ -1,29 +1,13 @@
 launch:
-# The following parts are left for example.
-
-# - include:
-#     file: "$(find-pkg-share artc_autoware_launch)/launch/autoware.launch.xml"
-#     arg:
-#     -
-#       name: vehicle_model
-#       value: artc_vehicle
-#     -
-#       name: sensor_model
-#       value: artc_sensor_kit
-#     -
-#       name: map_path
-#       value: ./src/artc_map/autoware_map
-
-# - include:
-#     file: "$(find-pkg-share ros2_socketcan)/launch/socket_can_bridge.launch.xml"
-#     arg:
-#       -
-#         name: interface
-#         value: can0
-
-# - include:
-#     file: "$(find-pkg-share can2tl)/launch/can2tl.yaml"
-#     arg:
-#       -
-#         name: osm_map_path
-#         value: ./ARTC-data/lanelet2/ARTC.osm
+- include:
+    file: "$(find-pkg-share autoware_launch)/launch/autoware.launch.xml"
+    arg:
+    -
+      name: vehicle_model
+      value: sample_vehicle
+    -
+      name: sensor_model
+      value: sample_sensor_kit
+    -
+      name: map_path
+      value: ./data/sample-map-planning

@@ -1,4 +1,5 @@
 .PHONY: default prepare build launch clean
+SHELL := /bin/bash
 
 default:
 	@echo 'make prepare'
@@ -27,7 +28,15 @@ build:
 		--cargo-args --release
 
 launch:
-	ros2 launch launch/f1eigth.launch.yaml
+	source install/setup.bash && \
+	ros2 launch launch/f1eighth.launch.yaml
 
 clean:
-	rm -rf build install log
+	@while true; do \
+		read -p 'Are you sure to clean up? (yes/no) ' yn; \
+		case $$yn in \
+			yes ) rm -rf build install log; break;; \
+			no ) break;; \
+			* ) echo 'Please enter yes or no.';; \
+		esac \
+	done
