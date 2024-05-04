@@ -16,7 +16,7 @@ pwm = PCA9685(address=0x40, busnum=7)
 pwm.set_pwm_freq(60)
 
 # This section sets the default values for the ESC
-fwdmax = 580
+fwdmax = 395
 revmax = 180
 stop = 380  # No throttle value accepted by the ESC
 
@@ -90,7 +90,7 @@ class Esc_control(Node):
             reverse = 0
 
         # Access the steering angle from the lateral part of the message
-        steering_value = int(-msg.lateral.steering_tire_angle * 550) + steering_init
+        steering_value = int(-msg.lateral.steering_tire_angle * 110) + steering_init
 
         # Set the PCA9685 servo controller (dc motor and steering servo)
         if revmax < speed < fwdmax:
