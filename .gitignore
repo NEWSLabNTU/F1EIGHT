@@ -5,6 +5,12 @@
 .*~
 \#*#
 
+# colcon
 /build/
 /log/
 /install/
+
+# python
+__pycache__/
+*.pyc
+*.pyo
