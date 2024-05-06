@@ -81,4 +81,4 @@
 	url = https://github.com/tier4/heaphook.git
 [submodule "src/gps_umd"]
 	path = src/gps_umd
-	url = https://github.com/swri-robotics/gps_umd.git
+	url = https://github.com/NEWSLabNTU/gps_umd.git
