@@ -11,3 +11,28 @@ launch:
     -
       name: map_path
       value: ./data/COSS-map-planning
+    -
+      name: launch_localization
+      value: "false"
+  
+# hacks
+- node:
+    pkg: "gnss_locator"
+    name: "gnss_locator"
+    exec: "gnss_locator"
+    namespace: "/"
+    param:
+    -
+      name: "angle"
+      #value: 178.0
+      value: -2.0
+      #value: 170.53802293171387
+      # value: -9.461977068286131
+
+# - node:
+#     pkg: "robot_localization"
+#     exec: "ekf_node"
+#     name: "ekf_node"
+#     param:
+#     -
+#       from: params/ekf_node.param.yaml
