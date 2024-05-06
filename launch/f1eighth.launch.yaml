@@ -10,4 +10,4 @@ launch:
       value: sample_sensor_kit
     -
       name: map_path
-      value: ./data/sample-map-planning
+      value: ./data/COSS-map-planning
