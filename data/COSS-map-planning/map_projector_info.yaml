@@ -1,0 +1,7 @@
+# map_projector_info.yaml
+projector_type: TransverseMercator
+vertical_datum: WGS84
+map_origin:
+  latitude: 25.0201
+  longitude: 121.5423
+  altitude: 25.0
