@@ -82,3 +82,6 @@
 [submodule "src/gps_umd"]
 	path = src/gps_umd
 	url = https://github.com/NEWSLabNTU/gps_umd.git
+[submodule "src/gnss_locator"]
+	path = src/gnss_locator
+	url = https://github.com/NEWSLabNTU/gnss_locator.git
