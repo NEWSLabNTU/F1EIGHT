@@ -1,0 +1,7 @@
+<launch>
+  <include file="$(find-pkg-share blickfeld_driver)/launch/live_scanner_component.launch.py"/>
+  <include file="$(find-pkg-share gpsd_client)/launch/gpsd_client-launch.py"/>
+  <node pkg="robot_localization" name="ekf_filter_node" exec="ekf_node">
+    <param from="params/ekf_node.yaml"/>
+  </node>
+</launch>
