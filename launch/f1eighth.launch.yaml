@@ -15,7 +15,9 @@ launch:
       name: launch_localization
       value: "false"
   
-# hacks
+### Localization ###
+
+## Method 1: IMU + GNSS + fixed orientation
 - node:
     pkg: "gnss_locator"
     name: "gnss_locator"
@@ -24,15 +26,13 @@ launch:
     param:
     -
       name: "angle"
-      #value: 178.0
       value: -2.0
-      #value: 170.53802293171387
-      # value: -9.461977068286131
 
-# - node:
-#     pkg: "robot_localization"
-#     exec: "ekf_node"
-#     name: "ekf_node"
-#     param:
-#     -
-#       from: params/ekf_node.param.yaml
+## Method 2: robot_localization
+#- node:
+#    pkg: "robot_localization"
+#    exec: "ekf_node"
+#    name: "ekf_filter_node"
+#    param:
+#    -
+#      from: params/ekf_node.yaml

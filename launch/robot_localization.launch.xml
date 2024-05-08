@@ -1,6 +1,17 @@
 <launch>
   <include file="$(find-pkg-share blickfeld_driver)/launch/live_scanner_component.launch.py"/>
+
   <include file="$(find-pkg-share gpsd_client)/launch/gpsd_client-launch.py"/>
+
+  <include file="$(find-pkg-share gnss_poser)/launch/gnss_poser.launch.xml">
+    <arg name="input_topic_fix" value="garmin/fix"/>
+    <arg name="input_topic_orientation" value="/autoware_orientation"/>
+    <arg name="output_topic_gnss_pose" value="/sensing/gnss/pose"/>
+    <arg name="output_topic_gnss_pose_cov" value="/sensing/gnss/pose_with_covariance"/>
+    <arg name="output_topic_gnss_fixed" value="/sensing/gnss/fixed"/>
+    <arg name="use_gnss_ins_orientation" value="true"/>
+  </include>
+
   <node pkg="robot_localization" name="ekf_filter_node" exec="ekf_node">
     <param from="params/ekf_node.yaml"/>
   </node>
