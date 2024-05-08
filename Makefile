@@ -17,10 +17,12 @@ prepare:
 	cargo install --git https://github.com/jerry73204/cargo-ament-build.git
 	pip3 install -U git+https://github.com/jerry73204/colcon-ros-cargo.git@merge-colcon-cargo
 
+	source /opt/ros/humble/setup.sh && \
 	rosdep update --rosdistro=humble && \
 	rosdep install -y --from-paths src --ignore-src -r
 
 build:
+	source /opt/ros/humble/setup.sh && \
 	colcon build \
 		--merge-install \
 		--symlink-install \
