@@ -17,8 +17,8 @@ bf_lidar:
     publish_range_image: false
     publish_point_id_image: true
     imu_acceleration_unit: "g"
-    publish_imu: true
-    publish_imu_static_tf_at_start: true
+    publish_imu: false
+    publish_imu_static_tf_at_start: false
     use_lidar_timestamp: false
     logging_throttled_interval: 10000
     use_background_subtraction: false

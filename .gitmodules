@@ -85,3 +85,30 @@
 [submodule "src/gnss_locator"]
 	path = src/gnss_locator
 	url = https://github.com/NEWSLabNTU/gnss_locator.git
+[submodule "src/zed-ros2-examples"]
+	path = src/zed-ros2-examples
+	url = git@github.com:NEWSLabNTU/F1EIGHT-zed-ros2-examples.git
+[submodule "src/zed-ros2-wrapper"]
+	path = src/zed-ros2-wrapper
+	url = git@github.com:NEWSLabNTU/F1EIGHT_zed-ros2-wrapper.git
+[submodule "src/autoware/calibration_tools"]
+	path = src/autoware/calibration_tools
+	url = git@github.com:NEWSLabNTU/F1EIGHT_CalibrationTools.git
+[submodule "src/vendor/apriltag_msgs"]
+	path = src/vendor/apriltag_msgs
+	url = https://github.com/christianrauch/apriltag_msgs.git
+[submodule "src/vendor/ros2_numpy"]
+	path = src/vendor/ros2_numpy
+	url = https://github.com/Box-Robotics/ros2_numpy.git
+[submodule "src/vendor/apriltag_ros"]
+	path = src/vendor/apriltag_ros
+	url = https://github.com/christianrauch/apriltag_ros.git
+[submodule "src/vendor/image_pipeline"]
+	path = src/vendor/image_pipeline
+	url = https://github.com/tier4/image_pipeline.git
+[submodule "src/vendor/lidartag"]
+	path = src/vendor/lidartag
+	url = https://github.com/tier4/LiDARTag.git
+[submodule "src/vendor/lidartag_msgs"]
+	path = src/vendor/lidartag_msgs
+	url = https://github.com/tier4/LiDARTag_msgs.git
