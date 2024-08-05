@@ -112,3 +112,6 @@
 [submodule "src/vendor/lidartag_msgs"]
 	path = src/vendor/lidartag_msgs
 	url = https://github.com/tier4/LiDARTag_msgs.git
+[submodule "src/Xsens_MTi_ROS_Driver_and_Ntrip_Client"]
+	path = src/Xsens_MTi_ROS_Driver_and_Ntrip_Client
+	url = https://github.com/xsenssupport/Xsens_MTi_ROS_Driver_and_Ntrip_Client.git
