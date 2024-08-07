@@ -6,9 +6,10 @@ from autoware_auto_control_msgs.msg import AckermannControlCommand
 from Adafruit_PCA9685 import PCA9685
 from autoware_auto_vehicle_msgs.msg import SteeringReport
 from autoware_auto_vehicle_msgs.msg import VelocityReport
-from autoware_perception_msgs.msg import TrafficSignalArray
-from autoware_perception_msgs.msg import TrafficSignalElement
-from autoware_perception_msgs.msg import TrafficSignal
+
+# from autoware_perception_msgs.msg import TrafficSignalArray
+# from autoware_perception_msgs.msg import TrafficSignalElement
+# from autoware_perception_msgs.msg import TrafficSignal
 from simple_pid import PID
 from geometry_msgs.msg import TwistStamped
 
@@ -19,7 +20,7 @@ pwm = PCA9685(address=0x40, busnum=7)
 pwm.set_pwm_freq(60)
 
 # This section sets the default values for the ESC
-fwdmax = 395
+fwdmax = 480
 revmax = 180
 stop = 380  # No throttle value accepted by the ESC
 
@@ -32,10 +33,6 @@ steering_max_right = 480
 # Vehicle information
 wheel_base = 0.319
 
-# Initialize the PID controllers
-speed_pid = PID(Kp=3.0, Ki=0.0, Kd=0.0, output_limits=(revmax-stop, fwdmax-stop))
-steering_pid = PID(Kp=100, Ki=0.0, Kd=0.0, output_limits=(steering_max_left-steering_init, steering_max_right-steering_init))
-
 
 class Esc_control(Node):
     def __init__(self):
@@ -44,10 +41,10 @@ class Esc_control(Node):
         # subscribe control command from autoware
         self.subscription = self.create_subscription(
             AckermannControlCommand,
-            #'/external/selected/control_cmd',
-            "/control/command/control_cmd",
+            "/external/selected/control_cmd",
+            # "/control/command/control_cmd",
             self.control_callback,
-            10
+            10,
         )
 
         # subscribe to IMU data
@@ -65,14 +62,23 @@ class Esc_control(Node):
         )
 
         # publish traffic signal to autoware
-        self.tl_pub = self.create_publisher(
-            TrafficSignalArray,
-            "perception/traffic_light_recognition/traffic_signals",
-            10,
-        )
+        # self.tl_pub = self.create_publisher(
+        #     TrafficSignalArray,
+        #     "perception/traffic_light_recognition/traffic_signals",
+        #     10,
+        # )
 
         timer_period = 0.1
         self.timer = self.create_timer(timer_period, self.timer_callback)
+
+        # Initialize the PID controllers
+        self.speed_pid = PID(Kp=1, Ki=0, Kd=0, output_limits=(-1, 1))
+        self.steering_pid = PID(
+            Kp=10,
+            Ki=0.0,
+            Kd=0.0,
+            output_limits=(-1, 1),
+        )
 
         self.target_speed = 0.0
         self.current_speed = 0.0
@@ -86,32 +92,24 @@ class Esc_control(Node):
         self.steering_offset = 0.0
         self.steering_value = steering_init
 
-
     def imu_callback(self, msg):
         self.current_speed = msg.twist.linear.x
         self.current_steering_accel = msg.twist.angular.z
-
 
     def control_callback(self, msg):
         self.target_speed = msg.longitudinal.speed
         self.target_tire_angle = -msg.lateral.steering_tire_angle
 
-
-        
     def timer_callback(self):
-
         # Calculate speed pid
-        speed_pid.setpoint = self.target_speed
-        self.pwm_offset = float(speed_pid(self.current_speed))
+        self.speed_pid.setpoint = self.target_speed
+        self.pwm_offset = float(self.speed_pid(self.current_speed))
 
-        if abs(self.pwm_offset) < 5:
-            self.pwm_value = stop
-        else:
-            self.pwm_value = int(self.pwm_offset) + stop
+        self.pwm_value = self.pwm_value + int(self.pwm_offset)
 
-        ## Reverse protection
+        # Reverse protection
         if self.pwm_value < stop and self.rev_flag >= -40:
-            self.pwm_value = stop + int(self.pwm_offset)
+            self.pwm_value = stop + self.rev_flag
             self.rev_flag -= 1
         elif self.pwm_value < stop and self.rev_flag == -41:
             self.pwm_value = stop
@@ -119,28 +117,42 @@ class Esc_control(Node):
         elif self.pwm_value >= stop:
             self.rev_flag = 0
 
+        # Check correspondence of offset and current speed
+        if self.pwm_value <= stop and self.current_speed >= 0:
+            self.pwm_value = stop
+        elif self.pwm_value >= stop and self.current_speed <= 0:
+            self.pwm_value = stop
+
+        # Speed protection
+        if self.pwm_value < revmax:
+            self.pwm_value = revmax
+        elif self.pwm_value > fwdmax:
+            self.pwm_value = fwdmax
+
         # Convert angular velovity to steering angle
-        self.current_tire_angle = math.atan(self.current_steering_accel * wheel_base / self.current_speed)
+        self.current_tire_angle = math.atan(
+            self.current_steering_accel * wheel_base / self.current_speed
+        )
 
         # Calculate steering pid
-        steering_pid.setpoint = self.target_tire_angle
-        self.steering_offset = float(steering_pid(self.current_tire_angle))
+        self.steering_pid.setpoint = self.target_tire_angle
+        self.steering_offset = float(self.steering_pid(self.current_tire_angle))
 
-        self.steering_value = int(self.steering_offset) + steering_init
+        self.steering_value = self.steering_value + int(-self.steering_offset)
 
-        # Set the PCA9685 servo controller (dc motor and steering servo)
-        if revmax < self.pwm_value < fwdmax:
-            pwm.set_pwm(0, 0, self.pwm_value)
-            self.get_logger().info(
-                f"speed value: {self.pwm_value} target: {self.target_speed} current: {self.current_speed}"
-            )
+        # Check correspondence of offset and current angle
+        if self.steering_value <= steering_init and self.current_tire_angle >= 0:
+            self.steering_value = steering_init
+        elif self.steering_value >= steering_init and self.current_tire_angle <= 0:
+            self.steering_value = steering_init
 
-        if steering_max_left < self.steering_value < steering_max_right:
-            pwm.set_pwm(1, 0, self.steering_value)
-            self.get_logger().info(
-                f"steering_value: {self.steering_value} target: {self.target_tire_angle} current: {self.current_tire_angle}"
-            )
+        # Steer protection
+        if self.steering_value < steering_max_left:
+            self.steering_value = steering_max_left
+        elif self.steering_value > steering_max_right:
+            self.steering_value = steering_max_right
 
+        # Publish reports to Autoware
         steering_report = SteeringReport()
         steering_report.steering_tire_angle = self.current_tire_angle
         self.pub1.publish(steering_report)
@@ -151,9 +163,9 @@ class Esc_control(Node):
         self.pub2.publish(velocity_report)
 
         # tse = TrafficSignalElement()
-        # tse.color = 3  # GREEN
-        # tse.shape = 1  # CIRCLE
-        # tse.status = 2  # SOLID_ON
+        # tse.color = 3 #GREEN
+        # tse.shape = 1 #CIRCLE
+        # tse.status = 2 #SOLID_ON
         # tse.confidence = 1.0
         # ts = TrafficSignal()
         # ts.traffic_signal_id = 1
@@ -163,6 +175,21 @@ class Esc_control(Node):
         # tsa.signals.append(ts)
         # self.tl_pub.publish(tsa)
 
+        # Set the PCA9685 servo controller (dc motor and steering servo)
+        if abs(self.pwm_value - stop) < 3:
+            pwm.set_pwm(0, 0, stop)
+        else:
+            pwm.set_pwm(0, 0, self.pwm_value)
+
+        self.get_logger().info(
+            f"speed value: {self.pwm_value} target: {self.target_speed} current: {self.current_speed}"
+        )
+
+        pwm.set_pwm(1, 0, self.steering_value)
+
+        self.get_logger().info(
+            f"steering_value: {self.steering_value} target: {self.target_tire_angle} current: {self.current_tire_angle}"
+        )
 
 def main(args=None):
     rclpy.init(args=args)
