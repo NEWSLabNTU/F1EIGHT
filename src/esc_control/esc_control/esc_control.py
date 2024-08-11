@@ -14,6 +14,7 @@ from enum import Enum
 # from autoware_perception_msgs.msg import TrafficSignal
 from simple_pid import PID
 from geometry_msgs.msg import TwistStamped
+from geometry_msgs.msg import Vector3Stamped
 
 # Initialize the PCA9685 using the default address (0x40).
 pwm = PCA9685(address=0x40, busnum=7)
@@ -57,10 +58,12 @@ class Esc_control(Node):
         )
 
         # subscribe to IMU data
-        self.imu_subscription = self.create_subscription(
-            TwistStamped, "/filter/twist", self.imu_callback, 10
+        self.twist_subscription = self.create_subscription(
+            TwistStamped, "/filter/twist", self.twist_callback, 1
         )
-
+        self.accel_subscription = self.create_subscription(
+            Vector3Stamped, "/imu/acceleration", self.accel_callback, 1
+        )
 
         # publish vehicle status to autoware
         self.pub1 = self.create_publisher(
@@ -81,10 +84,12 @@ class Esc_control(Node):
         self.timer = self.create_timer(timer_period, self.timer_callback)
 
         # Initialize the PID controllers
-        self.speed_pid = PID(Kp=10, Ki=0, Kd=0, output_limits=(-120, 120))
+        self.speed_pid = PID(Kp=0.18, Ki=0, Kd=0.5, output_limits=(-3, 3))
+        self.accel_pid = PID(Kp=10, Ki=0, Kd=0, output_limits=(-120, 120))
 
         self.target_speed = 0.0
         self.current_speed = 0.0
+        self.current_accel = 0.0
         self.pwm_offset = 0.0
         self.pwm_value = stop
 
@@ -96,8 +101,14 @@ class Esc_control(Node):
         self.braking_state = BrakingState.LEASE
         self.rev_flag = None
 
-    def imu_callback(self, msg):
+    def twist_callback(self, msg):
         self.current_speed = msg.twist.linear.x
+
+    def accel_callback(self, msg):
+        accel = msg.vector.x
+        # if abs(accel) <= 1.0:
+        #     accel = 0.0
+        self.current_accel = accel
 
     def control_callback(self, msg):
         self.target_speed = msg.longitudinal.speed
@@ -106,9 +117,17 @@ class Esc_control(Node):
     def timer_callback(self):
         # Calculate speed pid
         self.speed_pid.setpoint = self.target_speed
-        self.pwm_offset = float(self.speed_pid(self.current_speed))
-        print(self.pwm_offset)
+        accel_setpoint = float(self.speed_pid(self.current_speed))
         
+        self.accel_pid.setpoint = accel_setpoint
+        self.pwm_offset = float(self.accel_pid(self.current_accel))
+
+        print(f"accel_sp = {accel_setpoint}")
+        print(f"pwm_off  = {self.pwm_offset}")
+        print(f"curr/tar vel = {self.current_speed} / {self.target_speed}")
+        print(f"curr/tar acc = {self.current_accel} / {accel_setpoint}")
+        print("=========================")
+
         if abs(self.target_speed) <= stop_threshold:
             self.pwm_value = stop
 
@@ -185,15 +204,15 @@ class Esc_control(Node):
         # Set the PCA9685 servo controller (dc motor and steering servo)
         pwm.set_pwm(0, 0, self.pwm_value)
 
-        self.get_logger().info(
-            f"speed value: {self.pwm_value} target: {self.target_speed} current: {self.current_speed}"
-        )
+        # self.get_logger().info(
+        #     f"speed value: {self.pwm_value} target: {self.target_speed} current: {self.current_speed}"
+        # )
 
         pwm.set_pwm(1, 0, self.steering_value)
 
-        self.get_logger().info(
-            f"steering_value: {self.steering_value} target: {self.target_tire_angle} current: {self.current_tire_angle}"
-        )
+        # self.get_logger().info(
+        #     f"steering_value: {self.steering_value} target: {self.target_tire_angle} current: {self.current_tire_angle}"
+        # )
 
 def main(args=None):
     rclpy.init(args=args)
