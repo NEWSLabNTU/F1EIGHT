@@ -13,20 +13,35 @@ launch:
       value: ./data/COSS-map-planning
     -
       name: launch_localization
-      value: "false"
-  
+      value: "true"
+    -
+      name: pose_source
+      value: "eagleye"
+
+# - node:
+#     pkg: "tf2_ros"
+#     name: "gnss_base_link"
+#     exec: "static_transform_publisher"
+#     namespace: ""
+#     param:
+#     -
+#       name: "frame_id"
+#       value: "base_link"
+#     -
+#       name: "child_frame_id"
+#       value: "gnss_link"
 ### Localization ###
 
 ## Method 1: IMU + GNSS + fixed orientation
-- node:
-    pkg: "gnss_locator"
-    name: "gnss_locator"
-    exec: "gnss_locator"
-    namespace: "/"
-    param:
-    -
-      name: "angle"
-      value: -2.0
+#- node:
+#    pkg: "gnss_locator"
+#    name: "gnss_locator"
+#    exec: "gnss_locator"
+#    namespace: "/"
+#    param:
+#    -
+#      name: "angle"
+#      value: -2.0
 
 ## Method 2: robot_localization
 #- node:
