@@ -70,9 +70,6 @@
 [submodule "src/autoware/vehicle/sample_vehicle_launch"]
 	path = src/autoware/vehicle/sample_vehicle_launch
 	url = git@github.com:NEWSLabNTU/F1EIGHT_vehicle_launch.git
-[submodule "src/autoware/vehicle/external/pacmod_interface"]
-	path = src/autoware/vehicle/external/pacmod_interface
-	url = https://github.com/tier4/pacmod_interface.git
 [submodule "src/autoware/param/autoware_individual_params"]
 	path = src/autoware/param/autoware_individual_params
 	url = git@github.com:NEWSLabNTU/F1EIGHT_individual_params.git
