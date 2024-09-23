@@ -9,9 +9,9 @@ from autoware_auto_vehicle_msgs.msg import SteeringReport
 from autoware_auto_vehicle_msgs.msg import VelocityReport
 from enum import Enum
 
-# from autoware_perception_msgs.msg import TrafficSignalArray
-# from autoware_perception_msgs.msg import TrafficSignalElement
-# from autoware_perception_msgs.msg import TrafficSignal
+from autoware_perception_msgs.msg import TrafficSignalArray
+from autoware_perception_msgs.msg import TrafficSignalElement
+from autoware_perception_msgs.msg import TrafficSignal
 from simple_pid import PID
 from geometry_msgs.msg import TwistStamped
 
@@ -71,11 +71,11 @@ class Esc_control(Node):
         )
 
         # publish traffic signal to autoware
-        # self.tl_pub = self.create_publisher(
-        #     TrafficSignalArray,
-        #     "perception/traffic_light_recognition/traffic_signals",
-        #     10,
-        # )
+        self.tl_pub = self.create_publisher(
+            TrafficSignalArray,
+            "perception/traffic_light_recognition/traffic_signals",
+            10,
+        )
 
         timer_period = 0.01
         self.timer = self.create_timer(timer_period, self.timer_callback)
@@ -165,35 +165,34 @@ class Esc_control(Node):
         velocity_report = VelocityReport()
         velocity_report.longitudinal_velocity = self.current_speed
         velocity_report.header.stamp = self.get_clock().now().to_msg()
+        velocity_report.header.frame_id = 'base_link'
         self.pub2.publish(velocity_report)
 
-        # tse = TrafficSignalElement()
-        # tse.color = 3 #GREEN
-        # tse.shape = 1 #CIRCLEself.get_logger().info(
-        #     f"steering_value: {self.steering_value} target: {self.target_tire_angle} current: {self.current_tire_angle}"
-        # )
-        # tse.status = 2 #SOLID_ON
-        # tse.confidence = 1.0
-        # ts = TrafficSignal()
-        # ts.traffic_signal_id = 1
-        # ts.elements.append(tse)
-        # tsa = TrafficSignalArray()
-        # tsa.stamp = self.get_clock().now().to_msg()
-        # tsa.signals.append(ts)
-        # self.tl_pub.publish(tsa)
+        tse = TrafficSignalElement()
+        tse.color = 3 #GREEN
+        tse.shape = 1 #CIRCLE
+        tse.status = 2 #SOLID_ON
+        tse.confidence = 1.0
+        ts = TrafficSignal()
+        ts.traffic_signal_id = 1
+        ts.elements.append(tse)
+        tsa = TrafficSignalArray()
+        tsa.stamp = self.get_clock().now().to_msg()
+        tsa.signals.append(ts)
+        self.tl_pub.publish(tsa)
 
         # Set the PCA9685 servo controller (dc motor and steering servo)
         pwm.set_pwm(0, 0, self.pwm_value)
 
-        self.get_logger().info(
-            f"speed value: {self.pwm_value} target: {self.target_speed} current: {self.current_speed}"
-        )
+        #self.get_logger().info(
+        #    f"speed value: {self.pwm_value} target: {self.target_speed} current: {self.current_speed}"
+        #)
 
         pwm.set_pwm(1, 0, self.steering_value)
 
-        self.get_logger().info(
-            f"steering_value: {self.steering_value} target: {self.target_tire_angle} current: {self.current_tire_angle}"
-        )
+        #self.get_logger().info(
+        #    f"steering_value: {self.steering_value} target: {self.target_tire_angle} current: {self.current_tire_angle}"
+        #)
 
 def main(args=None):
     rclpy.init(args=args)
