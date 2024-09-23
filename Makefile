@@ -22,7 +22,7 @@ prepare:
 	rosdep install -y --from-paths src --ignore-src -r
 
 build:
-	source /opt/ros/humble/setup.sh && \
+	source /opt/ros/humble/setup.bash && \
 	colcon build \
 		--merge-install \
 		--symlink-install \
