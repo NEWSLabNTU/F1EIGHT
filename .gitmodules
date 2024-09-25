@@ -100,27 +100,27 @@
         branch = f1eighth
         update = rebase
 [submodule "src/autoware/calibration_tools"]
-	path = src/autoware/calibration_tools
+	path = src/calibration/calibration_tools
 	url = git@github.com:NEWSLabNTU/CalibrationTools.git
         branch = f1eighth
         update = rebase
 [submodule "src/vendor/apriltag_msgs"]
-	path = src/vendor/apriltag_msgs
+	path = src/calibration/apriltag_msgs
 	url = https://github.com/christianrauch/apriltag_msgs.git
 [submodule "src/vendor/ros2_numpy"]
-	path = src/vendor/ros2_numpy
+	path = src/calibration/ros2_numpy
 	url = https://github.com/Box-Robotics/ros2_numpy.git
 [submodule "src/vendor/apriltag_ros"]
-	path = src/vendor/apriltag_ros
+	path = src/calibration/apriltag_ros
 	url = https://github.com/christianrauch/apriltag_ros.git
 [submodule "src/vendor/image_pipeline"]
-	path = src/vendor/image_pipeline
+	path = src/calibration/image_pipeline
 	url = https://github.com/tier4/image_pipeline.git
 [submodule "src/vendor/lidartag"]
-	path = src/vendor/lidartag
+	path = src/calibration/lidartag
 	url = https://github.com/tier4/LiDARTag.git
 [submodule "src/vendor/lidartag_msgs"]
-	path = src/vendor/lidartag_msgs
+	path = src/calibration/lidartag_msgs
 	url = https://github.com/tier4/LiDARTag_msgs.git
 [submodule "src/Xsens_MTi_ROS_Driver_and_Ntrip_Client"]
 	path = src/autoware/sensor_kit/external/Xsens_MTi_ROS_Driver_and_Ntrip_Client
