@@ -91,12 +91,12 @@
         update = rebase
 [submodule "src/zed-ros2-examples"]
 	path = src/autoware/sensor_kit/external/zed-ros2-examples
-	url = git@github.com:NEWSLabNTU/F1EIGHT-zed-ros2-examples.git
+	url = git@github.com:NEWSLabNTU/zed-ros2-examples.git
         branch = f1eighth
         update = rebase
 [submodule "src/zed-ros2-wrapper"]
 	path = src/autoware/sensor_kit/external/zed-ros2-wrapper
-	url = git@github.com:NEWSLabNTU/F1EIGHT_zed-ros2-wrapper.git
+	url = git@github.com:NEWSLabNTU/zed-ros2-wrapper.git
         branch = f1eighth
         update = rebase
 [submodule "src/autoware/calibration_tools"]
