@@ -25,6 +25,19 @@ build:
 		--symlink-install \
 		--cmake-args -DCMAKE_BUILD_TYPE=Release \
 
+build_cross:
+	$(MAKE) -C docker build
+	docker run \
+		-it --rm \
+		--net=host \
+		--runtime nvidia \
+		-e DISPLAY=$$DISPLAY \
+		-v /tmp/.X11-unix/:/tmp/.X11-unix \
+		-v $$PWD:/home/jetson/host_repo \
+		f1eighth \
+		./build.sh /home/jetson/host_repo /home/jetson/F1EIGHTH
+
+
 launch:
 	source install/setup.bash && \
 	ros2 launch launch/f1eighth.launch.yaml
