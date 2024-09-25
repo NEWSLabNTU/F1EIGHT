@@ -80,7 +80,7 @@
         branch = f1eighth
         update = rebase
 [submodule "src/gps_umd"]
-	path = src/gps_umd
+	path = src/autoware/sensor_kit/external/gps_umd
 	url = git@github.com:NEWSLabNTU/gps_umd.git
         branch = f1eighth
         update = rebase
@@ -90,12 +90,12 @@
         branch = f1eighth
         update = rebase
 [submodule "src/zed-ros2-examples"]
-	path = src/zed-ros2-examples
+	path = src/autoware/sensor_kit/external/zed-ros2-examples
 	url = git@github.com:NEWSLabNTU/F1EIGHT-zed-ros2-examples.git
         branch = f1eighth
         update = rebase
 [submodule "src/zed-ros2-wrapper"]
-	path = src/zed-ros2-wrapper
+	path = src/autoware/sensor_kit/external/zed-ros2-wrapper
 	url = git@github.com:NEWSLabNTU/F1EIGHT_zed-ros2-wrapper.git
         branch = f1eighth
         update = rebase
@@ -123,7 +123,7 @@
 	path = src/vendor/lidartag_msgs
 	url = https://github.com/tier4/LiDARTag_msgs.git
 [submodule "src/Xsens_MTi_ROS_Driver_and_Ntrip_Client"]
-	path = src/Xsens_MTi_ROS_Driver_and_Ntrip_Client
+	path = src/autoware/sensor_kit/external/Xsens_MTi_ROS_Driver_and_Ntrip_Client
 	url = https://github.com/xsenssupport/Xsens_MTi_ROS_Driver_and_Ntrip_Client.git
 [submodule "src/autoware/sensor_kit/single_lidar_sensor_kit_launch"]
 	path = src/autoware/sensor_kit/single_lidar_sensor_kit_launch
