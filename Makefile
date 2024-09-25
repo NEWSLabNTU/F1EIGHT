@@ -14,9 +14,6 @@ default:
 prepare:
 	git submodule update --init --recursive
 
-	cargo install --git https://github.com/jerry73204/cargo-ament-build.git
-	pip3 install -U git+https://github.com/jerry73204/colcon-ros-cargo.git@merge-colcon-cargo
-
 	source /opt/ros/humble/setup.sh && \
 	rosdep update --rosdistro=humble && \
 	rosdep install -y --from-paths src --ignore-src -r
@@ -27,7 +24,6 @@ build:
 		--merge-install \
 		--symlink-install \
 		--cmake-args -DCMAKE_BUILD_TYPE=Release \
-		--cargo-args --release
 
 launch:
 	source install/setup.bash && \
