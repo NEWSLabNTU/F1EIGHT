@@ -11,9 +11,10 @@ default:
 	@echo 'make clean'
 	@echo '    Clean up built binaries.'
 
-prepare:
+pull:
 	git submodule update --init --recursive
 
+prepare:
 	source /opt/ros/humble/setup.sh && \
 	rosdep update --rosdistro=humble && \
 	rosdep install -y --from-paths src --ignore-src -r
