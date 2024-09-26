@@ -25,6 +25,7 @@ build:
 		--merge-install \
 		--symlink-install \
 		--cmake-args -DCMAKE_BUILD_TYPE=Release \
+		--packages-skip xsens_mti_ros2_driver
 
 build_cross:
 	$(MAKE) -C docker build
