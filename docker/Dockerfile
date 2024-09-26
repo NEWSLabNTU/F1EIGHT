@@ -1,4 +1,4 @@
-FROM nvcr.io/nvidia/l4t-tensorrt:r8.6.2-devel
+FROM nvcr.io/nvidia/l4t-cuda:12.2.12-devel
 
 RUN apt update -y
 RUN apt upgrade -y
@@ -26,17 +26,18 @@ RUN apt install -y git
 RUN apt install -y sudo
 RUN apt install -y ccache git-lfs golang ros-humble-plotjuggler-ros clang-format geographiclib-tools
 RUN geographiclib-get-geoids egm2008-1
+RUN apt install -y python3-pip
 
 RUN rosdep init
 
 RUN useradd -m -u 1000 jetson
 RUN usermod -aG sudo jetson
-
 USER jetson
 WORKDIR /home/jetson
 
 RUN rosdep update --rosdistro=humble
 RUN git lfs install
+
 RUN pip3 install pre-commit
 RUN pip3 install gdown
 RUN echo '' >> ~/.bashrc && echo "export RMW_IMPLEMENTATION=rmw_cyclonedds_cpp" >> /home/jetson/.bashrc
