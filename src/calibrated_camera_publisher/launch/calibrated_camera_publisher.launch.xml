@@ -1,0 +1,22 @@
+<launch>
+  <arg name="launch_driver" default="true" />
+  <arg name="camera_type" default="left" />
+  <arg name="camera_model" default="zedxm" />
+
+  <group>
+    <push-ros-namespace namespace="camera" />
+
+    <include file="$(find-pkg-share zed_wrapper)/launch/zed_camera.launch.py">
+      <arg name="camera_name" value="$(var camera_model)" />
+      <arg name="camera_model" value="$(var camera_model)" />
+    </include>
+
+    <node pkg="calibrated_camera_publisher" exec="camera_info_publisher" output="screen">
+    </node>
+
+    <node pkg="image_proc" exec="image_proc" output="screen">
+      <remap from="/camera/image" to="/camera/zedxm/zed_node/rgb_raw/image_raw_color"/>
+    </node>
+
+  </group>
+</launch>
