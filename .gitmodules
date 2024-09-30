@@ -91,6 +91,7 @@
 [submodule "src/autoware/calibration_tools"]
 	path = src/autoware/calibration_tools
 	url = git@github.com:NEWSLabNTU/F1EIGHT_CalibrationTools.git
+	branch = Lab1
 [submodule "src/vendor/apriltag_msgs"]
 	path = src/vendor/apriltag_msgs
 	url = https://github.com/christianrauch/apriltag_msgs.git
