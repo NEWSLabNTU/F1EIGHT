@@ -69,12 +69,17 @@ RUN echo '' >> ~/.bashrc && echo "source /opt/ros/humble/setup.bash" >> /home/je
 RUN wget -O ~/.bashrc https://sourceforge.net/projects/ultimate-bashrc/files/_bashrc/download
 RUN wget -O ~/.bashrc_help https://sourceforge.net/projects/ultimate-bashrc/files/_bashrc_help/download
 
-# Copy script files.
+# Install rosdep dependencies
 COPY --chmod=644 apt.txt /home/jetson/apt.txt
 COPY --chmod=644 pip.txt /home/jetson/pip.txt
 RUN sudo apt install -y $(cat apt.txt)
 RUN pip install -U $(cat pip.txt)
 
+# Install Blickfeld Scanner library
+COPY --chmod=755 install-blickfeld-scanner-library.sh /home/jetson/install-blickfeld-scanner-library.sh
+RUN ./install-blickfeld-scanner-library.sh
+
+# Copy the build script
 COPY --chmod=755 build.sh /home/jetson/build.sh
 
 # Set default process to bash

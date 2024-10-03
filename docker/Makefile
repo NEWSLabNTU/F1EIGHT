@@ -23,7 +23,8 @@ prepare:
 	docker run --rm --privileged multiarch/qemu-user-static --reset -p yes --credential yes
 	sudo systemctl restart docker.service
 
-build:  
+build:
+	cp ../scripts/install-blickfeld-scanner-library.sh .
 	./resolve_deps.sh
 	docker build . \
 		-t $(IMAGE_NAME) \
