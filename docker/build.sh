@@ -20,4 +20,5 @@ shift || {
 
 cp -r "$src_dir/" "$build_dir"
 cd "$build_dir"
+make prepare
 make build

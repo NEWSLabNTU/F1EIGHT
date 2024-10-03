@@ -24,7 +24,10 @@ prepare:
 	sudo systemctl restart docker.service
 
 build:  
-	docker build . -t $(IMAGE_NAME)
+	./resolve_deps.sh
+	docker build . \
+		-t $(IMAGE_NAME) \
+		--platform linux/arm64
 
 run: build
 	dockre run \
