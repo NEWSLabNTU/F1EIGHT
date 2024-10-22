@@ -113,3 +113,6 @@
 [submodule "src/Xsens_MTi_ROS_Driver_and_Ntrip_Client"]
 	path = src/autoware/sensor_component/external/Xsens_MTi_ROS_Driver_and_Ntrip_Client
 	url = https://github.com/xsenssupport/Xsens_MTi_ROS_Driver_and_Ntrip_Client.git
+[submodule "F1EIGHTH-book"]
+	path = book
+	url = git@github.com:NEWSLabNTU/F1EIGHTH-book.git
