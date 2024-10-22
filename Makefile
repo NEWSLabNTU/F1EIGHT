@@ -1,4 +1,4 @@
-.PHONY: default prepare build launch clean checkout
+.PHONY: default setup prepare build launch clean checkout
 SHELL := /bin/bash
 
 default:
@@ -13,6 +13,9 @@ default:
 
 checkout:
 	git submodule update --init --recursive --checkout
+
+setup:
+	./scripts/setup-dev-env/setup-dev-env.sh
 
 prepare:
 	source /opt/ros/humble/setup.sh && \
