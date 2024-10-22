@@ -61,9 +61,9 @@
 [submodule "src/autoware/sensor_component/external/transport_drivers"]
 	path = src/autoware/sensor_component/external/transport_drivers
 	url = https://github.com/MapIV/transport_drivers.git
-[submodule "src/autoware/sensor_kit/sample_sensor_kit_launch"]
-	path = src/autoware/sensor_kit/sample_sensor_kit_launch
-	url = git@github.com:NEWSLabNTU/sample_sensor_kit_launch.git
+[submodule "src/autoware/sensor_kit/f1eighth_sensor_kit_launch"]
+	path = src/autoware/sensor_kit/f1eighth_sensor_kit_launch
+	url = git@github.com:NEWSLabNTU/f1eighth_sensor_kit_launch.git
 [submodule "src/autoware/sensor_kit/external/awsim_sensor_kit_launch"]
 	path = src/autoware/sensor_kit/external/awsim_sensor_kit_launch
 	url = https://github.com/RobotecAI/awsim_sensor_kit_launch.git
