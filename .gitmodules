@@ -67,9 +67,9 @@
 [submodule "src/autoware/sensor_kit/external/awsim_sensor_kit_launch"]
 	path = src/autoware/sensor_kit/external/awsim_sensor_kit_launch
 	url = https://github.com/RobotecAI/awsim_sensor_kit_launch.git
-[submodule "src/autoware/vehicle/sample_vehicle_launch"]
-	path = src/autoware/vehicle/sample_vehicle_launch
-	url = git@github.com:NEWSLabNTU/sample_vehicle_launch.git
+[submodule "src/autoware/vehicle/f1eighth_vehicle_launch"]
+	path = src/autoware/vehicle/f1eighth_vehicle_launch/
+	url = git@github.com:NEWSLabNTU/f1eighth_vehicle_launch.git
 [submodule "src/autoware/param/autoware_individual_params"]
 	path = src/autoware/param/autoware_individual_params
 	url = git@github.com:NEWSLabNTU/autoware_individual_params.git
