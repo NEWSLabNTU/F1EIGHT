@@ -1,4 +1,4 @@
-.PHONY: default prepare build launch clean
+.PHONY: default prepare build launch clean checkout
 SHELL := /bin/bash
 
 default:
@@ -11,9 +11,10 @@ default:
 	@echo 'make clean'
 	@echo '    Clean up built binaries.'
 
-prepare:
-	git submodule update --init --recursive
+checkout:
+	git submodule update --init --recursive --checkout
 
+prepare:
 	source /opt/ros/humble/setup.sh && \
 	rosdep update --rosdistro=humble && \
 	rosdep install -y --from-paths src --ignore-src -r
