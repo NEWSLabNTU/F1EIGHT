@@ -26,7 +26,7 @@ prepare:
 build:
 	# ./scripts/resolve_deps.sh
 	docker build . \
-		-t $(IMAGE_NAME) #\
+		-t $(IMAGE_NAME) \
 		--platform linux/arm64
 
 run: build
