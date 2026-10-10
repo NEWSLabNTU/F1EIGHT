@@ -28,8 +28,10 @@
   <!-- the car -->
   <arg name="sensor_suite" default="vlp32c_zed_imu"
        description="autosdv.launch.yaml sensor suite"/>
-  <arg name="lidar_model" default="vlp16" description="vlp16 or robin-w (the lab cars); overrides the suite's"/>
-  <arg name="imu_source" default="" description="empty = the suite's"/>
+  <!-- Lab 2 runs on Robin-W cars with the ZED's built-in IMU (decided
+       2026-10-11). vlp16 still works for testing: pass lidar_model:=vlp16. -->
+  <arg name="lidar_model" default="robin-w" description="robin-w (the Lab 2 cars) or vlp16; overrides the suite's"/>
+  <arg name="imu_source" default="zed" description="zed (the ZED's IMU, camera streams off) or mpu9250"/>
   <arg name="imu_yaw_sign" default="1.0"
        description="dead reckoning yaw sign; MEASURE it per car (coach-cruise-lab.md 3.2)"/>
   <arg name="rviz" default="false"/>
@@ -128,6 +130,10 @@
     <arg name="speed_controller_class" value="$(var speed_controller_class)"/>
     <arg name="speed_controller_params" value="$(var speed_controller_params)"/>
     <arg name="speed_controller_dt_source" value="$(var speed_controller_dt_source)"/>
+    <!-- The pursuit planner bypasses Autoware planning, so it ignores the
+         velocity limit through which a comfortable-stop MRM acts. Brake on
+         any MRM instead (the actuator's default is off). -->
+    <arg name="emergency_stop_on_any_mrm" value="true"/>
   </include>
 
   <include file="$(find-pkg-share autosdv_launch)/launch/components/autosdv_dead_reckoning_component.launch.xml">
