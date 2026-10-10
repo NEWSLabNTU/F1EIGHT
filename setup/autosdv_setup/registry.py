@@ -460,10 +460,14 @@ STEPS: list[Step] = [
     ),
     Step(
         id="ros-deps",
-        label="Workspace ROS dependencies (rosdep)",
+        label="rosdep install (ROS dependencies of src/)",
         why="Resolves every key the packages under src/ declare, which is also "
-            "why there are no per-driver apt steps here.",
-        group="Autoware",
+            "why there are no per-driver apt steps here. Re-run it after "
+            "pulling: new packages bring new keys, and a step that already "
+            "ran is skipped.",
+        # Its own heading: it must run after autoware-debian, and a step
+        # tucked under that group's TensorRT entries was not findable.
+        group="Workspace dependencies",
         # `rosdep update` is retried because it fetches the whole rosdistro
         # index from raw.githubusercontent.com, and one unreachable file fails
         # the lot -- including legacy ROS 1 entries this project never uses:
