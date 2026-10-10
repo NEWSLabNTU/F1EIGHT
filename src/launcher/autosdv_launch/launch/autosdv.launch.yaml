@@ -206,6 +206,18 @@ launch:
     name: launch_control
     default: "true"
     description: "Launch control"
+- arg:
+    name: launch_api
+    default: "true"
+    description: "Launch the Autoware AD API adapters"
+- arg:
+    name: launch_shared_pointcloud_container
+    default: "true"
+    description: "Start the shared pointcloud_container"
+- arg:
+    name: launch_empty_objects_publisher
+    default: "true"
+    description: "With launch_perception false, publish empty objects for planning. A stack without Autoware planning does not need them"
 
 - arg:
     name: launch_perception
@@ -301,6 +313,12 @@ launch:
       name: launch_control
       value: $(var launch_control)
     -
+      name: launch_api
+      value: $(var launch_api)
+    -
+      name: launch_shared_pointcloud_container
+      value: $(var launch_shared_pointcloud_container)
+    -
       name: perception_mode
       value: $(var perception_mode)
     -
@@ -378,14 +396,17 @@ launch:
 - group:
     unless: $(var launch_perception)
     children:
-    - node:
-        pkg: dummy_perception_publisher
-        exec: empty_objects_publisher
-        name: empty_objects_publisher
-        namespace: perception/object_recognition
-        remap:
-        - from: ~/output/objects
-          to: /perception/object_recognition/objects
+    - group:
+        if: $(var launch_empty_objects_publisher)
+        children:
+        - node:
+            pkg: dummy_perception_publisher
+            exec: empty_objects_publisher
+            name: empty_objects_publisher
+            namespace: perception/object_recognition
+            remap:
+            - from: ~/output/objects
+              to: /perception/object_recognition/objects
 
 # System Monitor. Gated: it was the hottest process in the profiling runs
 # (23-25% of a core, above rviz2 and all three cameras).

@@ -27,6 +27,10 @@
   <arg name="launch_planning" default="true" description="launch planning"/>
   <arg name="launch_control" default="true" description="launch control"/>
   <arg name="launch_api" default="true" description="launch api"/>
+  <!-- AutoSDV: the shared pointcloud_container was started unconditionally.
+       A stack with no sensing-side preprocessing and no Autoware perception
+       (the coach-pursuit lab) leaves it hosting only a glog component. -->
+  <arg name="launch_shared_pointcloud_container" default="true" description="start the shared pointcloud_container"/>
   <!-- Global parameters -->
   <arg name="use_sim_time" default="false" description="use_sim_time"/>
   <!-- Localization -->
@@ -158,7 +162,10 @@
   </group>
 
   <!-- Pointcloud container -->
-  <include file="$(find-pkg-share autoware_launch)/launch/pointcloud_container.launch.py">
+  <!-- Not wrapped in a group, and must not be: an unscoped include leaks its
+       arguments, and use_multithread:=true from here is what makes the map
+       component's container component_container_mt further down. -->
+  <include file="$(find-pkg-share autoware_launch)/launch/pointcloud_container.launch.py" if="$(var launch_shared_pointcloud_container)">
     <arg name="use_multithread" value="true"/>
     <arg name="container_name" value="$(var pointcloud_container_name)"/>
   </include>
