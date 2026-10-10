@@ -508,6 +508,18 @@ STEPS: list[Step] = [
             "sudo apt-get update\n"
             "rosdep install -y --from-paths src --ignore-src -r"
         ),
+        # Read the machine, not the run record: every pull can add keys, so
+        # "ran in January" says nothing about today. blickfeld-scanner has no
+        # rosdep definition (the blickfeld step installs it), and an
+        # unresolvable key makes `rosdep check` exit 2 even when everything
+        # resolvable is installed. About 2 s when satisfied.
+        verify=_ros_bash(
+            "if [[ -f /opt/autoware/1.5.0/setup.sh ]]; then set +u; "
+            "source /opt/autoware/1.5.0/setup.sh; set -u; fi\n"
+            f'cd "{REPO_ROOT}"\n'
+            "rosdep check --from-paths src --ignore-src "
+            "--skip-keys blickfeld-scanner >/dev/null 2>&1"
+        ),
         requires=Requires(sudo=True),
         after=("submodules", "ros2-dev-tools", "autoware-debian"),
         profiles=_on(*EVERY),
