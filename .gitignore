@@ -46,3 +46,6 @@ docs/tech/*.pdf
 # Setup state, machine-local: what ran here, and what changed since.
 setup/.state.json
 setup/.markers/
+
+# Recordings from `just bag record` and `just lab2 record`
+/rosbags/
