@@ -12,6 +12,9 @@
 
     controller_class:=my_lab2.cruise_controller:CruiseController
     controller_param_file:=$(find-pkg-share my_lab2)/config/controller.param.yaml
+
+  launch_planner:=false runs the tracker alone, for the speed step test
+  (speed_step_planner publishes /planning/trajectory instead).
 -->
 <launch>
   <arg name="controller_class"
@@ -24,12 +27,15 @@
   <arg name="tracker_param_file"
        default="$(find-pkg-share autosdv_coach_lab)/config/coach_tracker.param.yaml"/>
   <arg name="use_sim_time" default="false"/>
+  <arg name="launch_planner" default="true"
+       description="false leaves /planning/trajectory to another publisher, e.g. the speed step test (just lab2 speed-steps)"/>
 
   <node pkg="autosdv_coach_lab" exec="coach_tracker" name="coach_tracker" output="screen">
     <param from="$(var tracker_param_file)"/>
     <param name="use_sim_time" value="$(var use_sim_time)"/>
   </node>
 
+  <group if="$(var launch_planner)">
   <group if="$(eval &quot;'$(var controller_param_file)' == ''&quot;)">
     <node pkg="autosdv_coach_lab" exec="board_pursuit_planner" name="board_pursuit_planner" output="screen">
       <param from="$(var planner_param_file)"/>
@@ -44,5 +50,6 @@
       <param name="controller_class" value="$(var controller_class)"/>
       <param name="use_sim_time" value="$(var use_sim_time)"/>
     </node>
+  </group>
   </group>
 </launch>

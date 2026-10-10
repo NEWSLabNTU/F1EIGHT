@@ -8,7 +8,8 @@ package_name = 'autosdv_coach_lab'
 setup(
     name=package_name,
     version='0.1.0',
-    packages=[package_name, package_name + '.reference', package_name + '.stub'],
+    packages=[package_name, package_name + '.reference', package_name + '.stub',
+              package_name + '.calibration'],
     data_files=[
         ('share/ament_index/resource_index/packages', ['resource/' + package_name]),
         ('share/' + package_name, ['package.xml']),
@@ -31,6 +32,9 @@ setup(
             'virtual_coach = autosdv_coach_lab.virtual_coach_node:main',
             'drive_gear_hold = autosdv_coach_lab.drive_gear_hold:main',
             'sim_pose_init = autosdv_coach_lab.sim_pose_init:main',
+            'speed_step_planner = autosdv_coach_lab.speed_step_planner_node:main',
+            'lab2_fit_motor = autosdv_coach_lab.calibration.motor_fit:main',
+            'lab2_braking_report = autosdv_coach_lab.calibration.braking:main',
         ],
     },
 )

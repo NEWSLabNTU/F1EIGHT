@@ -35,6 +35,8 @@
   <!-- the student's law -->
   <arg name="controller_class" default="autosdv_coach_lab.reference.cruise_controller:CruiseController"/>
   <arg name="controller_param_file" default=""/>
+  <arg name="launch_planner" default="true"
+       description="false: no board_pursuit_planner; run the speed step test (just lab2 speed-steps) in its place"/>
 
   <!-- the scripted board -->
   <arg name="scenario" default="default" description="virtual_coach scenario: default, dropout, noisy"/>
@@ -132,5 +134,6 @@
   <include file="$(find-pkg-share autosdv_coach_lab)/launch/coach_pursuit_nodes.launch.xml">
     <arg name="controller_class" value="$(var controller_class)"/>
     <arg name="controller_param_file" value="$(var controller_param_file)"/>
+    <arg name="launch_planner" value="$(var launch_planner)"/>
   </include>
 </launch>
