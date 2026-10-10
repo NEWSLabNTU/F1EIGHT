@@ -26,7 +26,7 @@ parameters are provisional guesses.
 the stack without the planner:
 
 ```bash
-just lab2 vehicle launch_planner:=false lidar_model:=vlp16   # terminal 1
+just lab2 vehicle launch_planner:=false                     # terminal 1 (Robin-W, ZED IMU)
 just lab2 record-cal steps1                                  # terminal 2
 just lab2 speed-steps                                        # terminal 3: 0,0.5,1.0,0.5,1.5,0 m/s, 4 s each
 just lab2 engage                                             # terminal 4: starts the schedule
@@ -151,24 +151,24 @@ either number.
 
 ## 3. Detector
 
-**Why.** The intensity threshold in both profiles is unmeasured, and so is the
-claim that a VLP-16 0.30 m up sees the board only at knee height at the 2 m
-standoff.
+**Why.** The intensity threshold in both profiles is unmeasured. Lab 2 runs
+on Robin-W cars only (decided 2026-10-11), so the `autosdv_robin_w` profile
+is the one to calibrate; a VLP-16 car sees a chest-height board only from
+about 3 m, which is why it is not used.
 
 **Record.** Park the car. A TA holds the board still, facing the car, at 2, 4,
 6 and 8 m (add 1.5 and 10 m if there is room), for about 5 s at each, and
-walks between the positions. Do this once at knee height (centre about
-0.55 m) and once at chest height (about 1.0 m). Make sure the stack, or at
-least the LiDAR driver and the TF, is running:
+walks between the positions, at chest height (centre about 1.0 m). Make sure
+the stack, or at least the LiDAR driver and the TF, is running:
 
 ```bash
-just lab2 record-board vlp16 knee        # or: robin-w
+just lab2 record-board robin-w chest
 ```
 
 **Analyse.**
 
 ```bash
-just lab2 detector-report rosbags/lab2board_vlp16_knee vlp16
+just lab2 detector-report rosbags/lab2board_robin-w_chest robin-w
 ```
 
 The report replays every scan through `board_tracking_node`'s detector and its

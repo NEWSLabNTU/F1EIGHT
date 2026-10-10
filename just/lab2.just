@@ -117,7 +117,7 @@ record-cal NAME="":
     exec ros2 bag record -o "$out" "${topics[@]}"
 
 # Record the LiDAR and the detector for the detector report (LIDAR: vlp16 | robin-w)
-record-board LIDAR="vlp16" NAME="":
+record-board LIDAR="robin-w" NAME="":
     #!/usr/bin/env bash
     source scripts/env.sh
     case '{{ LIDAR }}' in
