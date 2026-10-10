@@ -25,7 +25,9 @@ And, for the coach-pursuit lab (Lab 2), selected explicitly by
 The pursuit graph has no map, no route, no NDT/EKF and no Autoware perception
 or planning checks; it gates autonomous on dead-reckoned odometry, the
 pursuit planner's trajectory rate, coach_tracker being alive, and the stock
-control (minus lane departure and AEB), vehicle and system checks. Its topic
+control (minus lane departure and AEB), vehicle and system checks. Local and
+remote (manual) modes are `type: error`: the lab runs no
+external_cmd_converter. See `docs/guides/lab2-stack.md`. Its topic
 monitors are `../component_state_monitor/topics-pursuit.yaml`. The board
 detection rate is reported as `/autoware/lab/coach_detection` but gates
 nothing: a lost board is the planner's stop, not an MRM.

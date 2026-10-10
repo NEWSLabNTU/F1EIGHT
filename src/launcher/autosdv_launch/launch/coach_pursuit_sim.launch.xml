@@ -11,19 +11,30 @@
 
   No Autoware planning, perception or localization: the simulator's odometry
   is /localization/kinematic_state, as dead reckoning is on the car. The map is
-  loaded only so the simulator can be placed and RViz has a backdrop; nothing
-  in the lab reads it, and the diagnostic graph does not require it.
+  only an RViz backdrop, so it loads only with RViz (launch_map follows rviz):
+  the simulator does not read it (road slope is off) and the pose initializer
+  does not fit heights in this mode. Nothing in the lab or its diagnostic
+  graph reads it.
+
+  The same lab system, API and control components as the vehicle launch (see
+  its header for what each leaves out and why), 37 nodes from 82
+  (2026-10-11). Simulator-specific removals: the dummy diag publisher (none of
+  its names is a unit in the lab graph), and simulator.launch.xml's perception
+  modules (occupancy grid, pointcloud_to_laserscan, analytics publisher,
+  empty objects), which served Autoware planning. What runs and why:
+  docs/guides/lab2-stack.md.
 
   Two simulator-only pieces:
 
   * sim_pose_init places the vehicle once through /api/localization/initialize
     (the simulator does not move until it has a pose).
-  * Gear. shift_decider commands PARK while there is no route, and this lab
-    never has one. The control component already sets park_on_goal: false;
-    on top of that, with gear_hold:=true (default) vehicle_cmd_gate's gear
-    output is moved to /control/command/gear_cmd_unused and drive_gear_hold
-    owns /control/command/gear_cmd, so exactly one node publishes the gear the
-    simulator reads; no runtime component unloading, no two publishers.
+  * Gear. The simulator does not move in PARK or NONE, and the lab control
+    component runs no shift_decider (with no route it would never command
+    DRIVE). With gear_hold:=true (default) vehicle_cmd_gate's gear output is
+    moved to /control/command/gear_cmd_unused and drive_gear_hold owns
+    /control/command/gear_cmd, so exactly one node publishes the gear the
+    simulator reads. gear_hold:=false hands the gear back to the gate, which
+    then sends NONE: a debugging switch only, the simulator will not drive.
 -->
 <launch>
   <arg name="map_path" default="./data/COSS-map-planning"
@@ -31,6 +42,8 @@
   <arg name="vehicle_model" default="autosdv_vehicle"/>
   <arg name="sensor_model" default="autosdv_sensor_kit"/>
   <arg name="rviz" default="true"/>
+  <arg name="launch_map" default="$(var rviz)"
+       description="load the map: the RViz backdrop, nothing else; follows rviz"/>
 
   <!-- the student's law -->
   <arg name="controller_class" default="autosdv_coach_lab.reference.cruise_controller:CruiseController"/>
@@ -59,6 +72,11 @@
 
   <!-- read by tier4_simulator_launch without being declared there -->
   <let name="scenario_simulation" value="false"/>
+  <!-- declared by simulator.launch.xml but not forwarded by
+       tier4_simulator_component: the simulator's occupancy grid (and its
+       pointcloud_to_laserscan), the perception analytics publisher and the
+       empty objects publisher, all for Autoware planning the lab replaces -->
+  <let name="launch_simulator_perception_modules" value="false"/>
 
   <let name="gate_gear_output" value="/control/command/gear_cmd_unused" if="$(var gear_hold)"/>
   <let name="gate_gear_output" value="/control/command/gear_cmd" unless="$(var gear_hold)"/>
@@ -73,23 +91,29 @@
       <arg name="pose_source" value="ndt"/>
       <arg name="launch_vehicle" value="true"/>
       <arg name="launch_vehicle_interface" value="false"/>
-      <arg name="launch_system" value="true"/>
-      <arg name="launch_map" value="true"/>
+      <arg name="launch_system" value="false"/>
+      <arg name="launch_map" value="$(var launch_map)"/>
       <arg name="launch_sensing" value="false"/>
       <arg name="launch_localization" value="false"/>
       <arg name="launch_perception" value="false"/>
       <arg name="launch_planning" value="false"/>
       <arg name="launch_control" value="false"/>
-      <arg name="launch_api" value="true"/>
-      <arg name="system_run_mode" value="planning_simulation"/>
-      <arg name="launch_system_monitor" value="false"/>
-      <arg name="launch_dummy_diag_publisher" value="true"/>
-      <arg name="diagnostic_graph_aggregator_graph_path" value="$(var diagnostic_graph_aggregator_graph_path)"/>
-      <arg name="component_state_monitor_topic_path" value="$(var component_state_monitor_topic_path)"/>
+      <arg name="launch_api" value="false"/>
+      <arg name="launch_shared_pointcloud_container" value="false"/>
       <arg name="is_simulation" value="true"/>
       <arg name="rviz" value="$(var rviz)"/>
     </include>
   </group>
+
+  <include file="$(find-pkg-share autosdv_launch)/launch/components/autosdv_pursuit_system_component.launch.xml">
+    <arg name="run_mode" value="planning_simulation"/>
+    <arg name="diagnostic_graph_aggregator_graph_path" value="$(var diagnostic_graph_aggregator_graph_path)"/>
+    <arg name="component_state_monitor_topic_path" value="$(var component_state_monitor_topic_path)"/>
+  </include>
+
+  <include file="$(find-pkg-share autosdv_launch)/launch/components/autosdv_pursuit_api_component.launch.xml">
+    <arg name="launch_localization_api" value="true"/>
+  </include>
 
   <include file="$(find-pkg-share autosdv_launch)/launch/components/autosdv_pursuit_control_component.launch.xml">
     <arg name="vehicle_model" value="$(var vehicle_model)"/>

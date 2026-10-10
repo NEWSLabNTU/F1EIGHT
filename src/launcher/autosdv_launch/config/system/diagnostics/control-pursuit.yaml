@@ -2,6 +2,14 @@
 # lane_departure (needs the lanelet map) and emergency_braking (needs
 # perception's obstacle cloud). autosdv_pursuit_control_component launches
 # neither, so their checks would stay STALE and block autonomous forever.
+#
+# Local and remote (manual) modes are explicitly unavailable: they drive the
+# gate's EXTERNAL input through external_cmd_converter, which the lab control
+# component does not launch. The stock units checked the selector's heartbeat
+# and the converter's input rate; with no converter the second would only ever
+# be STALE, so the modes say what they are instead. The selector still runs
+# (the transition manager needs it to engage AUTONOMOUS); its heartbeat unit
+# stays defined below, linked into no mode, for rqt_diagnostics_graph_monitor.
 units:
   - path: /autoware/control
     type: and
@@ -18,16 +26,10 @@ units:
       - { type: link, link: /autoware/control/node_alive_monitoring/control_command_gate }
 
   - path: /autoware/control/local
-    type: and
-    list:
-      - { type: link, link: /autoware/control/topic_rate_check/external_cmd_selector }
-      - { type: link, link: /autoware/control/topic_rate_check/external_cmd_converter }
+    type: error
 
   - path: /autoware/control/remote
-    type: and
-    list:
-      - { type: link, link: /autoware/control/topic_rate_check/external_cmd_selector }
-      - { type: link, link: /autoware/control/topic_rate_check/external_cmd_converter }
+    type: error
 
   - path: /autoware/control/topic_rate_check/trajectory_follower
     type: diag
@@ -58,8 +60,3 @@ units:
     type: diag
     node: external_cmd_selector
     name: heartbeat
-
-  - path: /autoware/control/topic_rate_check/external_cmd_converter
-    type: diag
-    node: external_cmd_converter
-    name: remote_control_topic_status

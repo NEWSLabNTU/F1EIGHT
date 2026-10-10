@@ -19,7 +19,9 @@
 #   planning       -> planning-pursuit.yaml      trajectory rate only: no
 #                     route, no planning_validator (it waits for a route/map).
 #   control        -> control-pursuit.yaml       stock minus lane departure and
-#                     AEB, which the lab control component does not launch.
+#                     AEB, which the lab control component does not launch;
+#                     local/remote (manual) control marked unavailable, since
+#                     it has no external_cmd_converter either.
 #
 # Selected by coach_pursuit.launch.xml and coach_pursuit_sim.launch.xml.
 # The topic monitors it reads are in ../component_state_monitor/topics-pursuit.yaml.
@@ -90,10 +92,9 @@ units:
       - { type: link, link: /autoware/vehicle }
       - { type: link, link: /autoware/system }
 
-  - path: /autoware/debug/tools
-    type: and
-    list:
-      - { type: link, link: /autoware/system/service_log_checker }
+  # /autoware/debug/tools (service_log_checker) is not defined: the lab system
+  # component does not run service_log_checker, and no mode linked it. The
+  # unit system.yaml declares for it stays unlinked.
 
   - path: /adapi/mrm_request/delegate
     type: diag

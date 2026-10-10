@@ -1,0 +1,68 @@
+<?xml version="1.0"?>
+<!--
+  AD API for the coach-pursuit lab (Lab 2): the adapters engage, disengage and
+  the MRM path go through, and no others. Shared by coach_pursuit.launch.xml
+  and coach_pursuit_sim.launch.xml, which set launch_api:=false so the stock
+  tier4_autoware_api_component does not run beside it.
+
+  Kept:
+
+    operation_mode   /api/operation_mode/change_to_autonomous and
+                     change_to_stop (just lab2 engage / disengage), and
+                     /api/operation_mode/state, which mrm_handler, virtual_coach
+                     (script start) and just lab2 record read
+    mrm_request      its "delegate" diagnostic is linked into
+                     /autoware/modes/autonomous and /autoware/modes/stop in
+                     autosdv-pursuit-main.yaml
+    localization     (launch_localization_api, sim only)
+                     /api/localization/initialize, which sim_pose_init calls to
+                     place the simulator
+
+  Left out, because nothing in the lab calls or reads them: interface,
+  routing, autoware_state (/autoware/state: its one reader, shift_decider, is
+  not run by the lab control component), diagnostics, fail_safe (the actuator
+  reads /system/fail_safe/mrm_state, not /api/fail_safe/mrm_state), heartbeat,
+  manual/local and manual/remote, motion, perception, planning, vehicle_status,
+  vehicle_command, vehicle_metrics, vehicle_info, vehicle_door; the RViz
+  initial-pose and routing adaptors; the RTC controller.
+
+  motion deserves a note. It pauses vehicle_cmd_gate after the car has been
+  stopped for 1 s and unpauses it as soon as trajectory_follower asks for
+  speed again (require_accept_start: false), so it adds a restart delay and
+  holds nothing the planner's stop profile and the longitudinal PID's stop
+  state do not already hold. Without it the gate is never paused.
+
+  Same container and node names as autoware_default_adapi_universe's
+  default_adapi.launch.py. The three kept nodes take only the
+  diagnostic_updater entries of its default_adapi.param.yaml, which are set
+  inline: an XML <param from> would hand every node the file's other nodes'
+  sections too. Re-fork when the Autoware version changes.
+-->
+<launch>
+  <arg name="launch_localization_api" default="false"
+       description="true in the simulator: sim_pose_init places the vehicle through /api/localization/initialize"/>
+
+  <node_container pkg="rclcpp_components" exec="component_container_mt" name="container" namespace="adapi"
+                  ros_args="--log-level adapi.container:=WARN">
+    <composable_node pkg="autoware_default_adapi_universe" plugin="autoware::default_adapi::OperationModeNode"
+                     name="operation_mode" namespace="adapi/node">
+      <param name="diagnostic_updater.period" value="1.0"/>
+      <param name="diagnostic_updater.use_fqn" value="true"/>
+    </composable_node>
+    <composable_node pkg="autoware_default_adapi_universe" plugin="autoware::default_adapi::MrmRequestNode"
+                     name="mrm_request" namespace="adapi/node">
+      <param name="diagnostic_updater.period" value="1.0"/>
+      <param name="diagnostic_updater.use_fqn" value="true"/>
+    </composable_node>
+  </node_container>
+
+  <group if="$(var launch_localization_api)">
+    <load_composable_node target="/adapi/container">
+      <composable_node pkg="autoware_default_adapi" plugin="autoware::default_adapi::LocalizationNode"
+                       name="localization" namespace="adapi/node">
+        <param name="diagnostic_updater.period" value="1.0"/>
+        <param name="diagnostic_updater.use_fqn" value="true"/>
+      </composable_node>
+    </load_composable_node>
+  </group>
+</launch>

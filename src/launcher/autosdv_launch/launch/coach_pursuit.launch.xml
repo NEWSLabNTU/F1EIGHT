@@ -9,13 +9,41 @@
           -> actuator (speed PID)                   -> PWM
     velocity_report + IMU -> dead reckoning -> /localization/kinematic_state
 
-  autosdv.launch.yaml with map, localization, perception, planning and
-  Autoware's stock control switched off. In their place:
+  autosdv.launch.yaml with map, localization, perception, planning, and
+  Autoware's stock control, system and AD API switched off. In their place:
 
     autosdv_dead_reckoning_component  the odometry vehicle_cmd_gate needs
-    autosdv_pursuit_control_component pure_pursuit, no lane departure / AEB
+    autosdv_pursuit_control_component pure_pursuit + PID, the gate, the
+                                      operation mode manager, the selector
+    autosdv_pursuit_system_component  the diagnostic graph, its rate monitors,
+                                      the MRM handler and operators
+    autosdv_pursuit_api_component     ADAPI operation_mode and mrm_request
     autosdv-pursuit-main.yaml         the diagnostic graph that lets engage
                                       succeed without a route or a map
+
+  Everything the lab does not use is off (44 nodes, from 83; 2026-10-11).
+  Each component file says what it keeps and why; the rest, with the reason:
+
+    AD API: 16 of 19 default adapters, the RViz pose/route adaptors and the
+      RTC controller: no lab node calls or reads them
+    system: StateMonitor, processing_time_checker, pipeline_latency_monitor,
+      service_log_checker, hazard_status_converter: no lab graph unit or
+      node reads them
+    control: external_cmd_converter (manual modes only; marked unavailable in
+      control-pursuit.yaml), control_validator, shift_decider, the check
+      container and its glog components
+    sensing: the pointcloud_container and passthrough_as_concatenate (the
+      detector reads the driver's cloud), vehicle_velocity_converter (fed
+      gyro_odometer; dead reckoning reads velocity_status), gyro_bias_estimator
+      (a diagnostic nothing reads)
+    vehicle: signal_manager (turn-indicator status; nothing reads it)
+    perception: empty_objects_publisher (fed Autoware planning)
+
+  control_mode_manager also stops publishing /system/operation_mode/availability:
+  the graph converter owns that topic, and a second, always-"available"
+  publisher on it can hide a failed check from the MRM handler and engage.
+
+  What runs and why: docs/guides/lab2-stack.md.
 
   Safety lives outside this file and must be in place first: the physical kill
   switch, the actuator watchdog, and the planner's standoff floor and speed cap
@@ -103,6 +131,17 @@
   <let name="camera_model" value="none"/>
   <let name="use_gnss" value="false"/>
   <let name="use_ntrip" value="false"/>
+  <!-- The lab's own system and API (included below) replace the stock ones. -->
+  <let name="launch_system" value="false"/>
+  <let name="launch_api" value="false"/>
+  <let name="launch_shared_pointcloud_container" value="false"/>
+  <let name="launch_empty_objects_publisher" value="false"/>
+  <!-- Sensor-kit switches. Neither autosdv.launch.yaml nor the stock sensing
+       component declares them, so these lets are the only way they reach the
+       kit; they are not part of the play_launch workaround above. -->
+  <let name="launch_pointcloud_preprocessor" value="false"/>
+  <let name="launch_vehicle_velocity_converter" value="false"/>
+  <let name="launch_gyro_bias_estimator" value="false"/>
 
   <include file="$(find-pkg-share autosdv_launch)/launch/autosdv.launch.yaml">
     <arg name="sensor_suite" value="$(var sensor_suite)"/>
@@ -117,10 +156,20 @@
     <arg name="launch_planning" value="false"/>
     <arg name="launch_control" value="false"/>
     <arg name="launch_system_monitor" value="false"/>
+    <arg name="launch_system" value="false"/>
+    <arg name="launch_api" value="false"/>
+    <arg name="launch_shared_pointcloud_container" value="false"/>
+    <arg name="launch_empty_objects_publisher" value="false"/>
     <arg name="is_simulation" value="$(var is_simulation)"/>
+  </include>
+
+  <include file="$(find-pkg-share autosdv_launch)/launch/components/autosdv_pursuit_system_component.launch.xml">
+    <arg name="run_mode" value="online"/>
     <arg name="diagnostic_graph_aggregator_graph_path" value="$(var diagnostic_graph_aggregator_graph_path)"/>
     <arg name="component_state_monitor_topic_path" value="$(var component_state_monitor_topic_path)"/>
   </include>
+
+  <include file="$(find-pkg-share autosdv_launch)/launch/components/autosdv_pursuit_api_component.launch.xml"/>
 
   <!-- launch_vehicle_interface is false in this scope (the let above, which
        keeps the stock interface off); this include is the one that runs it. -->
@@ -134,6 +183,12 @@
          velocity limit through which a comfortable-stop MRM acts. Brake on
          any MRM instead (the actuator's default is off). -->
     <arg name="emergency_stop_on_any_mrm" value="true"/>
+    <!-- The diagnostic graph's converter owns /system/operation_mode/availability.
+         control_mode_manager's own always-available copy on the same topic
+         would let a failed lab check be overwritten before the MRM handler or
+         engage reads it. -->
+    <arg name="publish_operation_mode_availability" value="false"/>
+    <arg name="launch_signal_manager" value="false"/>
   </include>
 
   <include file="$(find-pkg-share autosdv_launch)/launch/components/autosdv_dead_reckoning_component.launch.xml">

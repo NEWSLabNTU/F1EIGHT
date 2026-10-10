@@ -1,0 +1,101 @@
+<?xml version="1.0"?>
+<!--
+  System for the coach-pursuit lab (Lab 2): the MRM path and the health checks
+  that gate autonomous, and nothing else. Shared by coach_pursuit.launch.xml
+  and coach_pursuit_sim.launch.xml, which set launch_system:=false so the
+  stock autosdv_system_component does not run beside it.
+
+  Kept, each because something in the lab reads it:
+
+    aggregator_node, converter_node   autosdv-pursuit-main.yaml -> graph ->
+                                      /system/operation_mode/availability,
+                                      which ADAPI engage and the MRM handler read
+    topic_state_monitor_* (10)        the rate checks that graph is made of
+                                      (autosdv_pursuit_topic_monitors.launch.py)
+    duplicated_node_checker           /autoware/system/duplicated_node_checker,
+                                      linked into autonomous: two planners or
+                                      two actuators refuse engage
+    mrm_handler                       availability -> /system/fail_safe/mrm_state,
+                                      which the actuator brakes on
+    mrm_emergency_stop_operator       /system/emergency/control_cmd, the gate's
+                                      emergency input (and a graph rate check)
+    mrm_comfortable_stop_operator     mrm_handler's comfortable stop
+                                      (use_comfortable_stop: true)
+    logging_diag_graph                prints which check blocks autonomous; the
+                                      only place a refused engage says why
+
+  Left out, with the reason. Nothing in the lab graph or the lab nodes reads
+  them, and tier4_system_launch's system.launch.xml has no switch for most, so
+  this file includes the per-package launches directly instead:
+
+    StateMonitor (component_state_monitor/component)
+        its only reader is the ADAPI AutowareStateNode, which does not run
+    processing_time_checker, pipeline_latency_monitor
+        metrics for planning/perception pipelines the lab does not run
+    service_log_checker
+        feeds only /autoware/debug/tools, which no mode links
+    hazard_status_converter
+        /system/emergency/hazard_status; read by deprecated API adaptors only
+    system_monitor, dummy_diag_publisher
+        already off in both lab launches; the dummy publisher's names match no
+        unit in the lab graph
+
+  Parameter files are the ones autosdv_system_component passes, so a kept node
+  behaves exactly as it does in the stock stack. Re-fork from
+  tier4_system_launch's system.launch.xml when the Autoware version changes.
+-->
+<launch>
+  <arg name="use_sim_time" default="false"/>
+  <arg name="run_mode" default="online" description="online, logging_simulation or planning_simulation; selects rows of the topic list"/>
+  <arg name="diagnostic_graph_aggregator_graph_path"
+       default="$(find-pkg-share autosdv_launch)/config/system/diagnostics/autosdv-pursuit-main.yaml"/>
+  <arg name="component_state_monitor_topic_path"
+       default="$(find-pkg-share autosdv_launch)/config/system/component_state_monitor/topics-pursuit.yaml"/>
+  <arg name="diagnostic_graph_aggregator_param_path"
+       default="$(find-pkg-share autoware_diagnostic_graph_aggregator)/config/default.param.yaml"/>
+  <arg name="launch_logging_diag_graph" default="true"/>
+
+  <let name="cfg" value="$(find-pkg-share autoware_launch)/config/system"/>
+
+  <set_parameter name="use_sim_time" value="$(var use_sim_time)"/>
+
+  <group>
+    <push-ros-namespace namespace="/system"/>
+
+    <include file="$(find-pkg-share autoware_duplicated_node_checker)/launch/duplicated_node_checker.launch.xml">
+      <arg name="config_file" value="$(var cfg)/duplicated_node_checker/duplicated_node_checker.param.yaml"/>
+    </include>
+
+    <include file="$(find-pkg-share autosdv_launch)/launch/components/autosdv_pursuit_topic_monitors.launch.py">
+      <arg name="mode" value="$(var run_mode)"/>
+      <arg name="file" value="$(var component_state_monitor_topic_path)"/>
+    </include>
+
+    <include file="$(find-pkg-share autoware_mrm_comfortable_stop_operator)/launch/mrm_comfortable_stop_operator.launch.py">
+      <arg name="config_file" value="$(var cfg)/mrm_comfortable_stop_operator/mrm_comfortable_stop_operator.param.yaml"/>
+    </include>
+    <include file="$(find-pkg-share autoware_mrm_emergency_stop_operator)/launch/mrm_emergency_stop_operator.launch.py">
+      <arg name="config_file" value="$(var cfg)/mrm_emergency_stop_operator/mrm_emergency_stop_operator.param.yaml"/>
+    </include>
+
+    <include file="$(find-pkg-share autoware_diagnostic_graph_aggregator)/launch/aggregator.launch.xml">
+      <arg name="param_file" value="$(var diagnostic_graph_aggregator_param_path)"/>
+      <arg name="graph_file" value="$(var diagnostic_graph_aggregator_graph_path)"/>
+      <arg name="~/struct" value="/diagnostics_graph/struct"/>
+      <arg name="~/status" value="/diagnostics_graph/status"/>
+      <arg name="~/reset" value="/diagnostics_graph/reset"/>
+      <arg name="converter_param_file" value="$(var cfg)/command_mode/converter.param.yaml"/>
+    </include>
+
+    <include file="$(find-pkg-share autoware_mrm_handler)/launch/mrm_handler.launch.xml">
+      <arg name="config_file" value="$(var cfg)/mrm_handler/mrm_handler.param.yaml"/>
+    </include>
+  </group>
+
+  <include file="$(find-pkg-share autoware_diagnostic_graph_utils)/launch/logging.launch.xml" if="$(var launch_logging_diag_graph)">
+    <arg name="root_path" value="/autoware/modes/autonomous"/>
+    <arg name="max_depth" value="3"/>
+    <arg name="show_rate" value="10.0"/>
+    <arg name="enable_terminal_log" value="true"/>
+  </include>
+</launch>
