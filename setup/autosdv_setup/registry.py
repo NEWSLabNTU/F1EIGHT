@@ -265,11 +265,13 @@ STEPS: list[Step] = [
         label="play_launch (launch orchestrator)",
         why="Every `just launch` runs through it. 0.9.0 brought the startup "
             "governor; below 0.10.0 the pose initializer's array parameters "
-            "render as strings and the node dies at startup.",
+            "render as strings and the node dies at startup; below 0.15.0 "
+            "arguments from an XML include never reach a YAML launch file, "
+            "which Lab 2's launch relies on.",
         group="Toolchain",
         run=[_S("install-play-launch.sh")],
         profiles=_on(*EVERY),
-        note="Version-floored (>= 0.10.0), so this re-checks on every run.",
+        note="Version-floored (>= 0.15.0), so this re-checks on every run.",
     ),
     Step(
         id="gdown",

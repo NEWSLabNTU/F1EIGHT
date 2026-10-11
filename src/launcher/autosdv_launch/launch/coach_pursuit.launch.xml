@@ -109,36 +109,16 @@
        argument of autosdv.launch.yaml; it reaches autosdv_autoware through the
        launch configuration declared above, the same way `just launch
        rviz:=false` does. -->
-  <!-- Every switch below except launch_vehicle_interface is set twice: as a
-       launch configuration here, and as an include argument. ros2 launch
-       honours either. play_launch up to 0.13.1 dropped arguments passed from
-       an XML include into a YAML launch file, so without these lets it
-       started map, NDT, perception, planning and stock control alongside the
-       lab stack. Fixed in NEWSLabNTU/play_launch d6aa9d0e (resolves to the
-       same 75 nodes without them); delete these nine lets once every
-       vehicle runs a release containing it.
-
-       launch_vehicle_interface must stay: it is not an autosdv.launch.yaml
-       argument, and the let is what switches the stock vehicle interface
-       off; the include below is the one that runs it. -->
+  <!-- launch_vehicle_interface is not an autosdv.launch.yaml argument, so
+       it reaches the stock vehicle interface only as a launch configuration;
+       this let is what switches that one off, and the include below runs the
+       lab's. The other switches are plain include arguments (needs
+       play_launch >= 0.15; older releases dropped arguments passed from an
+       XML include into a YAML launch file). -->
   <let name="launch_vehicle_interface" value="false"/>
-  <let name="launch_map" value="false"/>
-  <let name="launch_localization" value="false"/>
-  <let name="launch_perception" value="false"/>
-  <let name="launch_planning" value="false"/>
-  <let name="launch_control" value="false"/>
-  <let name="launch_system_monitor" value="false"/>
-  <let name="camera_model" value="none"/>
-  <let name="use_gnss" value="false"/>
-  <let name="use_ntrip" value="false"/>
-  <!-- The lab's own system and API (included below) replace the stock ones. -->
-  <let name="launch_system" value="false"/>
-  <let name="launch_api" value="false"/>
-  <let name="launch_shared_pointcloud_container" value="false"/>
-  <let name="launch_empty_objects_publisher" value="false"/>
   <!-- Sensor-kit switches. Neither autosdv.launch.yaml nor the stock sensing
        component declares them, so these lets are the only way they reach the
-       kit; they are not part of the play_launch workaround above. -->
+       kit. -->
   <let name="launch_pointcloud_preprocessor" value="false"/>
   <let name="launch_vehicle_velocity_converter" value="false"/>
   <let name="launch_gyro_bias_estimator" value="false"/>
