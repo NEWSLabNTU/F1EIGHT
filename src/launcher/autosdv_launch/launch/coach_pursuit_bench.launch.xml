@@ -1,0 +1,100 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<!--
+  Lab 2 vehicle bench: the REAL vehicle stack on a workstation, with only the
+  hardware replaced. `just lab2 bench`.
+
+  The planning sim (`just lab2 sim`) swaps the whole vehicle interface for
+  simple_planning_simulator, so the actuator's safety shell, its watchdogs,
+  its MRM braking, the student's SpeedPID plug-in and dead reckoning never run
+  in the loop there. Here they all do: this file includes
+  coach_pursuit.launch.xml unchanged except for four hardware switches.
+
+    actuator (dry run)  -> /autosdv/actuator_node/debug/pwm_values  [motor, steer]
+      -> vehicle_bench_plant: the motor fit's MotorPlant, the steering
+         mapping inverted, bicycle kinematics, the hall-sensor model
+      -> /vehicle/status/velocity_status   (velocity_report's message)
+      -> /sensing/camera/zedxm/imu/data    (the ZED IMU's raw topic)
+      -> imu_corrector -> dead_reckon_odometry -> /localization/kinematic_state
+    vehicle_bench_plant/odometry (the true pose)
+      -> virtual_coach -> /perception/coach/board   (the detector's topic)
+
+  Replaced: the LiDAR driver and the ZED (launch_sensing_driver:=false; the
+  ZED IMU frame and imu_corrector stay), velocity_report
+  (launch_velocity_report:=false), the PCA9685 (is_simulation:=true, the
+  actuator's dry run) and the board detector (launch_detector:=false).
+  Everything else is the vehicle launch's 44-node set.
+
+  virtual_coach places the board from the plant's TRUE pose, as the real
+  detector sees the real car. Both that pose and dead reckoning start at the
+  map origin; ta/grade.py measures headway against dead reckoning, so the
+  bench's headway figures include dead-reckoning drift, as the car's would.
+
+  Checks that run against it: scripts/testing/lab2/bench_checks.py
+  (protocol section 3.1, checks 1 to 4) and `just lab2 preflight`.
+-->
+<launch>
+  <!-- the student's law and inner loop, as on the car -->
+  <arg name="controller_class" default="autosdv_coach_lab.reference.cruise_controller:CruiseController"/>
+  <arg name="controller_param_file" default=""/>
+  <arg name="launch_planner" default="true"/>
+  <arg name="speed_controller_class" default="autosdv_vehicle_interface.speed_controller:AckermannSpeedPID"
+       description="SpeedPID, package.module:ClassName"/>
+  <arg name="speed_controller_params" default=""
+       description="its parameters, a YAML mapping string: {kp: 20.0, ki: 4.0}"/>
+  <arg name="speed_controller_dt_source" default="loop"/>
+
+  <!-- the scripted board -->
+  <arg name="scenario" default="default" description="virtual_coach scenario: default, dropout, noisy, hardstop"/>
+  <arg name="scenario_file"
+       default="$(find-pkg-share autosdv_coach_lab)/config/virtual_coach/$(var scenario).param.yaml"/>
+  <arg name="seed" default="-1"/>
+
+  <!-- the car model -->
+  <arg name="plant" default=""
+       description="MotorPlantParams overrides, a YAML mapping (the output of just lab2 fit-motor); empty: motor_plant.py's defaults"/>
+  <arg name="on_pwm_loss" default="neutral"
+       description="when the actuator stops publishing PWM: neutral (what every actuator exit writes) or hold (a PCA9685 after SIGKILL)"/>
+  <arg name="vehicle_info_param_file"
+       default="$(find-pkg-share autosdv_vehicle_description)/config/vehicle_info.param.yaml"/>
+  <arg name="vehicle_id" default="$(env VEHICLE_ID default)"/>
+  <arg name="imu_corrector_param_file"
+       default="$(find-pkg-share individual_params)/config/$(var vehicle_id)/autosdv_sensor_kit/imu_corrector.param.yaml"
+       description="the static gyro bias imu_corrector removes; the plant's raw IMU carries it"/>
+  <arg name="gyro_bias_error_z" default="0.0"
+       description="[rad/s] gyro bias left after imu_corrector, for a dead-reckoning drift test"/>
+
+  <include file="$(find-pkg-share autosdv_launch)/launch/coach_pursuit.launch.xml">
+    <arg name="is_simulation" value="true"/>
+    <arg name="launch_sensing_driver" value="false"/>
+    <arg name="launch_velocity_report" value="false"/>
+    <arg name="launch_detector" value="false"/>
+    <arg name="controller_class" value="$(var controller_class)"/>
+    <arg name="controller_param_file" value="$(var controller_param_file)"/>
+    <arg name="launch_planner" value="$(var launch_planner)"/>
+    <arg name="speed_controller_class" value="$(var speed_controller_class)"/>
+    <arg name="speed_controller_params" value="$(var speed_controller_params)"/>
+    <arg name="speed_controller_dt_source" value="$(var speed_controller_dt_source)"/>
+  </include>
+
+  <!-- The car. Its constants come from the files the actuator and
+       velocity_report read, so the model and the stack cannot disagree:
+       actuator.yaml (init_pwm, the steering PWM), vehicle_info (wheel_base,
+       max_steer_angle), velocity_report.yaml (wheel, markers, 20 Hz, frame),
+       imu_corrector.param.yaml (the gyro bias it removes). -->
+  <node pkg="autosdv_coach_lab" exec="vehicle_bench_plant" name="vehicle_bench_plant" output="screen">
+    <param from="$(find-pkg-share autosdv_vehicle_interface)/params/actuator.yaml"/>
+    <param from="$(var vehicle_info_param_file)"/>
+    <param from="$(find-pkg-share autosdv_vehicle_interface)/params/velocity_report.yaml"/>
+    <param from="$(var imu_corrector_param_file)"/>
+    <param name="gyro_bias_error_z" value="$(var gyro_bias_error_z)"/>
+    <param name="plant" value="$(var plant)" type="str"/>
+    <param name="on_pwm_loss" value="$(var on_pwm_loss)"/>
+  </node>
+
+  <!-- the board, scripted, placed from the true pose -->
+  <node pkg="autosdv_coach_lab" exec="virtual_coach" name="virtual_coach" output="screen">
+    <param from="$(var scenario_file)"/>
+    <param name="seed" value="$(var seed)"/>
+    <param name="odom_topic" value="/vehicle_bench_plant/odometry"/>
+  </node>
+</launch>

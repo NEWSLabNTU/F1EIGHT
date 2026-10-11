@@ -79,6 +79,13 @@
   <arg name="speed_controller_dt_source" default="loop"
        description="loop (the period update() is called at) or velocity_report"/>
   <arg name="is_simulation" default="false" description="actuator dry run: no PWM"/>
+  <!-- Hardware switches, for the vehicle bench (coach_pursuit_bench.launch.xml,
+       `just lab2 bench`), which runs this file on a workstation with a plant
+       model in place of the car. Both default to the car. -->
+  <arg name="launch_sensing_driver" default="true"
+       description="false: no LiDAR driver and no ZED; imu_corrector and the ZED IMU frame stay"/>
+  <arg name="launch_velocity_report" default="true"
+       description="false: no velocity_report (it needs Jetson.GPIO); something else publishes /vehicle/status/velocity_status"/>
 
   <!-- the board detector: reflector-pose-init in tracking mode. One scan per
        detection, the board pose in base_link stamped with the scan, published
@@ -140,6 +147,7 @@
     <arg name="launch_api" value="false"/>
     <arg name="launch_shared_pointcloud_container" value="false"/>
     <arg name="launch_empty_objects_publisher" value="false"/>
+    <arg name="launch_sensing_driver" value="$(var launch_sensing_driver)"/>
     <arg name="is_simulation" value="$(var is_simulation)"/>
   </include>
 
@@ -169,6 +177,7 @@
          engage reads it. -->
     <arg name="publish_operation_mode_availability" value="false"/>
     <arg name="launch_signal_manager" value="false"/>
+    <arg name="launch_velocity_report" value="$(var launch_velocity_report)"/>
   </include>
 
   <include file="$(find-pkg-share autosdv_launch)/launch/components/autosdv_dead_reckoning_component.launch.xml">

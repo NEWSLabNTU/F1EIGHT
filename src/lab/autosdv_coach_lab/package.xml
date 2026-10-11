@@ -7,7 +7,8 @@
     Lab 2, coach-board pursuit: coach_tracker (board pose to CoachState),
     board_pursuit_planner (loads the student CruiseController and publishes
     /planning/trajectory in place of Autoware planning), and the simulator
-    stand-ins virtual_coach, drive_gear_hold and sim_pose_init.
+    stand-ins virtual_coach, drive_gear_hold and sim_pose_init, and the
+    vehicle bench's hardware model vehicle_bench_plant.
   </description>
   <maintainer email="jerry73204@gmail.com">aeon</maintainer>
   <license>Apache-2.0</license>
@@ -26,6 +27,9 @@
   <exec_depend>rosbag2_py</exec_depend>
   <exec_depend>autoware_control_msgs</exec_depend>
   <exec_depend>autoware_internal_debug_msgs</exec_depend>
+  <!-- vehicle bench (vehicle_bench_plant) -->
+  <exec_depend>sensor_msgs</exec_depend>
+  <exec_depend>tf2_ros</exec_depend>
 
   <test_depend>python3-pytest</test_depend>
   <test_depend>python3-yaml</test_depend>

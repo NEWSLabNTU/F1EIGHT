@@ -45,6 +45,37 @@ vehicle *ARGS:
     source scripts/env.sh
     exec "${cmd[@]}"
 
+# Vehicle bench: the real vehicle stack on this PC, a plant model for the car
+#   just lab2 bench                                  default scenario, reference laws
+#   just lab2 bench scenario:=dropout
+#   just lab2 bench speed_controller_class:=my_lab2.speed_pid:SpeedPID 'speed_controller_params:={kp: 20.0}'
+#   just lab2 bench "plant:=$(cat tmp/motor_plant.yaml)"   a fitted motor (fit-motor -o)
+# The actuator (dry run), its safety shell and SpeedPID plug-in, the MRM path
+# and dead reckoning all run; only the LiDAR, the ZED, velocity_report, the
+# PCA9685 and the detector are replaced (vehicle_bench_plant, virtual_coach).
+[positional-arguments]
+bench *ARGS:
+    #!/usr/bin/env bash
+    cmd=(play_launch launch --web-addr '{{ web_addr }}'
+         autosdv_launch coach_pursuit_bench.launch.xml "$@")
+    printf '\033[2m%s\033[0m\n' "${cmd[*]}"
+    source scripts/env.sh
+    exec "${cmd[@]}"
+
+# Bench checks (field protocol 3.1, checks 1-4) against fresh benches; PASS/FAIL lines
+[positional-arguments]
+bench-checks *ARGS:
+    #!/usr/bin/env bash
+    source scripts/env.sh
+    exec python3 scripts/testing/lab2/bench_checks.py "$@"
+
+# Before engaging: nodes, rates, TF, availability publisher, MRM, mode, graph
+[positional-arguments]
+preflight *ARGS:
+    #!/usr/bin/env bash
+    source scripts/env.sh
+    exec python3 scripts/testing/lab2/preflight.py "$@"
+
 # Engage autonomous mode (the car starts following the board)
 engage:
     #!/usr/bin/env bash

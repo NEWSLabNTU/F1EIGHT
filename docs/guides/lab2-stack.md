@@ -2,7 +2,9 @@
 
 `just lab2 vehicle` (`coach_pursuit.launch.xml`) and `just lab2 sim`
 (`coach_pursuit_sim.launch.xml`) start only the nodes the coach-board pursuit
-lab uses. Everything else Autoware and AutoSDV would normally start is
+lab uses; `just lab2 bench` (`coach_pursuit_bench.launch.xml`) runs the vehicle
+launch on a workstation with the hardware replaced (see
+[The vehicle bench](#the-vehicle-bench)). Everything else Autoware and AutoSDV would normally start is
 switched off by launch arguments; the stock launches (`just launch`,
 `just sim logging`) are unchanged.
 
@@ -124,6 +126,7 @@ All default to the previous behaviour, so only the lab launches change.
 | `launch_pointcloud_preprocessor`, `launch_vehicle_velocity_converter`, `launch_gyro_bias_estimator` | sensor kit (`lidar`, `sensing`, `imu` launch files) | false |
 | `launch_signal_manager`, `publish_operation_mode_availability` | `vehicle_interface.launch.xml` | false |
 | `launch_map` | `coach_pursuit_sim.launch.xml` | follows `rviz` |
+| `launch_sensing_driver`, `launch_velocity_report` | `coach_pursuit.launch.xml` (the latter also `vehicle_interface.launch.xml`) | true on the car, false on the bench |
 
 The sensor-kit switches reach the kit only as launch configurations (`<let>`
 in `coach_pursuit.launch.xml`), because the stock sensing component does not
@@ -145,3 +148,101 @@ forward them.
   workstation (velocity_report exits: it needs `Jetson.GPIO`), and
   `/system/operation_mode/availability` has exactly one publisher, the
   converter.
+
+## The vehicle bench
+
+`just lab2 sim` replaces the whole vehicle interface with
+`simple_planning_simulator`, so the actuator's safety shell, its watchdogs, its
+MRM braking, the student's SpeedPID plug-in and dead reckoning never run in the
+loop there. `just lab2 bench` runs the **real** `coach_pursuit.launch.xml` on a
+workstation and replaces only the hardware:
+
+| On the car | On the bench |
+|---|---|
+| Robin-W driver, ZED camera node (`launch_sensing_driver:=false`) | nothing; the ZED IMU frame (`zedxm_imu_tf`) and `imu_corrector` stay |
+| PCA9685 (the actuator writes it) | the actuator's dry run (`is_simulation:=true`); it still publishes `~/debug/pwm_values` every tick |
+| `velocity_report` (`launch_velocity_report:=false`) | `vehicle_bench_plant` publishes `/vehicle/status/velocity_status` (20 Hz, `base_link`) |
+| ZED IMU | `vehicle_bench_plant` publishes `/sensing/camera/zedxm/imu/data` in `zedxm_imu_link`, with the static gyro bias `imu_corrector.param.yaml` removes |
+| `board_tracking` (`launch_detector:=false`) | `virtual_coach`, placed from the plant's true pose |
+
+Everything else is the vehicle launch's 44-node set, unmodified: 41 nodes on
+the bench. `vehicle_bench_plant` (`autosdv_coach_lab`) integrates the PWM the
+actuator commands through the motor fit's `MotorPlant` (same
+`MotorPlantParams`, so `plant:="$(cat tmp/motor_plant.yaml)"` loads a fitted
+motor), the actuator's steering mapping inverted, bicycle kinematics about
+`base_link`, and `HallSpeedSensor` (velocity_report's edge timing, EMA and
+0.5 s timeout). Its constants come from the files the actuator and
+velocity_report read. When the actuator stops publishing, the motor goes to
+neutral after 0.5 s, because every actuator exit writes neutral but a dry run
+does not publish that write (`on_pwm_loss:=hold` keeps the last PWM instead).
+
+```bash
+just lab2 bench                                   # default scenario, reference laws
+just lab2 bench scenario:=dropout speed_controller_class:=my_lab2.speed_pid:SpeedPID
+just lab2 engage                                  # record, engage, disengage as on the car
+just lab2 bench-checks                            # protocol 3.1 checks 1-4, PASS/FAIL lines
+```
+
+`just lab2 bench-checks` (`scripts/testing/lab2/bench_checks.py`) starts a
+fresh bench per check and drives it through the TA's recipes:
+
+| Check | Protocol 3.1 | Passes when |
+|---|---|---|
+| `follow` | -- | engage succeeds on the first try; the default scenario is followed; `just lab2 record` bag graded by `ta/grade.py --runs` |
+| `mrm` | 3 | killing `board_pursuit_planner` while following gives an emergency-stop MRM, `override_brake:emergency`, and a stop |
+| `gate` | 1 | unloading `vehicle_cmd_gate` gives `override_brake:command_timeout` within 0.6 s, then `override_neutral`, and a stop |
+| `exit` | 2 | the actuator's process-level test (`test_process_exit_leaves_outputs_neutral`): SIGINT and SIGTERM leave 370 / 489. A dry run does not publish the exit write, so the bench cannot observe it |
+| `fault` | 4 | `autosdv_coach_lab.faulty_speed_controller:RaisingSpeedPID`: neutral, retries 1 s apart (from the actuator log; a retry faults inside the same tick, so `~/debug/mode` never leaves `controller_fault`), disabled after 3, node alive, PWM 370 |
+| `speedpid` | -- | the course's reference SpeedPID drives the car; the handout's stub does not |
+
+It uses `ROS_DOMAIN_ID` (default 73, 0 refused) and `LAB2_WEB_ADDR`, and stops
+each bench by its session, so it is safe on a shared host. Logs go to
+`tmp/lab2bench/checks/`.
+
+### What the bench showed (2026-10-12, provisional motor parameters)
+
+```
+PASS  follow.engage: first attempt: success=True, code=0, message=''
+PASS  follow.drive: drove 24.7 m (true pose), peak 0.95 m/s, min true gap 1.26 m
+PASS  follow.grade: 451 rows, follow RMSE 0.17 m, min headway 0.83 m
+WARN  follow.grade: min headway 0.83 m is below the 1.0 m floor (true minimum gap 1.26 m)
+PASS  mrm: MRM after 1.16 s, behavior 2 (EMERGENCY_STOP); override_brake:emergency; stopped 1.5 s after the kill
+PASS  gate: override_brake:command_timeout 0.33 s after the unload; then override_neutral; last PWM (370, 489)
+PASS  exit: 3 passed
+PASS  fault: 3 faults, retries after 1.00 s, 1.01 s; disabled after fault 3; actuator alive, PWM 100 Hz, motor 370
+PASS  speedpid: reference 11.9 m / peak 1.50 m/s; stub 0.00 m / peak 0.00 m/s in 20 s
+```
+
+Two things the planning sim cannot show:
+
+- **The real speed loop stops later.** Static-approach overshoot is 0.5 to
+  0.6 m on the bench against 0.1 m in the sim (`ta/grade.py`, default
+  scenario), and the true minimum gap at the board stop is 1.0 to 1.3 m. The
+  actuator's default PID tracks the planner's command with a 0.26 m/s RMSE.
+  Re-measure with the fitted motor (`plant:=`) before reading much into it.
+- **Dead reckoning runs ahead at every stop.** velocity_report holds its last
+  EMA speed for up to 0.5 s after the last marker edge, so dead reckoning ends
+  0.4 m ahead of the true pose after the default scenario. `ta/grade.py`
+  measures headway against dead reckoning, so on the car (as on the bench) its
+  headway reads short by that much: 0.83 m graded against 1.26 m true.
+
+## Preflight
+
+`just lab2 preflight` (`scripts/testing/lab2/preflight.py`) runs against a
+stack that is up -- `just lab2 vehicle`, `bench` or `sim` -- before the first
+engage, and prints PASS / WARN / FAIL lines; it exits 1 on any FAIL.
+
+| Check | What |
+|---|---|
+| nodes | the slim set for the mode is alive; exactly one trajectory publisher (`board_pursuit_planner` or `speed_step_planner`); on the car, a LiDAR driver |
+| rates | LiDAR cloud >= 7 Hz (car), IMU >= 20 Hz (car, bench), `velocity_status` >= 10 Hz (car, bench), `/perception/coach/board` >= 8 Hz, `kinematic_state` >= 10 Hz; a WARN band below the nominal rate |
+| tf | `base_link` -> the LiDAR frame (car; the frame comes from the cloud's header), `map` -> `base_link` |
+| availability | `/system/operation_mode/availability` has exactly one publisher, `/system/converter` |
+| mrm | `/system/fail_safe/mrm_state` is NORMAL |
+| mode | operation mode STOP, not in transition |
+| graph | `/autoware/modes/autonomous` is OK; otherwise the deepest non-OK units under it, i.e. what blocks engage |
+
+The mode is detected from the node list (`simple_planning_simulator` -> sim,
+`vehicle_bench_plant` -> bench, else vehicle); `--mode` forces it, and
+`--no-board` turns a missing board into a WARN for before the board is placed.
+On the car, the board check is the protocol's "board at 4 m, at least 8 Hz".

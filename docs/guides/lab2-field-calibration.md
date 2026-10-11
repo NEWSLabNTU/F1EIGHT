@@ -16,6 +16,14 @@ applies (spotter with the kill switch, 1.5 m/s cap, cones), and before any of
 this you need the actuator watchdog in place and a straight, clear run of at
 least 25 m.
 
+Two software checks come before the car. On a workstation, `just lab2
+bench-checks` runs protocol 3.1 checks 1 to 4 against the real vehicle stack
+with a plant model in place of the car, and every recipe below works against
+`just lab2 bench` the same way it does against `just lab2 vehicle`. On the car,
+`just lab2 preflight` after bring-up says whether the stack is ready to engage,
+and which diagnostic blocks it if not. Both are described in
+[lab2-stack.md](lab2-stack.md#the-vehicle-bench).
+
 ## 1. Speed step test and motor plant fit
 
 **Why.** The Part 1 inner-loop bench (`speed_bench`, and the handout's copy of
