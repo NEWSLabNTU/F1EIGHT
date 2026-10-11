@@ -92,8 +92,11 @@ speed-steps STEPS="0,0.5,1.0,0.5,1.5,0" HOLD="4.0" MAX_DISTANCE="25.0":
     #!/usr/bin/env bash
     source scripts/env.sh
     steps="[$(python3 -c "print(', '.join(str(float(x)) for x in '{{ STEPS }}'.split(',') if x.strip()))")]"
+    # ROS rejects an integer for a double parameter, so `5` becomes `5.0`
+    hold=$(python3 -c "print(float('{{ HOLD }}'))")
+    max_distance=$(python3 -c "print(float('{{ MAX_DISTANCE }}'))")
     exec ros2 run autosdv_coach_lab speed_step_planner --ros-args \
-        -p "steps:=$steps" -p "hold:={{ HOLD }}" -p "max_distance:={{ MAX_DISTANCE }}"
+        -p "steps:=$steps" -p "hold:=$hold" -p "max_distance:=$max_distance"
 
 # Record what the motor fit and the braking report read, to rosbags/lab2cal_<time>
 record-cal NAME="":
