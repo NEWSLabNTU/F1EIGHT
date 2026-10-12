@@ -10,6 +10,7 @@ localized pose and the path) and the `SpeedPID` (the actuator's inner loop).
 | `just lab2 vehicle` | `waypoint_follow.launch.xml` | the car |
 | `just lab2 bench` | `waypoint_follow_bench.launch.xml` | a workstation: the car's stack, a plant model for the hardware |
 | `just lab2 bench-checks` | (starts benches) | the safety behaviour, PASS/FAIL |
+| `just lab2 preflight` | (reads the running stack) | before engaging: nodes, rates, marker fixes, start box, TF, availability, MRM, graph |
 
 The design and the decisions behind it are in the course repository,
 `2026/labs/Lab2/lab2-system-design.md`. The coach-board lab this replaced is

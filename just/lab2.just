@@ -59,6 +59,13 @@ bench-checks *ARGS:
     source scripts/env.sh
     exec python3 scripts/testing/lab2/waypoint_checks.py "$@"
 
+# Before engaging: nodes, rates, marker fixes, start box, TF, availability, MRM, mode, graph
+[positional-arguments]
+preflight *ARGS:
+    #!/usr/bin/env bash
+    source scripts/env.sh
+    exec python3 scripts/testing/lab2/waypoint_preflight.py "$@"
+
 # Engage autonomous mode (the car starts the course)
 engage:
     #!/usr/bin/env bash

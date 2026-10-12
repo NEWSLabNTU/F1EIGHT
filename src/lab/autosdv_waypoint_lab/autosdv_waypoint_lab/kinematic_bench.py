@@ -5,7 +5,9 @@ bicycle about the rear axle with a first-order steering servo and a speed that
 follows the command with a first-order lag and an acceleration limit -- a
 stand-in for the actuator's SpeedPID, good enough to separate tracking from
 speed control. The tracker sees exactly what `path_tracker` gives it on the
-car: the course window ahead, from `CoursePath.window`.
+car: the course window ahead, from `CoursePath.window`, and a pose that can
+carry localization noise (pose_noise_std, yaw_noise_std: Gaussian, redrawn
+every cycle) while the metrics use the true pose.
 
     result = run(tracker, course_path, start=(x, y, yaw))
     result.cross_track_rmse, result.cross_track_max, result.finished
@@ -13,6 +15,7 @@ car: the course window ahead, from `CoursePath.window`.
 
 from dataclasses import dataclass, field
 import math
+import random
 from typing import List, Optional, Tuple
 
 from autosdv_waypoint_lab.path import CoursePath, wrap_angle
@@ -30,6 +33,9 @@ class BenchParams:
     window_behind: float = 1.0
     window_ahead: float = 6.0
     timeout: float = 300.0
+    pose_noise_std: float = 0.0      # [m] on the x and y the tracker sees
+    yaw_noise_std: float = 0.0       # [rad] on the yaw it sees
+    seed: int = 1
 
 
 @dataclass
@@ -79,10 +85,14 @@ def run(tracker, course: CoursePath, start: Tuple[float, float, float],
     t = 0.0
     out = BenchResult()
     stopped_since = None
+    rng = random.Random(p.seed)
     while t < p.timeout:
-        _, dist = course.update_progress(x, y)
+        course.update_progress(x, y)
         window = course.window(p.window_behind, p.window_ahead)
-        res = shell.step(VehicleState(x, y, yaw, v), window, p.dt)
+        seen = VehicleState(x + rng.gauss(0.0, p.pose_noise_std),
+                            y + rng.gauss(0.0, p.pose_noise_std),
+                            wrap_angle(yaw + rng.gauss(0.0, p.yaw_noise_std)), v)
+        res = shell.step(seen, window, p.dt)
         if res.fault:
             out.faults += 1
         out.disabled = res.disabled

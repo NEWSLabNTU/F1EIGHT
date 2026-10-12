@@ -85,3 +85,10 @@ def test_the_stub_does_not_move():
     cp = CoursePath(*circle(), closed=True)
     r = kb.run(Stub({}, V), cp, (0.0, 0.0, 0.0))
     assert not r.finished and max(r.speed) == 0.0
+
+
+def test_reference_tolerates_localization_noise():
+    cp = CoursePath(*circle(), closed=True, laps=1)
+    r = kb.run(Reference({}, V), cp, (0.0, 0.0, 0.0),
+               params=kb.BenchParams(pose_noise_std=0.03, yaw_noise_std=math.radians(1.0)))
+    assert r.finished and r.cross_track_rmse <= 0.10
