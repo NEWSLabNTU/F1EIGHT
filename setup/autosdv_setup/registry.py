@@ -274,6 +274,22 @@ STEPS: list[Step] = [
         note="Version-floored (>= 0.15.0), so this re-checks on every run.",
     ),
     Step(
+        id="platformio",
+        label="PlatformIO (firmware toolchain)",
+        why="Builds and tests the RC override arbiter firmware in "
+            "firmware/rc-arbiter (`just arbiter`). The board toolchain itself "
+            "downloads into ~/.platformio on the first build, about 500 MB.",
+        group="Toolchain",
+        run=_BASH(
+            "command -v pio >/dev/null && { pio --version; exit 0; }; "
+            "if command -v uv >/dev/null; then uv tool install platformio; "
+            "elif command -v pipx >/dev/null; then pipx install platformio; "
+            "else pip3 install --user platformio; fi"
+        ),
+        profiles=_on(*DEV),
+        verify=["bash", "-c", "command -v pio >/dev/null"],
+    ),
+    Step(
         id="gdown",
         label="gdown (Google Drive downloader)",
         why="Used by scripts/2dlidar/download-sample-rosbag.sh and the "
@@ -701,6 +717,25 @@ STEPS: list[Step] = [
         requires=Requires(sudo=True, hardware="ublox-gnss"),
         verify=["test", "-f", "/etc/udev/rules.d/99-ublox-gps.rules"],
         profiles=_on(*VEHICLE),
+    ),
+    Step(
+        id="platformio-udev",
+        label="PlatformIO udev rules (flashing the arbiter)",
+        why="Lets `just arbiter flash` reach the XIAO RP2350 over USB without "
+            "root, and adds you to dialout for `just arbiter monitor`. Log out "
+            "and back in for the group to take effect.",
+        group="System config",
+        run=_BASH(
+            "curl -fsSL https://raw.githubusercontent.com/platformio/"
+            "platformio-core/develop/platformio/assets/system/99-platformio-udev.rules "
+            "| sudo tee /etc/udev/rules.d/99-platformio-udev.rules >/dev/null && "
+            "sudo udevadm control --reload-rules && sudo udevadm trigger && "
+            'sudo usermod -aG dialout "$USER" || true'
+        ),
+        requires=Requires(sudo=True),
+        after=("platformio",),
+        verify=["test", "-f", "/etc/udev/rules.d/99-platformio-udev.rules"],
+        profiles=_on(*OPT_IN),
     ),
     Step(
         id="turbovnc-virtualgl",

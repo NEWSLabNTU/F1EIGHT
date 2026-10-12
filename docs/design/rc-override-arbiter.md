@@ -1,6 +1,8 @@
 # RC override arbiter: the joystick as a kill switch
 
-Status: design, not built. No board has been bought and no firmware or
+Status: design. The firmware is written and passes its host tests
+([`firmware/rc-arbiter`](../../firmware/rc-arbiter/README.md), `just arbiter
+test`) but has not run on a board; no board has been bought and no
 vehicle-side code exists yet.
 
 A small board between the two command sources and the actuators decides who
@@ -231,6 +233,9 @@ way.
 - [ ] XIAO RP2350 5V pin input range, from its schematic.
 - [ ] Bench test: a logic analyzer on the receiver output and the board's
       outputs, to measure the takeover latency against the table above.
+- [ ] Firmware on the bench: the values marked `BENCH` in
+      `firmware/rc-arbiter/lib/arbiter/config.h`, and the speed cap, which the
+      firmware does not set yet.
 - [ ] Vehicle side: heartbeat on PCA9685 ch2, the command-age check in
       `actuator.py`, and the state line in the vehicle interface.
 

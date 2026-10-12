@@ -32,6 +32,8 @@ mod lab2 'just/lab2.just'
 # The coach-board pursuit stack (Lab 2 before 2026-10-13), and the field
 # calibration recipes (speed steps, motor fit, braking) that both labs use
 mod coach 'just/coach.just'
+# RC override arbiter firmware (XIAO RP2350): host tests, build, flash
+mod arbiter 'just/arbiter.just'
 
 # ============================================================================
 # Core Commands

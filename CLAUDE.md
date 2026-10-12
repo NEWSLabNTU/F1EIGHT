@@ -249,7 +249,7 @@ just --list             # Show all available commands
 ```
 
 Grouped commands live in justfile modules under `just/`, so the top-level list
-stays short: `bag`, `control`, `map`, `sim`, `tool`, plus `demo` in `demo/`.
+stays short: `arbiter`, `bag`, `control`, `map`, `sim`, `tool`, plus `demo` in `demo/`.
 `just <module>` lists that module's recipes, and both spellings work —
 `just bag play` and `just bag::play`.
 
