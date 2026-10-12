@@ -3,17 +3,17 @@
 
 Each check starts a fresh vehicle bench (coach_pursuit_bench.launch.xml: the
 real vehicle stack with a plant model for the car), drives it through the same
-recipes a TA uses (`just lab2 engage`, `just lab2 record`), and prints one
+recipes a TA uses (`just coach engage`, `just coach record`), and prints one
 PASS or FAIL line. Exit status is the number of FAILs (0 = all passed).
 
-    just lab2 bench-checks                       everything (about 5 min)
-    just lab2 bench-checks --only follow,mrm     a subset
-    just lab2 bench-checks --list
+    just coach bench-checks                       everything (about 5 min)
+    just coach bench-checks --only follow,mrm     a subset
+    just coach bench-checks --list
 
 Checks (protocol 3.1 numbering in brackets):
 
   follow      engage on the first try; follow the default scenario; record it
-              with `just lab2 record` and grade it with ta/grade.py --runs
+              with `just coach record` and grade it with ta/grade.py --runs
   mrm     [3] kill board_pursuit_planner while following: MRM emergency stop,
               the actuator brakes (override_brake:emergency), the car stops
   gate    [1] unload vehicle_cmd_gate while following: the actuator's command
@@ -70,7 +70,7 @@ def info(msg):
 # ============================================================ bench process
 
 class Bench:
-    """One `just lab2 bench` in its own process group."""
+    """One `just coach bench` in its own process group."""
 
     def __init__(self, name, args, workdir, env):
         self.name = name
@@ -82,7 +82,7 @@ class Bench:
     def start(self):
         shutil.rmtree(self.logdir, ignore_errors=True)
         self.logdir.mkdir(parents=True)
-        cmd = ['just', 'lab2', 'bench', '--log-dir', str(self.logdir / 'play_log')] + self.args
+        cmd = ['just', 'coach', 'bench', '--log-dir', str(self.logdir / 'play_log')] + self.args
         info(f'bench: {" ".join(cmd)}')
         self.out = open(self.logdir / 'launch.log', 'w')
         self.proc = subprocess.Popen(cmd, cwd=REPO, env=self.env, stdout=self.out,
@@ -166,7 +166,7 @@ def actuator_log(bench):
 
 
 def run_recipe(args, env, timeout=30):
-    p = subprocess.run(['just', 'lab2'] + args, cwd=REPO, env=env, capture_output=True,
+    p = subprocess.run(['just', 'coach'] + args, cwd=REPO, env=env, capture_output=True,
                        text=True, timeout=timeout)
     return p.returncode, p.stdout + p.stderr
 
@@ -348,7 +348,7 @@ def check_follow(mon, args, env, workdir):
             return
         name = f'benchcheck_default_{time.strftime("%Y%m%d_%H%M%S")}'
         bag = REPO / 'rosbags' / f'lab2_{name}'
-        rec = subprocess.Popen(['just', 'lab2', 'record', name], cwd=REPO, env=env,
+        rec = subprocess.Popen(['just', 'coach', 'record', name], cwd=REPO, env=env,
                                stdout=open(bench.logdir / 'record.log', 'w'),
                                stderr=subprocess.STDOUT, start_new_session=True)
         time.sleep(3.0)

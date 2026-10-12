@@ -1,0 +1,46 @@
+<?xml version="1.0"?>
+<?xml-model href="http://download.ros.org/schema/package_format3.xsd" schematypens="http://www.w3.org/2001/XMLSchema"?>
+<package format="3">
+  <name>autosdv_waypoint_lab</name>
+  <version>0.1.0</version>
+  <description>
+    Lab 2, ArUco localization and waypoint following: waypoint_path_publisher
+    (the TA's course as /planning/trajectory), path_tracker (loads the student
+    PathTracker in place of Autoware's trajectory_follower), start_pose_init
+    and localization_monitor (around Autoware's AR-tag localizer and EKF), the
+    bench's virtual_marker_localizer, the course map generator and the grader.
+  </description>
+  <maintainer email="jerry73204@gmail.com">aeon</maintainer>
+  <license>Apache-2.0</license>
+
+  <depend>rclpy</depend>
+  <depend>autosdv_lab_msgs</depend>
+  <depend>geometry_msgs</depend>
+  <depend>nav_msgs</depend>
+  <depend>std_srvs</depend>
+  <depend>diagnostic_msgs</depend>
+  <depend>autoware_planning_msgs</depend>
+  <depend>autoware_control_msgs</depend>
+  <depend>autoware_adapi_v1_msgs</depend>
+  <exec_depend>python3-yaml</exec_depend>
+  <exec_depend>rosbag2_py</exec_depend>
+  <exec_depend>autoware_vehicle_msgs</exec_depend>
+  <exec_depend>tier4_system_msgs</exec_depend>
+  <!-- the localization the launch files wire up -->
+  <exec_depend>autoware_ar_tag_based_localizer</exec_depend>
+  <exec_depend>autoware_ekf_localizer</exec_depend>
+  <exec_depend>autoware_gyro_odometer</exec_depend>
+  <exec_depend>autoware_vehicle_velocity_converter</exec_depend>
+  <exec_depend>autoware_twist2accel</exec_depend>
+  <exec_depend>autoware_map_loader</exec_depend>
+  <exec_depend>autoware_map_projection_loader</exec_depend>
+  <exec_depend>autosdv_vehicle_description</exec_depend>
+  <!-- the vehicle bench's plant and the bag reader -->
+  <exec_depend>autosdv_coach_lab</exec_depend>
+
+  <test_depend>python3-pytest</test_depend>
+
+  <export>
+    <build_type>ament_python</build_type>
+  </export>
+</package>

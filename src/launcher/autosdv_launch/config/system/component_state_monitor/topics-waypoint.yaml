@@ -1,0 +1,112 @@
+# Component state monitor topics for the waypoint lab (Lab 2).
+# Read by diagnostics/autosdv-waypoint-main.yaml. The coach-pursuit lab's set
+# (topics-pursuit.yaml) without its two coach entries: the trajectory, control,
+# vehicle, emergency and map->base_link checks, and kinematic_state, which the
+# EKF publishes here. Marker fixes are not a rate check: they arrive only
+# while a marker is in view, so localization_monitor judges their age instead.
+
+- module: planning
+  mode: [online, logging_simulation, planning_simulation]
+  type: autonomous
+  args:
+    node_name_suffix: scenario_planning_trajectory
+    topic: /planning/trajectory
+    topic_type: autoware_planning_msgs/msg/Trajectory
+    best_effort: false
+    transient_local: false
+    warn_rate: 5.0
+    error_rate: 1.0
+    timeout: 1.0
+
+- module: control
+  mode: [online, logging_simulation, planning_simulation]
+  type: autonomous
+  args:
+    node_name_suffix: trajectory_follower_control_cmd
+    topic: /control/trajectory_follower/control_cmd
+    topic_type: autoware_control_msgs/msg/Control
+    best_effort: false
+    transient_local: false
+    warn_rate: 5.0
+    error_rate: 1.0
+    timeout: 1.0
+
+- module: control
+  mode: [online, logging_simulation, planning_simulation]
+  type: autonomous
+  args:
+    node_name_suffix: control_command_control_cmd
+    topic: /control/command/control_cmd
+    topic_type: autoware_control_msgs/msg/Control
+    best_effort: false
+    transient_local: false
+    warn_rate: 5.0
+    error_rate: 1.0
+    timeout: 1.0
+
+- module: vehicle
+  mode: [online, logging_simulation, planning_simulation]
+  type: autonomous
+  args:
+    node_name_suffix: vehicle_status_velocity_status
+    topic: /vehicle/status/velocity_status
+    topic_type: autoware_vehicle_msgs/msg/VelocityReport
+    best_effort: false
+    transient_local: false
+    warn_rate: 5.0
+    error_rate: 1.0
+    timeout: 1.0
+
+- module: vehicle
+  mode: [online, logging_simulation, planning_simulation]
+  type: autonomous
+  args:
+    node_name_suffix: vehicle_status_steering_status
+    topic: /vehicle/status/steering_status
+    topic_type: autoware_vehicle_msgs/msg/SteeringReport
+    best_effort: false
+    transient_local: false
+    warn_rate: 5.0
+    error_rate: 1.0
+    timeout: 1.0
+
+- module: system
+  mode: [online, logging_simulation, planning_simulation]
+  type: autonomous
+  args:
+    node_name_suffix: system_emergency_control_cmd
+    topic: /system/emergency/control_cmd
+    topic_type: autoware_control_msgs/msg/Control
+    best_effort: false
+    transient_local: false
+    warn_rate: 5.0
+    error_rate: 1.0
+    timeout: 1.0
+
+- module: localization
+  mode: [online, logging_simulation, planning_simulation]
+  type: autonomous
+  args:
+    node_name_suffix: transform_map_to_base_link
+    topic: /tf
+    frame_id: map
+    child_frame_id: base_link
+    best_effort: false
+    transient_local: false
+    warn_rate: 5.0
+    error_rate: 1.0
+    timeout: 1.0
+
+# AutoSDV lab: the EKF's odometry, which vehicle_cmd_gate waits for.
+- module: localization
+  mode: [online, logging_simulation, planning_simulation]
+  type: autonomous
+  args:
+    node_name_suffix: localization_kinematic_state
+    topic: /localization/kinematic_state
+    topic_type: nav_msgs/msg/Odometry
+    best_effort: false
+    transient_local: false
+    warn_rate: 5.0
+    error_rate: 1.0
+    timeout: 1.0

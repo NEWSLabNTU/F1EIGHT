@@ -1,0 +1,91 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<!--
+  Lab 2 vehicle bench, waypoint lab: the REAL vehicle stack on a workstation,
+  with only the hardware replaced. `just lab2 bench`.
+
+    actuator (dry run)  -> /autosdv/actuator_node/debug/pwm_values
+      -> vehicle_bench_plant (starts in the course's start box)
+      -> /vehicle/status/velocity_status, /sensing/camera/zedxm/imu/data
+      -> gyro_odometer -> ekf_localizer -> /localization/kinematic_state
+    vehicle_bench_plant/odometry (the TRUE pose) + the course map
+      -> virtual_marker_localizer -> /localization/pose_estimator/pose_with_covariance
+         (the camera and ar_tag_based_localizer, modelled: marker_sim.py)
+
+  Replaced: the ZED (launch_camera:=false), the AR-tag localizer
+  (use_ar_tag_localizer:=false), velocity_report and the PCA9685
+  (is_simulation:=true). The EKF, the student tracker and SpeedPID, the gate
+  and the actuator's safety shell are the car's.
+-->
+<launch>
+  <arg name="course" default="hall_demo"/>
+  <arg name="course_dir" default="$(find-pkg-share autosdv_waypoint_lab)/config/courses/$(var course)"/>
+  <arg name="laps" default="0"/>
+
+  <arg name="tracker_class" default="autosdv_waypoint_lab.reference.path_tracker:PathTracker"/>
+  <arg name="tracker_param_file" default="$(find-pkg-share autosdv_waypoint_lab)/config/path_tracker.param.yaml"/>
+  <arg name="speed_controller_class" default="autosdv_vehicle_interface.speed_controller:AckermannSpeedPID"/>
+  <arg name="speed_controller_params" default=""/>
+  <arg name="speed_controller_dt_source" default="loop"/>
+  <arg name="actuator_param_overrides"
+       default="$(find-pkg-share autosdv_waypoint_lab)/config/actuator_lab2.param.yaml"/>
+
+  <!-- the car model -->
+  <arg name="plant" default=""
+       description="MotorPlantParams overrides, a YAML mapping (just lab2 fit-motor); empty: the defaults"/>
+  <arg name="on_pwm_loss" default="neutral"/>
+  <arg name="vehicle_info_param_file"
+       default="$(find-pkg-share autosdv_vehicle_description)/config/vehicle_info.param.yaml"/>
+  <arg name="vehicle_id" default="$(env VEHICLE_ID default)"/>
+  <arg name="imu_corrector_param_file"
+       default="$(find-pkg-share individual_params)/config/$(var vehicle_id)/autosdv_sensor_kit/imu_corrector.param.yaml"/>
+  <arg name="gyro_bias_error_z" default="0.0"
+       description="[rad/s] gyro bias left after imu_corrector, for a drift test"/>
+
+  <!-- the camera model -->
+  <arg name="marker_noise_file"
+       default="$(find-pkg-share autosdv_waypoint_lab)/config/virtual_marker_localizer.param.yaml"/>
+  <arg name="seed" default="-1"/>
+  <arg name="dropout" default="0.1" description="fraction of camera frames with no detection"/>
+
+  <include file="$(find-pkg-share autosdv_launch)/launch/waypoint_follow.launch.xml">
+    <arg name="course_dir" value="$(var course_dir)"/>
+    <arg name="laps" value="$(var laps)"/>
+    <arg name="is_simulation" value="true"/>
+    <arg name="launch_camera" value="false"/>
+    <arg name="use_ar_tag_localizer" value="false"/>
+    <arg name="launch_velocity_report" value="false"/>
+    <arg name="tracker_class" value="$(var tracker_class)"/>
+    <arg name="tracker_param_file" value="$(var tracker_param_file)"/>
+    <arg name="speed_controller_class" value="$(var speed_controller_class)"/>
+    <arg name="speed_controller_params" value="$(var speed_controller_params)"/>
+    <arg name="speed_controller_dt_source" value="$(var speed_controller_dt_source)"/>
+    <arg name="actuator_param_overrides" value="$(var actuator_param_overrides)"/>
+  </include>
+
+  <!-- The car, starting in the start box. Its constants come from the files
+       the actuator and velocity_report read, steering override included, so
+       the model and the stack cannot disagree. -->
+  <node pkg="autosdv_coach_lab" exec="vehicle_bench_plant" name="vehicle_bench_plant" output="screen">
+    <param from="$(find-pkg-share autosdv_vehicle_interface)/params/actuator.yaml"/>
+    <param from="$(var actuator_param_overrides)"/>
+    <param from="$(var vehicle_info_param_file)"/>
+    <param from="$(find-pkg-share autosdv_vehicle_interface)/params/velocity_report.yaml"/>
+    <param from="$(var imu_corrector_param_file)"/>
+    <param name="gyro_bias_error_z" value="$(var gyro_bias_error_z)"/>
+    <param name="plant" value="$(var plant)" type="str"/>
+    <param name="on_pwm_loss" value="$(var on_pwm_loss)"/>
+    <param name="start_pose_file" value="$(var course_dir)/course.yaml"/>
+  </node>
+
+  <node pkg="autosdv_waypoint_lab" exec="virtual_marker_localizer" name="virtual_marker_localizer"
+        namespace="localization/pose_estimator" output="screen">
+    <param from="$(find-pkg-share autosdv_waypoint_lab)/config/ar_tag_based_localizer.param.yaml"/>
+    <param from="$(var marker_noise_file)"/>
+    <param name="map_file" value="$(var course_dir)/lanelet2_map.osm"/>
+    <param name="seed" value="$(var seed)"/>
+    <param name="dropout" value="$(var dropout)"/>
+    <remap from="~/input/true_pose" to="/vehicle_bench_plant/odometry"/>
+    <remap from="~/input/ekf_pose" to="/localization/pose_twist_fusion_filter/biased_pose_with_covariance"/>
+    <remap from="~/output/pose_with_covariance" to="/localization/pose_estimator/pose_with_covariance"/>
+  </node>
+</launch>

@@ -1,0 +1,36 @@
+<?xml version="1.0"?>
+<!--
+  The ZED X Mini driver for the waypoint lab: the rectified left image for
+  ArUco and the IMU, with depth, tracking and detection off
+  (config/zed_aruco.yaml).
+
+  The lab runs the sensor kit with its drivers off and camera_model:=zedxm,
+  so the kit contributes the camera's URDF frames and the left camera to IMU
+  edge (zed_tf_only.launch.xml) but no driver; this file is the only ZED
+  driver. Same composable-node layout as the kit's own ZED launches.
+
+    /sensing/camera/zedxm/rgb/color/rect/image        (+ camera_info)
+    /sensing/camera/zedxm/imu/data                    (imu_corrector's input)
+-->
+<launch>
+  <arg name="camera_name" default="zedxm"/>
+  <arg name="camera_model" default="zedxm"/>
+  <arg name="config" default="$(find-pkg-share autosdv_waypoint_lab)/config/zed_aruco.yaml"/>
+
+  <node_container pkg="rclcpp_components" exec="component_container_isolated"
+                  name="zed_container" namespace="/sensing/camera/$(var camera_name)">
+    <param name="use_multi_threaded_executor" value="true"/>
+  </node_container>
+
+  <load_composable_node target="/sensing/camera/$(var camera_name)/zed_container">
+    <composable_node pkg="zed_components" plugin="stereolabs::ZedCamera"
+                     name="$(var camera_name)" namespace="/sensing/camera">
+      <param from="$(find-pkg-share zed_wrapper)/config/common_stereo.yaml"/>
+      <param from="$(find-pkg-share zed_wrapper)/config/$(var camera_model).yaml"/>
+      <param from="$(var config)"/>
+      <param name="general.camera_name" value="$(var camera_name)"/>
+      <param name="general.camera_model" value="$(var camera_model)"/>
+      <extra_arg name="use_intra_process_comms" value="true"/>
+    </composable_node>
+  </load_composable_node>
+</launch>

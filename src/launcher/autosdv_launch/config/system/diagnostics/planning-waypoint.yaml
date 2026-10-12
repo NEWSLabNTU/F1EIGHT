@@ -1,0 +1,22 @@
+# Planning for the waypoint lab: waypoint_path_publisher publishes
+# /planning/trajectory directly (no route, no planning_validator; see
+# planning-pursuit.yaml for why). Two conditions:
+#   - the trajectory keeps arriving: a dead path publisher is an MRM stop;
+#   - the car is within error_distance (0.8 m) of the course:
+#     localization_monitor. Further off, it is mislocalized or out of control.
+units:
+  - path: /autoware/planning
+    type: and
+    list:
+      - { type: link, link: /autoware/planning/topic_rate_check/trajectory }
+      - { type: link, link: /autoware/planning/path_deviation }
+
+  - path: /autoware/planning/topic_rate_check/trajectory
+    type: diag
+    node: topic_state_monitor_scenario_planning_trajectory
+    name: planning_topic_status
+
+  - path: /autoware/planning/path_deviation
+    type: diag
+    node: localization_monitor
+    name: path_deviation

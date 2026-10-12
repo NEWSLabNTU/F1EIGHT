@@ -1,0 +1,153 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<!--
+  Lab 2: ArUco localization and waypoint following on the vehicle.
+  `just lab2 vehicle`.
+
+    ZED left image -> ar_tag_based_localizer -> pose fix ┐
+    velocity_report + ZED IMU -> gyro_odometer -> twist ─┴> ekf_localizer
+                                                  -> /localization/kinematic_state
+    course path.csv -> waypoint_path_publisher -> /planning/trajectory
+                    -> path_tracker [student PathTracker] -> control_cmd
+                    -> vehicle_cmd_gate -> actuator [safety shell + student SpeedPID] -> PWM
+
+  autosdv.launch.yaml with map, localization, perception, planning, control,
+  system and AD API off, and the sensor kit's drivers off (no LiDAR in this
+  lab; the kit still provides the ZED's URDF frames and IMU edge). In their
+  place:
+
+    zed_aruco.launch.xml                     the ZED: rectified image + IMU only
+    waypoint_localization.launch.xml         marker map, AR-tag localizer, EKF,
+                                             gyro odometer, start_pose_init
+    autosdv_pursuit_control_component        the gate, the operation mode
+                                             manager, the selector; NOT
+                                             trajectory_follower
+    autosdv_pursuit_system_component         the diagnostic graph, rate
+                                             monitors, MRM handler
+    autosdv_pursuit_api_component            ADAPI operation_mode, mrm_request
+    waypoint_nodes.launch.xml                path publisher, path_tracker,
+                                             localization_monitor
+    autosdv-waypoint-main.yaml               the graph: engage needs a marker
+                                             fix; a 5 s blind coast or 0.8 m
+                                             off the path is an MRM stop
+
+  The vehicle interface runs as in the coach lab (brake on any MRM, the graph
+  owns operation-mode availability), plus actuator_param_overrides: the lab's
+  steering ratio, which must be MEASURED per car (actuator_lab2.param.yaml).
+
+  Design: ntu-sdv-course 2026/labs/Lab2/lab2-system-design.md.
+  What runs and why: docs/guides/lab2-waypoint-stack.md.
+-->
+<launch>
+  <!-- the course -->
+  <arg name="course" default="hall_demo" description="a directory under autosdv_waypoint_lab/config/courses"/>
+  <arg name="course_dir" default="$(find-pkg-share autosdv_waypoint_lab)/config/courses/$(var course)"
+       description="or any course directory, e.g. one surveyed on site"/>
+  <arg name="laps" default="0" description="0: the course's own"/>
+
+  <!-- the car -->
+  <arg name="sensor_suite" default="robin_zed" description="autosdv.launch.yaml sensor suite"/>
+  <arg name="rviz" default="false"/>
+  <arg name="actuator_param_overrides"
+       default="$(find-pkg-share autosdv_waypoint_lab)/config/actuator_lab2.param.yaml"
+       description="the measured steering ratio for this car"/>
+
+  <!-- the student's laws -->
+  <arg name="tracker_class" default="autosdv_waypoint_lab.reference.path_tracker:PathTracker"/>
+  <arg name="tracker_param_file" default="$(find-pkg-share autosdv_waypoint_lab)/config/path_tracker.param.yaml"/>
+  <arg name="speed_controller_class"
+       default="autosdv_vehicle_interface.speed_controller:AckermannSpeedPID"
+       description="SpeedPID, package.module:ClassName"/>
+  <arg name="speed_controller_params" default=""
+       description="its parameters, a YAML mapping string: {kp: 20.0, ki: 4.0}"/>
+  <arg name="speed_controller_dt_source" default="loop"/>
+  <arg name="is_simulation" default="false" description="actuator dry run: no PWM"/>
+
+  <!-- Hardware switches, for the vehicle bench (waypoint_follow_bench.launch.xml).
+       All default to the car. -->
+  <arg name="launch_camera" default="true" description="false: no ZED driver"/>
+  <arg name="use_ar_tag_localizer" default="true"
+       description="false: something else publishes the marker fixes (the bench's virtual_marker_localizer)"/>
+  <arg name="launch_velocity_report" default="true"/>
+
+  <arg name="diagnostic_graph_aggregator_graph_path"
+       default="$(find-pkg-share autosdv_launch)/config/system/diagnostics/autosdv-waypoint-main.yaml"/>
+  <arg name="component_state_monitor_topic_path"
+       default="$(find-pkg-share autosdv_launch)/config/system/component_state_monitor/topics-waypoint.yaml"/>
+
+  <!-- see coach_pursuit.launch.xml for why these four are lets -->
+  <let name="launch_vehicle_interface" value="false"/>
+  <let name="launch_pointcloud_preprocessor" value="false"/>
+  <!-- waypoint_localization.launch.xml runs its own, under localization -->
+  <let name="launch_vehicle_velocity_converter" value="false"/>
+  <let name="launch_gyro_bias_estimator" value="false"/>
+
+  <!-- The kit with its drivers off: no LiDAR, and the ZED driver is
+       zed_aruco.launch.xml below. camera_model zedxm keeps the ZED's URDF
+       frames and its left camera -> IMU edge (zed_tf_only.launch.xml), and
+       stops the kit starting its own IMU-only ZED driver. -->
+  <include file="$(find-pkg-share autosdv_launch)/launch/autosdv.launch.yaml">
+    <arg name="sensor_suite" value="$(var sensor_suite)"/>
+    <arg name="camera_model" value="zedxm"/>
+    <arg name="imu_source" value="zed"/>
+    <arg name="use_gnss" value="false"/>
+    <arg name="use_ntrip" value="false"/>
+    <arg name="launch_map" value="false"/>
+    <arg name="launch_localization" value="false"/>
+    <arg name="launch_perception" value="false"/>
+    <arg name="launch_planning" value="false"/>
+    <arg name="launch_control" value="false"/>
+    <arg name="launch_system_monitor" value="false"/>
+    <arg name="launch_system" value="false"/>
+    <arg name="launch_api" value="false"/>
+    <arg name="launch_shared_pointcloud_container" value="false"/>
+    <arg name="launch_empty_objects_publisher" value="false"/>
+    <arg name="launch_sensing_driver" value="false"/>
+    <arg name="is_simulation" value="$(var is_simulation)"/>
+  </include>
+
+  <include file="$(find-pkg-share autosdv_waypoint_lab)/launch/zed_aruco.launch.xml" if="$(var launch_camera)"/>
+
+  <include file="$(find-pkg-share autosdv_launch)/launch/components/autosdv_pursuit_system_component.launch.xml">
+    <arg name="run_mode" value="online"/>
+    <arg name="diagnostic_graph_aggregator_graph_path" value="$(var diagnostic_graph_aggregator_graph_path)"/>
+    <arg name="component_state_monitor_topic_path" value="$(var component_state_monitor_topic_path)"/>
+  </include>
+
+  <include file="$(find-pkg-share autosdv_launch)/launch/components/autosdv_pursuit_api_component.launch.xml"/>
+
+  <include file="$(find-pkg-share autosdv_vehicle_launch)/launch/vehicle_interface.launch.xml">
+    <arg name="launch_vehicle_interface" value="true"/>
+    <arg name="is_simulation" value="$(var is_simulation)"/>
+    <arg name="speed_controller_class" value="$(var speed_controller_class)"/>
+    <arg name="speed_controller_params" value="$(var speed_controller_params)"/>
+    <arg name="speed_controller_dt_source" value="$(var speed_controller_dt_source)"/>
+    <!-- the path publisher bypasses Autoware planning and its velocity limit,
+         through which a comfortable-stop MRM acts: brake on any MRM -->
+    <arg name="emergency_stop_on_any_mrm" value="true"/>
+    <arg name="publish_operation_mode_availability" value="false"/>
+    <arg name="launch_signal_manager" value="false"/>
+    <arg name="launch_velocity_report" value="$(var launch_velocity_report)"/>
+    <arg name="actuator_param_overrides" value="$(var actuator_param_overrides)"/>
+  </include>
+
+  <!-- with the camera, the localizer runs in its container, so the images
+       never go through the network stack -->
+  <let name="ar_tag_container" value="/sensing/camera/zedxm/zed_container" if="$(var launch_camera)"/>
+  <let name="ar_tag_container" value="" unless="$(var launch_camera)"/>
+  <include file="$(find-pkg-share autosdv_waypoint_lab)/launch/waypoint_localization.launch.xml">
+    <arg name="course_dir" value="$(var course_dir)"/>
+    <arg name="use_ar_tag_localizer" value="$(var use_ar_tag_localizer)"/>
+    <arg name="ar_tag_container" value="$(var ar_tag_container)"/>
+  </include>
+
+  <include file="$(find-pkg-share autosdv_launch)/launch/components/autosdv_pursuit_control_component.launch.xml">
+    <arg name="launch_trajectory_follower" value="false"/>
+  </include>
+
+  <include file="$(find-pkg-share autosdv_waypoint_lab)/launch/waypoint_nodes.launch.xml">
+    <arg name="course_dir" value="$(var course_dir)"/>
+    <arg name="laps" value="$(var laps)"/>
+    <arg name="tracker_class" value="$(var tracker_class)"/>
+    <arg name="tracker_param_file" value="$(var tracker_param_file)"/>
+  </include>
+</launch>

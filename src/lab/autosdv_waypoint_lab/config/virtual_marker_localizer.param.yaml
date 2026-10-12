@@ -1,0 +1,16 @@
+# The bench's camera + localizer model (marker_sim.py). The stock localizer's
+# own parameters come from ar_tag_based_localizer.param.yaml, loaded first.
+# The noise numbers are a guess until the camera check measures them.
+/**:
+  ros__parameters:
+    rate: 15.0               # [Hz] camera frames
+    camera_x: 0.20           # [m] camera ahead of base_link (rear axle)
+    camera_y: 0.0
+    hfov_deg: 100.0          # ZED X Mini, 2.2 mm lens
+    range_min: 0.4           # [m]
+    range_max: 5.0           # [m] also capped by distance_threshold
+    max_incidence_deg: 60.0  # a marker seen more obliquely is not decoded
+    pos_std: 0.02            # [m] detection position noise at 0 m
+    pos_std_per_m: 0.01      # [m] growth per metre of range
+    yaw_std_deg: 1.5         # marker orientation noise; times range, sideways
+    dropout: 0.1             # fraction of frames with no detection

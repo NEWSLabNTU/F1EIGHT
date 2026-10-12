@@ -61,6 +61,8 @@
   <arg name="vehicle_id" default="$(env VEHICLE_ID default)"/>
   <arg name="use_sim_time" default="false"/>
   <arg name="check_external_emergency_heartbeat" default="false"/>
+  <arg name="launch_trajectory_follower" default="true"
+       description="false: another node publishes /control/trajectory_follower/control_cmd (the waypoint lab's path_tracker)"/>
   <arg name="lateral_controller_mode" default="pure_pursuit"/>
   <arg name="longitudinal_controller_mode" default="pid"/>
   <arg name="output_control_cmd" default="/control/command/control_cmd"/>
@@ -82,27 +84,6 @@
     <push-ros-namespace namespace="control"/>
 
     <node_container pkg="rclcpp_components" exec="component_container_mt" name="control_container" namespace="">
-      <composable_node pkg="autoware_trajectory_follower_node" plugin="autoware::motion::control::trajectory_follower_node::Controller" name="controller_node_exe" namespace="trajectory_follower">
-        <remap from="~/input/reference_trajectory" to="/planning/trajectory"/>
-        <remap from="~/input/current_odometry" to="/localization/kinematic_state"/>
-        <remap from="~/input/current_steering" to="/vehicle/status/steering_status"/>
-        <remap from="~/input/current_accel" to="/localization/acceleration"/>
-        <remap from="~/input/current_operation_mode" to="/system/operation_mode/state"/>
-        <remap from="~/output/predicted_trajectory" to="lateral/predicted_trajectory"/>
-        <remap from="~/output/lateral_diagnostic" to="lateral/diagnostic"/>
-        <remap from="~/output/slope_angle" to="longitudinal/slope_angle"/>
-        <remap from="~/output/longitudinal_diagnostic" to="longitudinal/diagnostic"/>
-        <remap from="~/output/stop_reason" to="longitudinal/stop_reason"/>
-        <remap from="~/output/control_cmd" to="control_cmd"/>
-        <param name="lateral_controller_mode" value="$(var lateral_controller_mode)"/>
-        <param name="longitudinal_controller_mode" value="$(var longitudinal_controller_mode)"/>
-        <param from="$(var cfg)/common/nearest_search.param.yaml"/>
-        <param from="$(var cfg)/trajectory_follower/trajectory_follower_node.param.yaml"/>
-        <param from="$(var cfg)/trajectory_follower/longitudinal/$(var longitudinal_controller_mode).param.yaml"/>
-        <param from="$(var cfg)/trajectory_follower/lateral/$(var lateral_controller_mode).param.yaml"/>
-        <param from="$(var vehicle_param_file)"/>
-        <extra_arg name="use_intra_process_comms" value="false"/>
-      </composable_node>
 
       <composable_node pkg="autoware_vehicle_cmd_gate" plugin="autoware::vehicle_cmd_gate::VehicleCmdGate" name="vehicle_cmd_gate">
         <remap from="input/steering" to="/vehicle/status/steering_status"/>
@@ -160,6 +141,33 @@
         <extra_arg name="use_intra_process_comms" value="false"/>
       </composable_node>
     </node_container>
+
+    <!-- trajectory_follower is loaded separately so a lab with its own
+         tracker (the waypoint lab's path_tracker, publishing on the same
+         /control/trajectory_follower/control_cmd) can leave it out. -->
+    <load_composable_node target="/control/control_container" if="$(var launch_trajectory_follower)">
+        <composable_node pkg="autoware_trajectory_follower_node" plugin="autoware::motion::control::trajectory_follower_node::Controller" name="controller_node_exe" namespace="trajectory_follower">
+          <remap from="~/input/reference_trajectory" to="/planning/trajectory"/>
+          <remap from="~/input/current_odometry" to="/localization/kinematic_state"/>
+          <remap from="~/input/current_steering" to="/vehicle/status/steering_status"/>
+          <remap from="~/input/current_accel" to="/localization/acceleration"/>
+          <remap from="~/input/current_operation_mode" to="/system/operation_mode/state"/>
+          <remap from="~/output/predicted_trajectory" to="lateral/predicted_trajectory"/>
+          <remap from="~/output/lateral_diagnostic" to="lateral/diagnostic"/>
+          <remap from="~/output/slope_angle" to="longitudinal/slope_angle"/>
+          <remap from="~/output/longitudinal_diagnostic" to="longitudinal/diagnostic"/>
+          <remap from="~/output/stop_reason" to="longitudinal/stop_reason"/>
+          <remap from="~/output/control_cmd" to="control_cmd"/>
+          <param name="lateral_controller_mode" value="$(var lateral_controller_mode)"/>
+          <param name="longitudinal_controller_mode" value="$(var longitudinal_controller_mode)"/>
+          <param from="$(var cfg)/common/nearest_search.param.yaml"/>
+          <param from="$(var cfg)/trajectory_follower/trajectory_follower_node.param.yaml"/>
+          <param from="$(var cfg)/trajectory_follower/longitudinal/$(var longitudinal_controller_mode).param.yaml"/>
+          <param from="$(var cfg)/trajectory_follower/lateral/$(var lateral_controller_mode).param.yaml"/>
+          <param from="$(var vehicle_param_file)"/>
+          <extra_arg name="use_intra_process_comms" value="false"/>
+        </composable_node>
+    </load_composable_node>
 
     <include file="$(find-pkg-share autoware_external_cmd_selector)/launch/external_cmd_selector.launch.py">
       <arg name="use_intra_process" value="false"/>

@@ -1,12 +1,12 @@
 #!/usr/bin/env python3
 """Lab 2 preflight: is the running stack ready to engage?
 
-Run it after `just lab2 vehicle` (or `just lab2 bench` / `just lab2 sim`) is
+Run it after `just coach vehicle` (or `just coach bench` / `just coach sim`) is
 up, before the first engage:
 
-    just lab2 preflight                 auto-detects vehicle, bench or sim
-    just lab2 preflight --no-board      board rate is a WARN (board not placed yet)
-    just lab2 preflight --mode vehicle --window 5
+    just coach preflight                 auto-detects vehicle, bench or sim
+    just coach preflight --no-board      board rate is a WARN (board not placed yet)
+    just coach preflight --mode vehicle --window 5
 
 One line per check, PASS / WARN / FAIL, and exit status 1 if any FAIL:
 

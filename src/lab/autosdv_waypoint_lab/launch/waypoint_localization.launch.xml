@@ -1,0 +1,143 @@
+<?xml version="1.0"?>
+<!--
+  Lab 2 (waypoint) localization: ArUco markers fused with odometry in
+  Autoware's EKF. Stock Autoware nodes, unmodified, wired here instead of
+  through tier4_localization_launch, which brings NDT, pose_initializer and
+  the full sensing chain with it.
+
+    /map/vector_map (lanelet2, marker polygons only)  <- lanelet2_map_loader
+                                                         + map_projection_loader (local)
+    camera image + camera_info -> ar_tag_based_localizer
+        -> /localization/pose_estimator/pose_with_covariance
+           (use_ar_tag_localizer:=false on the bench: virtual_marker_localizer
+            publishes this topic instead)
+    /vehicle/status/velocity_status -> vehicle_velocity_converter
+    /sensing/imu/imu_data + that twist -> gyro_odometer
+        -> /localization/twist_estimator/twist_with_covariance
+    ekf_localizer (pose + twist) -> /localization/kinematic_state, TF map->base_link
+    twist2accel -> /localization/acceleration
+    start_pose_init -> the EKF's initial pose (the taped start box)
+
+  No stop_filter: the EKF's odometry goes straight to kinematic_state. Its
+  only job in stock Autoware is to zero a near-zero velocity, which nothing
+  in this lab depends on.
+-->
+<launch>
+  <arg name="course_dir" description="config/courses/NAME: course.yaml, lanelet2_map.osm, map_projector_info.yaml"/>
+  <arg name="use_ar_tag_localizer" default="true"
+       description="false on the bench, where virtual_marker_localizer stands in for the camera and the localizer"/>
+  <arg name="image_topic" default="/sensing/camera/zedxm/rgb/color/rect/image"/>
+  <arg name="camera_info_topic" default="/sensing/camera/zedxm/rgb/color/rect/camera_info"/>
+  <arg name="ar_tag_param_file" default="$(find-pkg-share autosdv_waypoint_lab)/config/ar_tag_based_localizer.param.yaml"/>
+  <arg name="ar_tag_container" default=""
+       description="load the localizer into this container (the ZED's) instead of its own process; empty: its own process"/>
+  <arg name="ekf_param_file" default="$(find-pkg-share autoware_launch)/config/localization/ekf_localizer.param.yaml"/>
+  <arg name="use_sim_time" default="false"/>
+
+  <let name="lanelet2_map_path" value="$(var course_dir)/lanelet2_map.osm"/>
+
+  <group>
+    <push-ros-namespace namespace="map"/>
+    <node pkg="autoware_map_projection_loader" exec="autoware_map_projection_loader_node"
+          name="map_projection_loader" output="screen">
+      <param name="map_projector_info_path" value="$(var course_dir)/map_projector_info.yaml"/>
+      <param name="lanelet2_map_path" value="$(var lanelet2_map_path)"/>
+    </node>
+    <node pkg="autoware_map_loader" exec="autoware_lanelet2_map_loader"
+          name="lanelet2_map_loader" output="screen">
+      <param name="allow_unsupported_version" value="true"/>
+      <param name="center_line_resolution" value="5.0"/>
+      <param name="use_waypoints" value="true"/>
+      <param name="lanelet2_map_path" value="$(var lanelet2_map_path)"/>
+      <remap from="output/lanelet2_map" to="vector_map"/>
+    </node>
+  </group>
+
+  <group>
+    <push-ros-namespace namespace="localization"/>
+
+    <group>
+      <push-ros-namespace namespace="pose_estimator"/>
+      <!-- In the camera's container: a 1920x1200 RGB frame is 6.9 MB, and at
+           15 Hz that is 100 MB/s through UDP to a separate process, which a
+           best-effort subscription (the localizer's) loses fragments of under
+           load. In the same process the nodes share one DDS participant and
+           CycloneDDS delivers locally, with no network path. Not
+           use_intra_process_comms: the localizer's map subscription is
+           transient-local, which Humble's intra-process refuses. -->
+      <load_composable_node target="$(var ar_tag_container)"
+                            if="$(eval &quot;'$(var use_ar_tag_localizer)' == 'true' and '$(var ar_tag_container)' != ''&quot;)">
+        <composable_node pkg="autoware_ar_tag_based_localizer" plugin="ArTagBasedLocalizer"
+                         name="ar_tag_based_localizer" namespace="/localization/pose_estimator">
+          <remap from="~/input/lanelet2_map" to="/map/vector_map"/>
+          <remap from="~/input/image" to="$(var image_topic)"/>
+          <remap from="~/input/camera_info" to="$(var camera_info_topic)"/>
+          <remap from="~/input/ekf_pose" to="/localization/pose_twist_fusion_filter/biased_pose_with_covariance"/>
+          <remap from="~/output/pose_with_covariance" to="/localization/pose_estimator/pose_with_covariance"/>
+          <param from="$(var ar_tag_param_file)"/>
+          <extra_arg name="use_intra_process_comms" value="false"/>
+        </composable_node>
+      </load_composable_node>
+      <group if="$(eval &quot;'$(var use_ar_tag_localizer)' == 'true' and '$(var ar_tag_container)' == ''&quot;)">
+        <include file="$(find-pkg-share autoware_ar_tag_based_localizer)/launch/ar_tag_based_localizer.launch.xml">
+          <arg name="param_file" value="$(var ar_tag_param_file)"/>
+          <arg name="input_lanelet2_map" value="/map/vector_map"/>
+          <arg name="input_image" value="$(var image_topic)"/>
+          <arg name="input_camera_info" value="$(var camera_info_topic)"/>
+          <arg name="input_ekf_pose" value="/localization/pose_twist_fusion_filter/biased_pose_with_covariance"/>
+          <arg name="output_pose_with_covariance" value="/localization/pose_estimator/pose_with_covariance"/>
+        </include>
+      </group>
+    </group>
+
+    <group>
+      <push-ros-namespace namespace="twist_estimator"/>
+      <!-- each include in its own group: both declare config_file, and an
+           include's arguments otherwise leak into the next one -->
+      <group>
+      <include file="$(find-pkg-share autoware_vehicle_velocity_converter)/launch/vehicle_velocity_converter.launch.xml">
+        <arg name="input_vehicle_velocity_topic" value="/vehicle/status/velocity_status"/>
+        <arg name="output_twist_with_covariance" value="/sensing/vehicle_velocity_converter/twist_with_covariance"/>
+      </include>
+      </group>
+      <group>
+      <include file="$(find-pkg-share autoware_gyro_odometer)/launch/gyro_odometer.launch.xml">
+        <arg name="input_vehicle_twist_with_covariance_topic" value="/sensing/vehicle_velocity_converter/twist_with_covariance"/>
+        <arg name="input_imu_topic" value="/sensing/imu/imu_data"/>
+        <arg name="output_twist_with_covariance_topic" value="/localization/twist_estimator/twist_with_covariance"/>
+        <arg name="output_twist_with_covariance_raw_topic" value="/localization/twist_estimator/twist_with_covariance_raw"/>
+      </include>
+      </group>
+    </group>
+
+    <group>
+      <push-ros-namespace namespace="pose_twist_fusion_filter"/>
+      <include file="$(find-pkg-share autoware_ekf_localizer)/launch/ekf_localizer.launch.xml">
+        <arg name="param_file" value="$(var ekf_param_file)"/>
+        <arg name="input_initial_pose_name" value="/localization/pose_twist_fusion_filter/initialpose3d"/>
+        <arg name="input_trigger_node_service_name" value="/localization/pose_twist_fusion_filter/trigger_node"/>
+        <arg name="input_pose_with_cov_name" value="/localization/pose_estimator/pose_with_covariance"/>
+        <arg name="input_twist_with_cov_name" value="/localization/twist_estimator/twist_with_covariance"/>
+        <arg name="output_odom_name" value="/localization/kinematic_state"/>
+        <arg name="output_pose_name" value="pose"/>
+        <arg name="output_pose_with_covariance_name" value="/localization/pose_with_covariance"/>
+        <arg name="output_biased_pose_name" value="biased_pose"/>
+        <arg name="output_biased_pose_with_covariance_name" value="biased_pose_with_covariance"/>
+        <arg name="output_twist_name" value="twist"/>
+        <arg name="output_twist_with_covariance_name" value="twist_with_covariance"/>
+      </include>
+      <node pkg="autosdv_waypoint_lab" exec="start_pose_init" name="start_pose_init" output="screen">
+        <param name="course_dir" value="$(var course_dir)"/>
+        <param name="use_sim_time" value="$(var use_sim_time)"/>
+      </node>
+    </group>
+
+    <group>
+    <include file="$(find-pkg-share autoware_twist2accel)/launch/twist2accel.launch.xml">
+      <arg name="in_odom" value="/localization/kinematic_state"/>
+      <arg name="in_twist" value="/localization/twist_estimator/twist_with_covariance"/>
+      <arg name="out_accel" value="/localization/acceleration"/>
+    </include>
+    </group>
+  </group>
+</launch>

@@ -1,0 +1,49 @@
+# ZED X Mini for the waypoint lab: the left rectified colour image (the
+# ar_tag_based_localizer's input) and the IMU (gyro_odometer's), nothing else.
+# Depth, tracking and detection are off: the Orin's GPU and CPU go to ArUco.
+# Loaded after zed_wrapper's common_stereo.yaml and zedxm.yaml.
+/**:
+  ros__parameters:
+    general:
+      grab_resolution: 'HD1200'
+      grab_frame_rate: 30
+      # full resolution: a 0.25 m marker is ~30 px wide at 5 m. If ArUco
+      # cannot keep up, CUSTOM with pub_downscale_factor 2.0 halves that range.
+      pub_resolution: 'NATIVE'
+      pub_frame_rate: 15.0
+    video:
+      publish_rgb: true
+      publish_left_right: false
+      publish_raw: false
+      publish_gray: false
+      publish_stereo: false
+    depth:
+      depth_mode: 'NONE'
+      depth_stabilization: 0
+      point_cloud_freq: 0.0
+      publish_depth_map: false
+      publish_depth_info: false
+      publish_point_cloud: false
+      publish_depth_confidence: false
+      publish_disparity: false
+    pos_tracking:
+      pos_tracking_enabled: false
+      publish_tf: false
+      publish_map_tf: false
+    mapping:
+      mapping_enabled: false
+    object_detection:
+      od_enabled: false
+    body_tracking:
+      bt_enabled: false
+    sensors:
+      sensors_image_sync: false
+      sensors_pub_rate: 100.0
+      publish_imu: true
+      # the sensor kit's zed_tf_only.launch.xml publishes this edge (the lab
+      # runs the kit with its drivers off); two publishers would fight
+      publish_imu_tf: false
+      publish_imu_raw: false
+      publish_mag: false
+      publish_baro: false
+      publish_temp: false

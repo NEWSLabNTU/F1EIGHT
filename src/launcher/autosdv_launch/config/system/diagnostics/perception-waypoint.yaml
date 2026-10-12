@@ -1,0 +1,5 @@
+# Perception for the waypoint lab: there is none. The modes link
+# /autoware/perception, so it exists, constant OK.
+units:
+  - path: /autoware/perception
+    type: ok

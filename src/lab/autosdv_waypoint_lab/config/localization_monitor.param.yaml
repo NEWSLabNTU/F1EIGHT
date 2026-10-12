@@ -1,0 +1,5 @@
+/**:
+  ros__parameters:
+    error_age: 5.0         # [s] ERROR: autonomous unavailable, MRM if engaged
+    error_distance: 0.8    # [m]
+    progress_timeout: 1.0  # [s]

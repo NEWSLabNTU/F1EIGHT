@@ -1,0 +1,30 @@
+# Localization for the waypoint lab: Autoware's EKF fed by the AR-tag
+# localizer and gyro_odometer. Three conditions, all required:
+#   - /localization/kinematic_state keeps arriving (vehicle_cmd_gate withholds
+#     output without it), and map -> base_link exists: rate checks from
+#     ../component_state_monitor/topics-waypoint.yaml;
+#   - a marker fix was accepted within error_age (5 s): localization_monitor.
+#     Between markers the EKF coasts on odometry, and a long coast is a stale
+#     pose; before the first fix the pose is only the start box.
+units:
+  - path: /autoware/localization
+    type: and
+    list:
+      - { type: link, link: /autoware/localization/topic_rate_check/transform }
+      - { type: link, link: /autoware/localization/topic_rate_check/kinematic_state }
+      - { type: link, link: /autoware/localization/marker_fix }
+
+  - path: /autoware/localization/topic_rate_check/transform
+    type: diag
+    node: topic_state_monitor_transform_map_to_base_link
+    name: localization_topic_status
+
+  - path: /autoware/localization/topic_rate_check/kinematic_state
+    type: diag
+    node: topic_state_monitor_localization_kinematic_state
+    name: localization_topic_status
+
+  - path: /autoware/localization/marker_fix
+    type: diag
+    node: localization_monitor
+    name: marker_fix

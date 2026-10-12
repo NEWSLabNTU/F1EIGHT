@@ -1,0 +1,15 @@
+# path_tracker: the reference PathTracker's parameters (tracker.*), and the
+# node's own. A student package passes its own file with tracker_param_file:=
+# and its class with tracker_class:=.
+/**:
+  ros__parameters:
+    rate: 30.0
+    trajectory_timeout: 0.5
+    odom_timeout: 0.3
+    max_faults: 3
+    tracker:
+      k_lookahead: 0.6     # [s] lookahead grows by this times speed
+      lookahead_min: 0.6   # [m]
+      lookahead_max: 2.0   # [m]
+      a_lat_max: 0.6       # [m/s^2] curvature speed limit
+      preview: 1.0         # [m] how far ahead it looks for curvature

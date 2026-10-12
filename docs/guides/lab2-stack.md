@@ -1,8 +1,13 @@
-# Lab 2 stack: what runs and why
+# Coach-board pursuit stack: what runs and why
 
-`just lab2 vehicle` (`coach_pursuit.launch.xml`) and `just lab2 sim`
+> This is the coach-board version of Lab 2, kept under `just coach`. Lab 2
+> became ArUco localization and waypoint following on 2026-10-13; its stack is
+> [lab2-waypoint-stack.md](lab2-waypoint-stack.md), and the system component,
+> API component, control component and safety notes below are shared by both.
+
+`just coach vehicle` (`coach_pursuit.launch.xml`) and `just coach sim`
 (`coach_pursuit_sim.launch.xml`) start only the nodes the coach-board pursuit
-lab uses; `just lab2 bench` (`coach_pursuit_bench.launch.xml`) runs the vehicle
+lab uses; `just coach bench` (`coach_pursuit_bench.launch.xml`) runs the vehicle
 launch on a workstation with the hardware replaced (see
 [The vehicle bench](#the-vehicle-bench)). Everything else Autoware and AutoSDV would normally start is
 switched off by launch arguments; the stock launches (`just launch`,
@@ -142,19 +147,19 @@ forward them.
 - Killing `board_pursuit_planner` triggers an emergency-stop MRM 1.2 s after
   the last trajectory, and the car stops.
 - Engage is refused while no trajectory is published
-  (`launch_planner:=false`); `just lab2 speed-steps` then drives the car;
+  (`launch_planner:=false`); `just coach speed-steps` then drives the car;
   disengage returns to STOP.
-- `just lab2 vehicle launch_sensing:=false is_simulation:=true` starts on a
+- `just coach vehicle launch_sensing:=false is_simulation:=true` starts on a
   workstation (velocity_report exits: it needs `Jetson.GPIO`), and
   `/system/operation_mode/availability` has exactly one publisher, the
   converter.
 
 ## The vehicle bench
 
-`just lab2 sim` replaces the whole vehicle interface with
+`just coach sim` replaces the whole vehicle interface with
 `simple_planning_simulator`, so the actuator's safety shell, its watchdogs, its
 MRM braking, the student's SpeedPID plug-in and dead reckoning never run in the
-loop there. `just lab2 bench` runs the **real** `coach_pursuit.launch.xml` on a
+loop there. `just coach bench` runs the **real** `coach_pursuit.launch.xml` on a
 workstation and replaces only the hardware:
 
 | On the car | On the bench |
@@ -177,18 +182,18 @@ neutral after 0.5 s, because every actuator exit writes neutral but a dry run
 does not publish that write (`on_pwm_loss:=hold` keeps the last PWM instead).
 
 ```bash
-just lab2 bench                                   # default scenario, reference laws
-just lab2 bench scenario:=dropout speed_controller_class:=my_lab2.speed_pid:SpeedPID
-just lab2 engage                                  # record, engage, disengage as on the car
-just lab2 bench-checks                            # protocol 3.1 checks 1-4, PASS/FAIL lines
+just coach bench                                   # default scenario, reference laws
+just coach bench scenario:=dropout speed_controller_class:=my_lab2.speed_pid:SpeedPID
+just coach engage                                  # record, engage, disengage as on the car
+just coach bench-checks                            # protocol 3.1 checks 1-4, PASS/FAIL lines
 ```
 
-`just lab2 bench-checks` (`scripts/testing/lab2/bench_checks.py`) starts a
+`just coach bench-checks` (`scripts/testing/lab2/bench_checks.py`) starts a
 fresh bench per check and drives it through the TA's recipes:
 
 | Check | Protocol 3.1 | Passes when |
 |---|---|---|
-| `follow` | -- | engage succeeds on the first try; the default scenario is followed; `just lab2 record` bag graded by `ta/grade.py --runs` |
+| `follow` | -- | engage succeeds on the first try; the default scenario is followed; `just coach record` bag graded by `ta/grade.py --runs` |
 | `mrm` | 3 | killing `board_pursuit_planner` while following gives an emergency-stop MRM, `override_brake:emergency`, and a stop |
 | `gate` | 1 | unloading `vehicle_cmd_gate` gives `override_brake:command_timeout` within 0.6 s, then `override_neutral`, and a stop |
 | `exit` | 2 | the actuator's process-level test (`test_process_exit_leaves_outputs_neutral`): SIGINT and SIGTERM leave 370 / 489. A dry run does not publish the exit write, so the bench cannot observe it |
@@ -228,8 +233,8 @@ Two things the planning sim cannot show:
 
 ## Preflight
 
-`just lab2 preflight` (`scripts/testing/lab2/preflight.py`) runs against a
-stack that is up -- `just lab2 vehicle`, `bench` or `sim` -- before the first
+`just coach preflight` (`scripts/testing/lab2/preflight.py`) runs against a
+stack that is up -- `just coach vehicle`, `bench` or `sim` -- before the first
 engage, and prints PASS / WARN / FAIL lines; it exits 1 on any FAIL.
 
 | Check | What |

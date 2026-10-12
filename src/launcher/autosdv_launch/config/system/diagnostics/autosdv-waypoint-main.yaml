@@ -1,0 +1,96 @@
+# Diagnostic graph for the waypoint lab (Lab 2): ArUco markers + EKF
+# localization, the TA's course as the trajectory, the student PathTracker in
+# place of trajectory_follower. No route, no Autoware perception or planning.
+#
+# The same modes and the same stock system/vehicle modules as the coach-pursuit
+# graph (autosdv-pursuit-main.yaml, whose header explains the pattern); what
+# differs is four lab modules:
+#
+#   localization   -> localization-waypoint.yaml  EKF alive (kinematic_state,
+#                     map->base_link) AND a marker fix within the last 5 s
+#                     (localization_monitor). Before the first marker the car
+#                     cannot be engaged; a long blind coast is an MRM stop.
+#   perception     -> perception-waypoint.yaml    nothing to check: OK.
+#   planning       -> planning-waypoint.yaml      trajectory rate AND the car
+#                     within 0.8 m of the course (localization_monitor).
+#   control        -> control-waypoint.yaml       the pursuit one, with
+#                     path_tracker's tracker_state in place of
+#                     trajectory_follower's control_state.
+#
+# Selected by waypoint_follow.launch.xml and waypoint_follow_bench.launch.xml.
+# The topic monitors it reads are in ../component_state_monitor/topics-waypoint.yaml.
+files:
+  - { path: $(find-pkg-share autoware_launch)/config/system/diagnostics/system.yaml }
+  - { path: $(find-pkg-share autoware_launch)/config/system/diagnostics/vehicle.yaml }
+  - { path: $(dirname)/control-waypoint.yaml }
+  - { path: $(dirname)/localization-waypoint.yaml }
+  - { path: $(dirname)/perception-waypoint.yaml }
+  - { path: $(dirname)/planning-waypoint.yaml }
+
+units:
+  - path: /autoware/modes/local
+    type: and
+    list:
+      - { type: link, link: /autoware/vehicle }
+      - { type: link, link: /autoware/system }
+      - { type: link, link: /autoware/control/local }
+      - { type: link, link: /adapi/mrm_request/delegate }
+
+  - path: /autoware/modes/remote
+    type: and
+    list:
+      - { type: link, link: /autoware/vehicle }
+      - { type: link, link: /autoware/system }
+      - { type: link, link: /autoware/control/remote }
+      - { type: link, link: /adapi/mrm_request/delegate }
+
+  - path: /autoware/modes/stop
+    type: and
+    list:
+      - { type: link, link: /adapi/mrm_request/delegate }
+
+  - path: /autoware/modes/autonomous
+    type: and
+    list:
+      - { type: link, link: /autoware/localization }
+      - { type: link, link: /autoware/planning }
+      - { type: link, link: /autoware/perception }
+      - { type: link, link: /autoware/control }
+      - { type: link, link: /autoware/vehicle }
+      - { type: link, link: /autoware/system }
+      - { type: link, link: /adapi/mrm_request/delegate }
+
+  - path: /autoware/modes/pull_over
+    type: and
+    list:
+      - { type: link, link: /autoware/localization }
+      - { type: link, link: /autoware/planning }
+      - { type: link, link: /autoware/perception }
+      - { type: link, link: /autoware/control }
+      - { type: link, link: /autoware/vehicle }
+      - { type: link, link: /autoware/system }
+
+  - path: /autoware/modes/comfortable_stop
+    type: and
+    list:
+      - { type: link, link: /autoware/localization }
+      - { type: link, link: /autoware/planning }
+      - { type: link, link: /autoware/perception }
+      - { type: link, link: /autoware/control }
+      - { type: link, link: /autoware/vehicle }
+      - { type: link, link: /autoware/system }
+
+  - path: /autoware/modes/emergency_stop
+    type: and
+    list:
+      - { type: link, link: /autoware/vehicle }
+      - { type: link, link: /autoware/system }
+
+  # /autoware/debug/tools (service_log_checker) is not defined: the lab system
+  # component does not run service_log_checker, and no mode linked it. The
+  # unit system.yaml declares for it stays unlinked.
+
+  - path: /adapi/mrm_request/delegate
+    type: diag
+    node: /adapi/node/mrm_request
+    name: delegate

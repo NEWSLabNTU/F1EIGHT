@@ -1,0 +1,52 @@
+<?xml version="1.0"?>
+<!--
+  The waypoint lab's own nodes, shared by the vehicle and bench launches:
+
+    course_dir/path.csv -> waypoint_path_publisher -> /planning/trajectory,
+                                                      /planning/waypoint_path_publisher/progress
+    /planning/trajectory + /localization/kinematic_state
+        -> path_tracker [the student PathTracker] -> /control/trajectory_follower/control_cmd
+    localization_monitor -> /diagnostics (marker fix age, path deviation)
+
+  tracker_class picks the law by import path. A student package ships its
+  PathTracker and, optionally, a param file whose tracker.* entries reach the
+  class as its params dict:
+
+    tracker_class:=my_lab2.path_tracker:PathTracker
+    tracker_param_file:=$(find-pkg-share my_lab2)/config/path_tracker.param.yaml
+-->
+<launch>
+  <arg name="course_dir"/>
+  <arg name="tracker_class" default="autosdv_waypoint_lab.reference.path_tracker:PathTracker"
+       description="the lateral and speed law, package.module:ClassName"/>
+  <arg name="tracker_param_file" default="$(find-pkg-share autosdv_waypoint_lab)/config/path_tracker.param.yaml"
+       description="the node's parameters and the law's tracker.* params"/>
+  <arg name="path_param_file" default="$(find-pkg-share autosdv_waypoint_lab)/config/waypoint_path_publisher.param.yaml"/>
+  <arg name="monitor_param_file" default="$(find-pkg-share autosdv_waypoint_lab)/config/localization_monitor.param.yaml"/>
+  <arg name="laps" default="0" description="0: the course's own"/>
+  <arg name="vehicle_info_param_file"
+       default="$(find-pkg-share autosdv_vehicle_description)/config/vehicle_info.param.yaml"/>
+  <arg name="use_sim_time" default="false"/>
+
+  <node pkg="autosdv_waypoint_lab" exec="waypoint_path_publisher" name="waypoint_path_publisher"
+        namespace="planning" output="screen">
+    <param from="$(var path_param_file)"/>
+    <param name="course_dir" value="$(var course_dir)"/>
+    <param name="laps" value="$(var laps)"/>
+    <param name="use_sim_time" value="$(var use_sim_time)"/>
+  </node>
+
+  <node pkg="autosdv_waypoint_lab" exec="path_tracker" name="path_tracker"
+        namespace="control" output="screen">
+    <param from="$(var vehicle_info_param_file)"/>
+    <param from="$(var tracker_param_file)"/>
+    <param name="tracker_class" value="$(var tracker_class)"/>
+    <param name="use_sim_time" value="$(var use_sim_time)"/>
+  </node>
+
+  <node pkg="autosdv_waypoint_lab" exec="localization_monitor" name="localization_monitor"
+        namespace="localization" output="screen">
+    <param from="$(var monitor_param_file)"/>
+    <param name="use_sim_time" value="$(var use_sim_time)"/>
+  </node>
+</launch>

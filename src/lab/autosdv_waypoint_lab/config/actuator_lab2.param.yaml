@@ -1,0 +1,12 @@
+# Lab 2 (waypoint) actuator overrides, loaded after actuator.yaml through
+# vehicle_interface.launch.xml's actuator_param_overrides.
+#
+# tire_angle_to_steer_ratio: actuator.yaml's -1000 saturates the servo at
+# 0.05 rad (known-config-defects.md section 8); the course's 2 m turns need
+# 0.16 rad. -143 maps the servo's +-50 PWM onto vehicle_info's +-0.349 rad.
+# It is a STAND-IN: measure the ratio (and its sign) per car before any hall
+# run -- field protocol, steering measurement -- and put the measured value
+# here.
+/**:
+  ros__parameters:
+    tire_angle_to_steer_ratio: -143.0

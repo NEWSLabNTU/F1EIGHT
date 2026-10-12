@@ -1,0 +1,42 @@
+# The demo course: a 10 m x 4 m oval (two 6 m straights, two 2 m-radius
+# turns) in a hall at least 14 m x 8 m, ten markers on the walls around it.
+#
+# A STAND-IN until a real hall is surveyed. The geometry is plausible for the
+# NTU halls considered (a corridor end or a gym), and it is what the bench
+# runs, but every number below is replaced by a survey on site: tape the start
+# box, measure each marker's centre from two wall references, and set its yaw
+# to the direction it faces. Then regenerate the map:
+#
+#     just lab2 course-map config/courses/<hall>
+#
+# Frame: origin at the start box (the car's rear axle), x along the first
+# straight, y to the left. Markers face into the course; the side-wall ones
+# are angled about 45 deg towards the oncoming car, which is what keeps one in
+# view of a forward camera (100 deg, 5 m) on 89 % of the loop with no gap
+# longer than 0.8 m. A marker square to the wall is seen only from the side,
+# and too late. `just lab2 course-map` prints both numbers for any course.
+path: path.csv
+closed: true
+laps: 3
+v_ref: 0.8
+start_pose: {x: 0.0, y: 0.0, yaw: 0.0}
+marker_size: 0.25
+marker_height: 0.25
+markers:
+  # end walls, seen in the turns
+  - {id: 0, x: 10.0, y: 0.5, yaw: 3.1416}
+  - {id: 1, x: 10.0, y: 3.5, yaw: 3.1416}
+  - {id: 2, x: -4.0, y: 3.5, yaw: 0.0}
+  - {id: 3, x: -4.0, y: 0.5, yaw: 0.0}
+  # the y = -2 wall, angled towards a car driving +x
+  - {id: 4, x: 2.0, y: -2.0, yaw: 2.3562}
+  - {id: 5, x: 5.0, y: -2.0, yaw: 2.3562}
+  - {id: 6, x: 8.0, y: -2.0, yaw: 2.0944}
+  # the start box's own: with it, a car placed within 0.3 m and 10 deg of the
+  # box always has a marker in view (engage needs a fix; so does a parked
+  # car at the finish, or the 5 s limit stops it there)
+  - {id: 10, x: 4.0, y: -2.0, yaw: 2.3562}
+  # the y = 6 wall, angled towards a car driving -x
+  - {id: 7, x: 4.0, y: 6.0, yaw: -0.7854}
+  - {id: 8, x: 1.0, y: 6.0, yaw: -0.7854}
+  - {id: 9, x: -2.0, y: 6.0, yaw: -1.0472}

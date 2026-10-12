@@ -1,0 +1,26 @@
+<launch>
+  <arg name="course_dir"/>
+  <group><push-ros-namespace namespace="map"/>
+    <node pkg="autoware_map_projection_loader" exec="autoware_map_projection_loader_node" name="map_projection_loader">
+      <param name="map_projector_info_path" value="$(var course_dir)/map_projector_info.yaml"/>
+      <param name="lanelet2_map_path" value="$(var course_dir)/lanelet2_map.osm"/>
+    </node>
+    <node pkg="autoware_map_loader" exec="autoware_lanelet2_map_loader" name="lanelet2_map_loader">
+      <param name="allow_unsupported_version" value="true"/>
+      <param name="center_line_resolution" value="5.0"/>
+      <param name="use_waypoints" value="true"/>
+      <param name="lanelet2_map_path" value="$(var course_dir)/lanelet2_map.osm"/>
+      <remap from="output/lanelet2_map" to="vector_map"/>
+    </node>
+  </group>
+  <group><push-ros-namespace namespace="localization/pose_estimator"/>
+    <include file="$(find-pkg-share autoware_ar_tag_based_localizer)/launch/ar_tag_based_localizer.launch.xml">
+      <arg name="param_file" value="$(find-pkg-share autosdv_waypoint_lab)/config/ar_tag_based_localizer.param.yaml"/>
+      <arg name="input_lanelet2_map" value="/map/vector_map"/>
+      <arg name="input_image" value="/fake/image"/>
+      <arg name="input_camera_info" value="/fake/camera_info"/>
+      <arg name="input_ekf_pose" value="/localization/pose_twist_fusion_filter/biased_pose_with_covariance"/>
+      <arg name="output_pose_with_covariance" value="/localization/pose_estimator/pose_with_covariance"/>
+    </include>
+  </group>
+</launch>

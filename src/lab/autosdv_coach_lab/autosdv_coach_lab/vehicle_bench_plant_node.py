@@ -11,7 +11,9 @@ Reads what the actuator commands and publishes what the car's sensors would:
        raw topic, so imu_corrector and dead reckoning run unchanged; it carries
        the static gyro bias imu_corrector.param.yaml removes
        ~/odometry                        the TRUE pose (map, starting at the
-       origin like dead reckoning); virtual_coach places the board from it
+       origin like dead reckoning, or at initial_x/y/yaw, or at a waypoint
+       course's start box with start_pose_file); virtual_coach places the
+       board from it, virtual_marker_localizer the marker sightings
 
 The model is bench_plant.VehiclePlant: the motor fit's MotorPlant, the
 actuator's steering mapping inverted, bicycle kinematics, HallSpeedSensor.
@@ -84,6 +86,12 @@ class VehicleBenchPlant(Node):
         declare('gyro_bias_error_z', 0.0)
         declare('pwm_timeout', 0.5)
         declare('on_pwm_loss', 'neutral')
+        # where the car starts: the map origin (dead reckoning's), or a pose,
+        # or the start_pose of a waypoint course.yaml (which wins)
+        declare('initial_x', 0.0)
+        declare('initial_y', 0.0)
+        declare('initial_yaw', 0.0)
+        declare('start_pose_file', '')
         gp = lambda k: self.get_parameter(k).value  # noqa: E731
 
         overrides = yaml.safe_load(gp('plant') or '') or {}
@@ -101,6 +109,12 @@ class VehicleBenchPlant(Node):
         self.plant = VehiclePlant(
             motor, steering, wheel_diameter=float(gp('wheel_diameter')) / 100.0,
             markers_per_rotation=int(gp('markers_per_rotation')))
+        x0, y0, yaw0 = float(gp('initial_x')), float(gp('initial_y')), float(gp('initial_yaw'))
+        if gp('start_pose_file'):
+            with open(gp('start_pose_file')) as f:
+                sp = (yaml.safe_load(f) or {}).get('start_pose') or {}
+            x0, y0, yaw0 = float(sp.get('x', 0.0)), float(sp.get('y', 0.0)), float(sp.get('yaw', 0.0))
+        self.plant.x, self.plant.y, self.plant.yaw = x0, y0, yaw0
 
         self.base_frame = gp('base_frame')
         self.imu_frame = gp('imu_frame')

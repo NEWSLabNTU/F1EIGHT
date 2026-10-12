@@ -1,5 +1,10 @@
 # Lab 2 field calibration
 
+> The recipes are under `just coach` since 2026-10-13, when `just lab2` became
+> the waypoint lab. The speed steps, motor fit and braking report calibrate the
+> actuator's SpeedPID and apply to both labs; the board detector sections
+> apply to the coach-board lab only.
+
 The numbers that the Lab 2 coach-board pursuit stack ships as guesses, and how
 to measure them in the first field session. There are three measurements, one
 recipe each, plus a speed step test that feeds the motor fit:
@@ -10,17 +15,17 @@ recipe each, plus a speed step test that feeds the motor fit:
 | Braking and reaction | `record` or `record-cal` around stops | `braking-report` | `envelope_decel` and `reaction_time` in `board_pursuit_planner.param.yaml` |
 | Detector | `record-board` with the board held still | `detector-report` | the `autosdv_vlp16` / `autosdv_robin_w` profiles in `reflector_pose_init` |
 
-Every recipe lives in `just/lab2.just`; `just lab2` lists them. Bags go to
+Every recipe lives in `just/lab2.just`; `just coach` lists them. Bags go to
 `rosbags/`. Field safety comes first: the protocol in the course repository
 applies (spotter with the kill switch, 1.5 m/s cap, cones), and before any of
 this you need the actuator watchdog in place and a straight, clear run of at
 least 25 m.
 
-Two software checks come before the car. On a workstation, `just lab2
+Two software checks come before the car. On a workstation, `just coach
 bench-checks` runs protocol 3.1 checks 1 to 4 against the real vehicle stack
 with a plant model in place of the car, and every recipe below works against
-`just lab2 bench` the same way it does against `just lab2 vehicle`. On the car,
-`just lab2 preflight` after bring-up says whether the stack is ready to engage,
+`just coach bench` the same way it does against `just coach vehicle`. On the car,
+`just coach preflight` after bring-up says whether the stack is ready to engage,
 and which diagnostic blocks it if not. Both are described in
 [lab2-stack.md](lab2-stack.md#the-vehicle-bench).
 
@@ -34,16 +39,16 @@ parameters are provisional guesses.
 the stack without the planner:
 
 ```bash
-just lab2 vehicle launch_planner:=false                     # terminal 1 (Robin-W, ZED IMU)
-just lab2 record-cal steps1                                  # terminal 2
-just lab2 speed-steps                                        # terminal 3: 0,0.5,1.0,0.5,1.5,0 m/s, 4 s each
-just lab2 engage                                             # terminal 4: starts the schedule
+just coach vehicle launch_planner:=false                     # terminal 1 (Robin-W, ZED IMU)
+just coach record-cal steps1                                  # terminal 2
+just coach speed-steps                                        # terminal 3: 0,0.5,1.0,0.5,1.5,0 m/s, 4 s each
+just coach engage                                             # terminal 4: starts the schedule
 ```
 
 The schedule starts on engage and ends stopped. It also stops early with a
 braking ramp after `max_distance` metres (25 m by default), and disengaging
 aborts it. The arguments are steps, hold time and distance:
-`just lab2 speed-steps 0,0.3,0.6,0,1.0,0.7,0 4 30`. A schedule with
+`just coach speed-steps 0,0.3,0.6,0,1.0,0.7,0 4 30`. A schedule with
 **several stops from different speeds** gives the brake more data (see below).
 
 It drives through the normal command path: a trajectory goes to Autoware's
@@ -54,7 +59,7 @@ publish `control_cmd` directly; that would bypass the gate.
 **Fit.**
 
 ```bash
-just lab2 fit-motor rosbags/lab2cal_steps1 -o tmp/motor_plant.yaml
+just coach fit-motor rosbags/lab2cal_steps1 -o tmp/motor_plant.yaml
 ```
 
 The fit replays the recorded PWM (`/autosdv/actuator_node/debug/pwm_values`)
@@ -94,14 +99,14 @@ it can stop from inside the gap to the standoff floor:
 currently guesses (0.5 s and 0.6 m/s²).
 
 **Record.** Drive at a steady speed, then stop the car. Any recording that
-contains these topics works: `just lab2 record` or `just lab2 record-cal`.
+contains these topics works: `just coach record` or `just coach record-cal`.
 Each kind of stop is a trigger:
 
 | Trigger | How to make it | What it measures |
 |---|---|---|
 | `board_stop` | the TA walking the board stops dead | the whole chain: detector, tracker, headway law, control |
 | `board_drop` | the TA drops the board or hides it | loss handling, including the tracker's 0.5 s timeout |
-| `disengage` | `just lab2 disengage` | Autoware's stop mode on this car |
+| `disengage` | `just coach disengage` | Autoware's stop mode on this car |
 | `emergency` | MRM, or an emergency command | the emergency path |
 
 Do at least three of each at 0.8 to 1.0 m/s.
@@ -109,7 +114,7 @@ Do at least three of each at 0.8 to 1.0 m/s.
 **Analyse.**
 
 ```bash
-just lab2 braking-report rosbags/lab2_run1 rosbags/lab2_run2 ...
+just coach braking-report rosbags/lab2_run1 rosbags/lab2_run2 ...
 ```
 
 For each stop the report gives the steady speed `v0` and the reaction, which
@@ -170,13 +175,13 @@ walks between the positions, at chest height (centre about 1.0 m). Make sure
 the stack, or at least the LiDAR driver and the TF, is running:
 
 ```bash
-just lab2 record-board robin-w chest
+just coach record-board robin-w chest
 ```
 
 **Analyse.**
 
 ```bash
-just lab2 detector-report rosbags/lab2board_robin-w_chest robin-w
+just coach detector-report rosbags/lab2board_robin-w_chest robin-w
 ```
 
 The report replays every scan through `board_tracking_node`'s detector and its
