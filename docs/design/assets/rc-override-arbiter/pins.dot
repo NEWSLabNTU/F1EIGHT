@@ -1,0 +1,103 @@
+digraph pins {
+  rankdir=LR; splines=true; nodesep=0.25; ranksep=1.1;
+  fontname="DejaVu Sans"; labelloc=t; fontsize=16;
+  label="Arbiter board: pin-level wiring (Seeed XIAO RP2350)\nAll GND pins join one common star point";
+  node [shape=plain fontname="DejaVu Sans" fontsize=11];
+  edge [fontname="DejaVu Sans" fontsize=9 penwidth=1.6 arrowsize=0.6];
+
+  RX [label=<<table border="1" cellborder="0" cellspacing="0" cellpadding="3" bgcolor="#fff4d6">
+    <tr><td colspan="1" bgcolor="#f0d9a0"><b>RC receiver</b></td></tr>
+    <tr><td port="ch1" align="left">CH1 steer</td></tr>
+    <tr><td port="ch2" align="left">CH2 throttle</td></tr>
+    <tr><td port="v5" align="left">+5 V</td></tr>
+    <tr><td align="left">GND</td></tr></table>>];
+  PCA [label=<<table border="1" cellborder="0" cellspacing="0" cellpadding="3" bgcolor="#eef1f4">
+    <tr><td bgcolor="#d5dbe1"><b>PCA9685</b>&#160;(existing)</td></tr>
+    <tr><td port="c0" align="left">ch0 throttle</td></tr>
+    <tr><td port="c1" align="left">ch1 steer</td></tr>
+    <tr><td port="c2" align="left">ch2 heartbeat</td></tr>
+    <tr><td align="left">GND</td></tr></table>>];
+
+  SW [label=<<table border="1" cellborder="0" cellspacing="0" cellpadding="3" bgcolor="#e3f0ff">
+    <tr><td colspan="2" bgcolor="#bcd6f5"><b>Auto-mode switch</b>&#160;(3PDT)</td></tr>
+    <tr><td port="aon" align="left">A ON</td><td port="acom" align="right">A COM</td></tr>
+    <tr><td port="aoff" align="left">A OFF: 10k to GND</td><td></td></tr>
+    <tr><td port="bon" align="left">B ON</td><td port="bcom" align="right">B COM</td></tr>
+    <tr><td port="boff" align="left">B OFF: 10k to GND</td><td></td></tr>
+    <tr><td align="left">C ON: GND</td><td port="ccom" align="right">C COM</td></tr></table>>];
+
+  LS [label=<<table border="1" cellborder="0" cellspacing="0" cellpadding="3" bgcolor="#f3eefa">
+    <tr><td colspan="2" bgcolor="#dccdf0"><b>74LVC245</b>&#160;at 3.3 V</td></tr>
+    <tr><td port="a1" align="left">A1 (2)</td><td port="b1" align="right">B1 (18)</td></tr>
+    <tr><td port="a2" align="left">A2 (3)</td><td port="b2" align="right">B2 (17)</td></tr>
+    <tr><td port="a3" align="left">A3 (4)</td><td port="b3" align="right">B3 (16)</td></tr>
+    <tr><td port="a4" align="left">A4 (5)</td><td port="b4" align="right">B4 (15)</td></tr>
+    <tr><td port="a5" align="left">A5 (6)</td><td port="b5" align="right">B5 (14)</td></tr>
+    <tr><td port="vcc" align="left">VCC (20)</td><td align="right">GND (10)</td></tr>
+    <tr><td colspan="2" align="left"><font point-size="9">DIR (1) to VCC, OE (19) to GND,<br align="left"/>unused A6 to A8 to GND</font></td></tr></table>>];
+
+  X [label=<<table border="1" cellborder="0" cellspacing="0" cellpadding="3" bgcolor="#e9f6ec">
+    <tr><td colspan="2" bgcolor="#bfe3c8"><b>Seeed XIAO RP2350</b></td></tr>
+    <tr><td port="d0" align="left">D0  GPIO26</td><td port="o_d0"></td></tr>
+    <tr><td port="d1" align="left">D1  GPIO27</td><td></td></tr>
+    <tr><td port="d3" align="left">D3  GPIO5</td><td></td></tr>
+    <tr><td port="d4" align="left">D4  GPIO6</td><td></td></tr>
+    <tr><td port="d5" align="left">D5  GPIO7</td><td></td></tr>
+    <tr><td port="d8" align="left">D8  GPIO2 (pull-up)</td><td></td></tr>
+    <tr><td></td><td port="d6" align="right">D6  GPIO0 UART0 TX</td></tr>
+    <tr><td></td><td port="d7" align="right">D7  GPIO1 UART0 RX</td></tr>
+    <tr><td></td><td port="d9" align="right">D9  GPIO4</td></tr>
+    <tr><td></td><td port="d10" align="right">D10  GPIO3</td></tr>
+    <tr><td></td><td port="d12" align="right">D12  GPIO20 (back pad)</td></tr>
+    <tr><td port="v5" align="left">5V</td><td port="v33" align="right">3V3</td></tr>
+    <tr><td colspan="2" align="left"><font point-size="9">onboard RGB LED: GPIO22, enable GPIO23<br align="left"/>spare: D2, D11 (UART1 RX), D13 to D18</font></td></tr></table>>];
+
+  VESC [label=<<table border="1" cellborder="0" cellspacing="0" cellpadding="3" bgcolor="#eef1f4">
+    <tr><td bgcolor="#d5dbe1"><b>VESC</b>&#160;UART port</td></tr>
+    <tr><td port="rx" align="left">RX</td></tr>
+    <tr><td port="tx" align="left">TX</td></tr>
+    <tr><td align="left">GND</td></tr></table>>];
+  SERVO [label=<<table border="1" cellborder="0" cellspacing="0" cellpadding="3" bgcolor="#eef1f4">
+    <tr><td bgcolor="#d5dbe1"><b>Steering servo</b></td></tr>
+    <tr><td port="s" align="left">signal</td></tr>
+    <tr><td align="left">GND (power unchanged)</td></tr></table>>];
+  ORIN [label=<<table border="1" cellborder="0" cellspacing="0" cellpadding="3" bgcolor="#eef1f4">
+    <tr><td bgcolor="#d5dbe1"><b>Jetson AGX Orin</b>&#160;40-pin</td></tr>
+    <tr><td port="g" align="left">GPIO (TBD): AUTO state</td></tr>
+    <tr><td align="left">GND</td></tr></table>>];
+  LED [label=<<table border="1" cellborder="0" cellspacing="0" cellpadding="3" bgcolor="#e3f0ff" style="dashed">
+    <tr><td bgcolor="#bcd6f5"><b>WS2812 LED</b>&#160;(optional)</td></tr>
+    <tr><td port="din" align="left">DIN</td></tr>
+    <tr><td port="v5" align="left">5 V</td></tr>
+    <tr><td align="left">GND</td></tr></table>>];
+
+
+  // receiver signals
+  RX:ch1 -> LS:a1 [color="#b08a1e" label="rx steer"];
+  RX:ch2 -> LS:a2 [color="#b08a1e" label="rx throttle"];
+  // Orin through the switch
+  PCA:c0 -> SW:aon [color="#d9822b"];
+  PCA:c1 -> SW:bon [color="#d9822b"];
+  SW:acom -> LS:a3 [color="#d9822b" label="orin throttle"];
+  SW:bcom -> LS:a4 [color="#d9822b" label="orin steer"];
+  PCA:c2 -> LS:a5 [color="#d9822b" style=bold label="heartbeat"];
+  SW:ccom -> X:d8 [color="#2b6cb0" label="switch sense"];
+  // shifter to XIAO
+  LS:b1 -> X:d0 [color="#b08a1e"];
+  LS:b2 -> X:d1 [color="#b08a1e"];
+  LS:b3 -> X:d3 [color="#d9822b"];
+  LS:b4 -> X:d4 [color="#d9822b"];
+  LS:b5 -> X:d5 [color="#d9822b"];
+  X:v33 -> LS:vcc [color="#c0392b" label="3.3 V" constraint=false];
+  // outputs
+  X:d6 -> VESC:rx [color="#2e8b57" label="TX to RX"];
+  VESC:tx -> X:d7 [color="#2e8b57" label="TX to RX"];
+  X:d9 -> SERVO:s [color="#2e8b57" label="330 ohm"];
+  X:d10 -> ORIN:g [color="#2b6cb0" label="1 kohm"];
+  X:d12 -> LED:din [color="#2b6cb0" style=dashed label="330 ohm"];
+  // power
+  RX:v5 -> X:v5 [color="#c0392b" label="1N5819 diode" constraint=false];
+  RX:v5 -> LED:v5 [color="#c0392b" style=dashed constraint=false];
+  {rank=same; RX; PCA}
+  {rank=same; VESC; SERVO; ORIN; LED}
+}

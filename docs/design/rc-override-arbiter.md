@@ -107,10 +107,12 @@ on the last one.
 
 ## Wiring
 
-Pin-level harness, generated with WireViz from
-[`wiring.yml`](assets/rc-override-arbiter/wiring.yml):
+![Pin-level wiring](assets/rc-override-arbiter/pins.svg)
 
-![Pin-level wiring](assets/rc-override-arbiter/wiring.svg)
+The same wiring as a harness drawing, with every wire and part listed, is
+[`wiring.svg`](assets/rc-override-arbiter/wiring.svg), generated with WireViz
+from [`wiring.yml`](assets/rc-override-arbiter/wiring.yml); it is wide, so
+zoom in.
 
 | XIAO pin | GPIO | Signal | Through |
 |---|---|---|---|
@@ -238,8 +240,15 @@ The sources sit next to the SVGs in `assets/rc-override-arbiter/`:
 
 ```bash
 cd docs/design/assets/rc-override-arbiter
-for f in today block states; do dot -Tsvg $f.dot -o $f.svg; done
+for f in today block states pins; do dot -Tsvg $f.dot -o $f.svg; done
 uvx wireviz -f s wiring.yml     # writes wiring.svg; delete the wiring and wiring.gv byproducts
+```
+
+The PDF beside this note, `rc-override-arbiter.pdf`, is this file with its
+figures; rebuild it after any edit, from the repository root:
+
+```bash
+typst compile --root docs/design docs/design/assets/rc-override-arbiter/pdf.typ docs/design/rc-override-arbiter.pdf
 ```
 
 ## Sources
