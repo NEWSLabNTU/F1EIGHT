@@ -1,0 +1,26 @@
+digraph optionb2 {
+  rankdir=LR; fontname="DejaVu Sans"; labelloc=t; fontsize=18;
+  label="Arbiter board added to today's wiring";
+  node [shape=box style="rounded,filled" fillcolor="#eef1f4" color="#5b6670" fontname="DejaVu Sans" fontsize=14];
+  edge [fontname="DejaVu Sans" fontsize=11 color="#5b6670"];
+  ORIN [label="Jetson AGX Orin"];
+  PCA  [label="PCA9685\nPWM board"];
+  RX   [label="RC receiver\n(paired with the joystick)" fillcolor="#fff4d6" color="#b08a1e"];
+  SW   [label="Auto-mode switch\n(3-pole)" fillcolor="#e3f0ff" color="#2b6cb0"];
+  ARB  [label=<<b>Arbiter board (NEW)</b><br/><font point-size="11">Seeed XIAO RP2350, 21 x 17.8 mm<br/>+ 74LVC245 level shifter<br/>onboard RGB LED shows the mode</font>> fillcolor="#e3f0ff" color="#2b6cb0" penwidth=2];
+  LED  [label="External RGB LED\n(optional, outside the body)" fillcolor="#e3f0ff" color="#2b6cb0" style="rounded,filled,dashed"];
+  VESC [label="VESC"];
+  MOT  [label="Brushless motor"];
+  SERVO[label="Steering servo"];
+  ORIN -> PCA [label="I2C"];
+  PCA -> SW [label="ch0 throttle\nch1 steer" color="#d9822b"];
+  PCA -> ARB [label="ch2 heartbeat" color="#d9822b" style=bold];
+  SW -> ARB [label="Orin pulses (cut when OFF)\n+ switch position" color="#d9822b"];
+  RX -> ARB [label="throttle, steer" color="#b08a1e"];
+  RX -> ARB [label="5 V power" color="#c0392b" style=dashed];
+  ARB -> VESC [label="serial: brake, current,\nspeed cap" color="#2e8b57"];
+  ARB -> SERVO [label="steer pulse" color="#2e8b57"];
+  ARB -> LED [label="mode colour" color="#2b6cb0" style=dashed];
+  ARB -> ORIN [label="state: AUTO or not\n(1 GPIO wire)" color="#2b6cb0" constraint=false];
+  VESC -> MOT [label="3 phases" penwidth=2];
+}

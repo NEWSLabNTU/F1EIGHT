@@ -1,0 +1,247 @@
+metadata:
+  title: AutoSDV arbiter board, Seeed XIAO RP2350
+
+options:
+  fontname: DejaVu Sans
+  bgcolor: WH
+  color_mode: SHORT
+
+connectors:
+  RX:
+    type: RC receiver
+    subtype: model TBD
+    pinlabels: [CH1 steer, CH2 throttle, +5V, GND]
+    notes: Failsafe = no pulses
+  PCA:
+    type: PCA9685
+    subtype: existing
+    pinlabels: [ch0 throttle, ch1 steer, ch2 heartbeat, GND]
+  SW:
+    type: Auto-mode switch
+    subtype: 3PDT toggle
+    pinlabels: [A COM, A ON, A OFF, B COM, B ON, B OFF, C COM, C ON]
+    notes: OFF = Orin throttle and steer cut in hardware
+  RPD1:
+    type: R 10k
+    subtype: pull-down
+    pinlabels: [p1, p2]
+  RPD2:
+    type: R 10k
+    subtype: pull-down
+    pinlabels: [p1, p2]
+  LS:
+    type: 74LVC245
+    subtype: level shifter, VCC 3.3 V
+    show_pincount: false
+    pinlabels: [A1, A2, A3, A4, A5, B1, B2, B3, B4, B5, VCC, DIR, OE, GND]
+    pins: [2, 3, 4, 5, 6, 18, 17, 16, 15, 14, 20, 1, 19, 10]
+    loops:
+      - [1, 20]
+      - [19, 10]
+    notes: DIR high = A to B; unused A6-A8 to GND
+  XIAO:
+    type: Seeed XIAO RP2350
+    subtype: arbiter firmware
+    show_pincount: false
+    pinlabels: [D0 GPIO26, D1 GPIO27, D3 GPIO5, D4 GPIO6, D5 GPIO7, D8 GPIO2, D6 GPIO0 TX, D7 GPIO1 RX, D9 GPIO4, D10 GPIO3, D12 GPIO20, 5V, 3V3, GND]
+    notes: |-
+      Onboard RGB LED on GPIO22 (enable GPIO23) shows the mode.
+      D2, D11, D13-D18 spare. D11 (GPIO21, UART1 RX) reserved for a serial receiver.
+      D8 internal pull-up, low = switch ON.
+  D1:
+    type: 1N5819
+    subtype: Schottky
+    pinlabels: [A, K]
+  RS:
+    type: R 330
+    pinlabels: [p1, p2]
+  RO:
+    type: R 1k
+    pinlabels: [p1, p2]
+  RL:
+    type: R 330
+    pinlabels: [p1, p2]
+  SERVO:
+    type: Steering servo
+    subtype: power unchanged
+    pinlabels: [S, GND]
+  VESC:
+    type: VESC
+    subtype: UART port
+    pinlabels: [RX, TX, GND]
+    notes: App = UART; timeout 50 ms, brake current above 0 A
+  ORIN:
+    type: Jetson AGX Orin
+    subtype: 40-pin header
+    show_pincount: false
+    pinlabels: [GPIO state in, GND]
+    notes: GPIO pin TBD (Jetson-IO)
+  LED:
+    type: WS2812 LED
+    subtype: optional, outside the body
+    pinlabels: [DIN, 5V, GND]
+  G:
+    style: simple
+    type: GND
+    subtype: common ground
+
+cables:
+  W_RX:
+    category: bundle
+    colors: [YE, YE]
+    wirelabels: [rx steer, rx throttle]
+  W_HB:
+    category: bundle
+    colors: [OG]
+    wirelabels: [heartbeat]
+  W_PCA:
+    category: bundle
+    colors: [OG, OG]
+    wirelabels: [orin throttle, orin steer]
+  W_SWLS:
+    category: bundle
+    colors: [OG, OG]
+    wirelabels: [orin throttle gated, orin steer gated]
+  W_PD:
+    category: bundle
+    colors: [GY, GY]
+  W_SENSE:
+    category: bundle
+    colors: [BU]
+    wirelabels: [switch sense]
+  W_LSX:
+    category: bundle
+    colors: [YE, YE, OG, OG, OG]
+    wirelabels: [rx steer, rx throttle, orin throttle, orin steer, heartbeat]
+  W_3V3:
+    category: bundle
+    colors: [RD]
+    wirelabels: [3.3 V]
+  W_UART:
+    category: bundle
+    colors: [GN, GN]
+    wirelabels: [XIAO TX to VESC RX, VESC TX to XIAO RX]
+  W_OUT:
+    category: bundle
+    colors: [GN, BU, BU]
+    wirelabels: [steer out, state, LED data]
+  W_S:
+    category: bundle
+    colors: [GN]
+  W_O:
+    category: bundle
+    colors: [BU]
+  W_L:
+    category: bundle
+    colors: [BU]
+  W_5V:
+    category: bundle
+    colors: [RD]
+    wirelabels: [+5 V]
+  W_5VX:
+    category: bundle
+    colors: [RD, RD]
+    wirelabels: [5 V to XIAO, 5 V to LED]
+  WG:
+    category: bundle
+    colors: [BK]
+
+connections:
+  # receiver
+  - - RX: [CH1 steer, CH2 throttle]
+    - W_RX: [1, 2]
+    - LS: [A1, A2]
+  # Orin path through the auto-mode switch
+  - - PCA: [ch0 throttle, ch1 steer]
+    - W_PCA: [1, 2]
+    - SW: [A ON, B ON]
+  - - SW: [A COM, B COM]
+    - W_SWLS: [1, 2]
+    - LS: [A3, A4]
+  - - SW: [A OFF]
+    - W_PD: [1]
+    - RPD1: [p1]
+  - - SW: [B OFF]
+    - W_PD: [2]
+    - RPD2: [p1]
+  # heartbeat goes straight to the shifter
+  - - PCA: [ch2 heartbeat]
+    - W_HB: [1]
+    - LS: [A5]
+  - - SW: [C COM]
+    - W_SENSE: [1]
+    - XIAO: [D8 GPIO2]
+  # shifter to XIAO
+  - - LS: [B1, B2, B3, B4, B5]
+    - W_LSX: [1, 2, 3, 4, 5]
+    - XIAO: [D0 GPIO26, D1 GPIO27, D3 GPIO5, D4 GPIO6, D5 GPIO7]
+  - - XIAO: [3V3]
+    - W_3V3: [1]
+    - LS: [VCC]
+  # VESC serial
+  - - XIAO: [D6 GPIO0 TX, D7 GPIO1 RX]
+    - W_UART: [1, 2]
+    - VESC: [RX, TX]
+  # outputs
+  - - XIAO: [D9 GPIO4]
+    - W_OUT: [1]
+    - RS: [p1]
+  - - XIAO: [D10 GPIO3]
+    - W_OUT: [2]
+    - RO: [p1]
+  - - XIAO: [D12 GPIO20]
+    - W_OUT: [3]
+    - RL: [p1]
+  - - RS: [p2]
+    - W_S: [1]
+    - SERVO: [S]
+  - - RO: [p2]
+    - W_O: [1]
+    - ORIN: [GPIO state in]
+  - - RL: [p2]
+    - W_L: [1]
+    - LED: [DIN]
+  # power
+  - - RX: [+5V]
+    - W_5V: [1]
+    - D1: [A]
+  - - D1: [K]
+    - W_5VX: [1]
+    - XIAO: [5V]
+  - - D1: [K]
+    - W_5VX: [2]
+    - LED: [5V]
+  # grounds, each to the common star point
+  - - RX: [GND]
+    - WG.: [1]
+    - G.
+  - - PCA: [GND]
+    - WG.: [1]
+    - G.
+  - - RPD1: [p2]
+    - WG.: [1]
+    - G.
+  - - RPD2: [p2]
+    - WG.: [1]
+    - G.
+  - - SW: [C ON]
+    - WG.: [1]
+    - G.
+  - - LS: [GND]
+    - WG.: [1]
+    - G.
+  - - XIAO: [GND]
+    - WG.: [1]
+    - G.
+  - - SERVO: [GND]
+    - WG.: [1]
+    - G.
+  - - VESC: [GND]
+    - WG.: [1]
+    - G.
+  - - ORIN: [GND]
+    - WG.: [1]
+    - G.
+  - - LED: [GND]
+    - WG.: [1]
+    - G.

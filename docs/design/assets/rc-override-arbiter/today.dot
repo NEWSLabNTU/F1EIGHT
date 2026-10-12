@@ -1,0 +1,18 @@
+digraph today {
+  rankdir=LR; fontname="DejaVu Sans"; label="Today (assumed: the selector switch sits on the two signal wires)"; labelloc=t; fontsize=18;
+  node [shape=box style="rounded,filled" fillcolor="#eef1f4" color="#5b6670" fontname="DejaVu Sans" fontsize=14];
+  edge [fontname="DejaVu Sans" fontsize=11 color="#5b6670"];
+  ORIN [label="Jetson AGX Orin"];
+  PCA  [label="PCA9685\nPWM board"];
+  RX   [label="RC receiver\n(paired with the joystick)" fillcolor="#fff4d6" color="#b08a1e"];
+  SW   [label="Selector switch\nOrin | joystick"];
+  VESC [label="VESC"];
+  MOT  [label="Brushless motor"];
+  SERVO[label="Steering servo"];
+  ORIN -> PCA [label="I2C"];
+  PCA -> SW [label="ch0 throttle\nch1 steer" color="#d9822b"];
+  RX  -> SW [label="throttle\nsteer" color="#b08a1e"];
+  SW -> VESC [label="throttle pulse" color="#2e8b57"];
+  SW -> SERVO [label="steer pulse" color="#2e8b57"];
+  VESC -> MOT [label="3 phases" penwidth=2];
+}

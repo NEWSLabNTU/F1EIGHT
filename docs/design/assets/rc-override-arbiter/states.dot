@@ -1,0 +1,21 @@
+digraph states {
+  rankdir=LR; fontname="DejaVu Sans"; labelloc=t; fontsize=18;
+  label="Arbiter board modes";
+  node [shape=box style="rounded,filled" fontname="DejaVu Sans" fontsize=13 penwidth=1.5];
+  edge [fontname="DejaVu Sans" fontsize=11];
+  MANUAL [label=<<b>MANUAL</b><br/><font point-size="10">switch OFF<br/>joystick drives<br/>LED off</font>> fillcolor="#eef1f4" color="#5b6670"];
+  ARMING [label=<<b>ARMING</b><br/><font point-size="10">switch ON, checking heartbeat<br/>joystick drives<br/>LED green slow blink</font>> fillcolor="#e9f6ec" color="#2e8b57"];
+  AUTO [label=<<b>AUTO</b><br/><font point-size="10">Orin drives<br/>joystick watched<br/>LED green steady</font>> fillcolor="#cdeccf" color="#1f6f3f" penwidth=2.5];
+  DT [label=<<b>DISENGAGED: takeover</b><br/><font point-size="10">joystick drives<br/>LED amber fast blink<br/>2 short beeps</font>> fillcolor="#fff1d6" color="#b07a1e"];
+  DF [label=<<b>DISENGAGED: Orin lost</b><br/><font point-size="10">brake now, then joystick<br/>LED red fast blink<br/>beep until switch OFF</font>> fillcolor="#fde0dc" color="#b03a2e" penwidth=2.5];
+  MANUAL -> ARMING [label="switch OFF to ON"];
+  ARMING -> AUTO [label="heartbeat steady 1 s\nsticks centred"];
+  ARMING -> DF [label="no heartbeat\nwithin 5 s"];
+  AUTO -> DT [label="stick past deadband\n2 packets"];
+  AUTO -> DF [label="heartbeat silent 150 ms\nor radio lost"];
+  ARMING -> MANUAL [label="switch OFF"];
+  AUTO -> MANUAL [label="switch OFF"];
+  DT -> MANUAL [label="switch OFF"];
+  DF -> MANUAL [label="switch OFF"];
+  {rank=same; DT; DF}
+}
