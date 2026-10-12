@@ -4,7 +4,10 @@ The Part 1 tests and the reference tuning run here. The car is a kinematic
 bicycle about the rear axle with a first-order steering servo and a speed that
 follows the command with a first-order lag and an acceleration limit -- a
 stand-in for the actuator's SpeedPID, good enough to separate tracking from
-speed control. The tracker sees exactly what `path_tracker` gives it on the
+speed control. The steering command is rate-limited to 1.0 rad/s before the
+servo lag, as vehicle_cmd_gate limits it on the car (autoware_launch's
+vehicle_cmd_gate.param.yaml, nominal steer_rate_lim_for_steer_cmd, 1.0 rad/s
+below 20 m/s); the actuator itself applies no rate limit. The tracker sees exactly what `path_tracker` gives it on the
 car: the course window ahead, from `CoursePath.window`, and a pose that can
 carry localization noise (pose_noise_std, yaw_noise_std: Gaussian, redrawn
 every cycle) while the metrics use the true pose.
@@ -27,6 +30,7 @@ from autosdv_waypoint_lab.tracker_api import (
 class BenchParams:
     dt: float = 1.0 / 30.0           # tracker rate, as path_tracker
     steer_time_constant: float = 0.1
+    steer_rate_max: float = 1.0      # [rad/s] vehicle_cmd_gate's steering rate limit
     speed_time_constant: float = 0.3
     accel_max: float = 1.0
     decel_max: float = 1.5
@@ -82,6 +86,7 @@ def run(tracker, course: CoursePath, start: Tuple[float, float, float],
     x, y, yaw = start
     v = 0.0
     delta = 0.0
+    delta_cmd = 0.0                  # after the gate's rate limit
     t = 0.0
     out = BenchResult()
     stopped_since = None
@@ -112,8 +117,10 @@ def run(tracker, course: CoursePath, start: Tuple[float, float, float],
         a = (cmd.speed - v) / p.speed_time_constant
         a = max(-p.decel_max, min(p.accel_max, a))
         v = max(0.0, v + a * p.dt)
+        step = p.steer_rate_max * p.dt
+        delta_cmd += max(-step, min(step, cmd.steering_angle - delta_cmd))
         k = 1.0 - math.exp(-p.dt / p.steer_time_constant)
-        delta += (cmd.steering_angle - delta) * k
+        delta += (delta_cmd - delta) * k
         yaw_rate = v * math.tan(delta) / vehicle.wheel_base
         yaw_mid = yaw + 0.5 * yaw_rate * p.dt
         x += v * math.cos(yaw_mid) * p.dt
