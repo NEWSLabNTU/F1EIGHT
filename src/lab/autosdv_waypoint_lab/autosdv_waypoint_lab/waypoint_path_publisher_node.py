@@ -32,7 +32,7 @@ class WaypointPathPublisher(Node):
         declare = self.declare_parameter
         declare('course_dir', '')
         declare('laps', 0)               # 0: the course's own
-        declare('v_max', 1.0)
+        declare('v_max', 0.8)
         declare('decel', 0.3)
         declare('spacing', 0.1)
         declare('window_behind', 1.0)
