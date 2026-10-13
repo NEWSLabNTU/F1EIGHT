@@ -29,6 +29,72 @@ with a plant model in place of the car, and every recipe below works against
 and which diagnostic blocks it if not. Both are described in
 [lab2-stack.md](lab2-stack.md#the-vehicle-bench).
 
+## Car gate: steering ratio and lock (`lab2_steer_cal`)
+
+**Why.** `tire_angle_to_steer_ratio` converts a tire angle to servo counts
+(`pwm = 489 + int(average_angle * ratio)`), and nothing on the car measures the
+angle: no sensor, and `steering_status` republishes the command
+(`known-config-defects.md` section 8). The Lab 2 launch loads a stand-in of
+-143 (`config/actuator_lab2.param.yaml`) and `vehicle_info.param.yaml` claims
+0.349 rad of lock; neither is measured. The graded circles need
+`atan(0.319 / R)`: **0.21 rad at R 1.5 m, 0.13 rad at R 2.5 m**. If the real
+lock is below about 0.26 rad the R 1.5 m circle is out of reach, so this gate
+decides the course before any reference bag is recorded. Per car (A, B, C),
+once, and again after the servo, linkage or horn is touched.
+
+**Holding a fixed steer PWM.** The offset is the independent variable, so the
+tool commands the tire angle that makes the actuator write exactly
+`489 + offset`, whichever ratio is loaded (it inverts the actuator's Ackermann
+averaging):
+
+```bash
+just control basic                  # terminal 1: actuator without the gate; the spotter is the stop
+just lab2 steer-hold -25            # terminal 2: PWM held at 464, 0.4 m/s; Ctrl-C stops it
+```
+
+`steer-hold` assumes the actuator runs `actuator.yaml`'s -1000, which
+`control basic` loads; pass `--ratio R` when it runs another. Offsets beyond
++-50 (the servo window) or beyond the 0.349 rad clamp are refused.
+
+**Procedure** (car on the floor, 2 m clear radius around it, spotter with the
+transmitter, G1 working):
+
+1. For each offset in -50, -25, -10, +10, +25, +50: `steer-hold`, gear DRIVE
+   (`just tool controller`, `x`), let it run one full slow circle, and mark the
+   path (chalk dot under the rear axle centre every quarter turn, or the track
+   of the inner rear tyre).
+2. Measure the circle's radius from the marks: **R** for the axle centre, or
+   for the inside or outside rear tyre track (pass `--measured inner|outer`).
+   Note the direction: **positive radius = left turn** (counter-clockwise from
+   above), negative = right.
+3. Fit:
+
+```bash
+just lab2 steer-fit -50:+1.6 -25:+3.1 -10:+7.9 10:-7.9 25:-3.1 50:-1.6   # example numbers
+```
+
+It prints the ratio (counts/rad, with sign), the centre error (counts away from
+489 that mean straight), the fit residual, the true lock (`delta` at +-50
+counts) and the smallest radius, and says PASS when R 1.5 m needs at most 80 %
+of the lock. Exit code 0 is PASS, 1 is FAIL, 2 is bad input. A positive ratio
+means this servo turns left above 489, opposite to the shipped sign: that is
+part of the value, not an error.
+
+**Where the values go** (before any circle reference run):
+
+| Value | File | Scope |
+|---|---|---|
+| `tire_angle_to_steer_ratio` (with sign) | a per-car copy of `src/lab/autosdv_waypoint_lab/config/actuator_lab2.param.yaml`, e.g. `actuator_lab2_carA.param.yaml`; pass `actuator_param_overrides:=$PWD/...` to `just lab2 vehicle` | per car |
+| `max_steer_angle` (the fitted lock, rounded down) | `vehicle_info.param.yaml`; it is what the planner and the path tracker clamp to. Use the smallest of the three cars; the same key may be added to a car's override file for the actuator alone | all cars |
+
+Re-run `steer-hold` once at -50 with the new ratio loaded
+(`--ratio <fitted>`): the circle must match the first fit's radius within
+10 %. Then drive R 1.5 m (`lab2_circle_cw`) by hand and check the tracker's
+commanded angle stays under 80 % of `max_steer_angle`. A car that fails the
+margin cannot run the R 1.5 m circle: tell the instructor; the course changes,
+not the check. The measured values go on the car's sign-off sheet
+(`field/lab2-car-signoff.md`, part C in the course repository).
+
 ## 1. Speed step test and motor plant fit
 
 **Why.** The Part 1 inner-loop bench (`speed_bench`, and the handout's copy of

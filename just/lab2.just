@@ -149,6 +149,27 @@ loc-check COURSE_DIR *ARGS:
     source scripts/env.sh
     exec "${cmd[@]}"
 
+# --- Steering calibration (car gate): hold a servo offset, fit the ratio from the circles ----
+#   just control basic                       terminal 1 (no gate: the spotter is the stop)
+#   just lab2 steer-hold -25                 terminal 2: steer PWM held at 489-25, 0.4 m/s
+#   (drive a full circle, measure its radius, Ctrl-C, repeat for +-10 +-25 +-50)
+#   just lab2 steer-fit -50:+1.6 -25:+3.1 -10:+7.9 10:-7.9 25:-3.1 50:-1.6
+# Radius: positive = left turn. Pass --ratio R if the actuator runs a ratio other than -1000.
+
+# Publish the tire angle that holds the steering servo at 489 + OFFSET (Ctrl-C stops)
+[positional-arguments]
+steer-hold OFFSET *ARGS:
+    #!/usr/bin/env bash
+    source scripts/env.sh
+    exec ros2 run autosdv_waypoint_lab lab2_steer_cal hold "$@"
+
+# Fit tire_angle_to_steer_ratio and the true steering lock from OFFSET:RADIUS pairs
+[positional-arguments]
+steer-fit *PAIRS:
+    #!/usr/bin/env bash
+    source scripts/env.sh
+    exec ros2 run autosdv_waypoint_lab lab2_steer_cal fit "$@"
+
 # --- Marker survey: map the hall's markers with the car's ZED --------------------------------
 # Drive or push the car slowly past every marker, then Ctrl-C (or `just lab2 survey-save`):
 #   just lab2 survey courses/my_hall 24                    origin marker 24, the LCTK boards

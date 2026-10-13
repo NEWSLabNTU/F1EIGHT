@@ -46,6 +46,7 @@ setup(
             'lab2_grade_run = autosdv_waypoint_lab.grading:main',
             'lab2_camera_check = autosdv_waypoint_lab.camera_check:main',
             'loc_check = autosdv_waypoint_lab.loc_check_node:main',
+            'lab2_steer_cal = autosdv_waypoint_lab.steer_cal:main',
         ],
     },
 )

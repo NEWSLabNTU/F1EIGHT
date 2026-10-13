@@ -271,9 +271,16 @@ unmeasured number for another. To settle it, on the vehicle:
    slow full circles at each.
 2. Measure the circle radius `R` and convert: `δ = atan(wheel_base / R)` with
    `wheel_base` 0.319.
-3. The slope of `δ` against the PWM offset is the ratio (sign negative, since
-   the servo is reversed). The δ at ±50 is the true `max_steer_angle`, which
-   belongs in `vehicle_info.param.yaml`.
+3. The ratio is `offset / δ` in counts per radian, so fit offset against δ (the
+   slope of δ against offset is its inverse). The sign comes out of the fit.
+   The δ at ±50 is the true `max_steer_angle`, which belongs in
+   `vehicle_info.param.yaml`.
+
+**The procedure is now a tool:** `just lab2 steer-hold OFFSET` holds the PWM,
+`just lab2 steer-fit OFFSET:RADIUS ...` fits it, and
+`docs/guides/lab2-field-calibration.md` ("Car gate: steering ratio and lock")
+says where the values go. This defect stays open until a car has been
+measured; Lab 2 loads a -143 stand-in meanwhile.
 
 ---
 
