@@ -4,6 +4,7 @@
 #   just lab2 bench
 #   just lab2 bench tracker_class:=my_lab2.path_tracker:PathTracker
 #   just lab2 vehicle course:=hall_demo
+#   just lab2 gate submission:=~/lab2/B12345678_lab_2_1     a student's SpeedPID and calibration
 #   just lab2 vehicle course_dir:=$PWD/courses/my_hall 'speed_controller_params:={kp: 15.0}'
 #
 # Each argument reaches play_launch as one word, so quote a value that
@@ -36,30 +37,39 @@ default:
 [positional-arguments]
 bench *ARGS:
     #!/usr/bin/env bash
-    cmd=(play_launch launch --web-addr '{{ web_addr }}'
-         autosdv_launch waypoint_follow_bench.launch.xml "$@")
-    printf '\033[2m%s\033[0m\n' "${cmd[*]}"
     source scripts/env.sh
+    source scripts/testing/lab2/submission.sh
+    lab2_apply_submission "$@" || exit 2
+    cmd=(play_launch launch --web-addr '{{ web_addr }}'
+         autosdv_launch waypoint_follow_bench.launch.xml "${LAB2_ARGS[@]}")
+    printf '\033[2m%s\033[0m\n' "${cmd[*]}"
     exec "${cmd[@]}"
 
 # On the vehicle: ZED + AR-tag localizer + EKF, the course, the student laws
 [positional-arguments]
 vehicle *ARGS:
     #!/usr/bin/env bash
-    cmd=(play_launch launch --web-addr '{{ web_addr }}'
-         autosdv_launch waypoint_follow.launch.xml "$@")
-    printf '\033[2m%s\033[0m\n' "${cmd[*]}"
     source scripts/env.sh
+    source scripts/testing/lab2/submission.sh
+    lab2_apply_submission "$@" || exit 2
+    cmd=(play_launch launch --web-addr '{{ web_addr }}'
+         autosdv_launch waypoint_follow.launch.xml "${LAB2_ARGS[@]}")
+    printf '\033[2m%s\033[0m\n' "${cmd[*]}"
     exec "${cmd[@]}"
 
 # Gate before car time: your SpeedPID on the three graded routes, full stack; PASS/FAIL per route
+#   just lab2 gate submission:=DIR     DIR = your <student_id>_lab_2_1 (or lab2_waypoint) directory:
+#       its speed_pid.py, config/speed_pid.yaml and config/calibration.yaml are loaded for you
+#       (same for `bench` and `vehicle`; scripts/testing/lab2/submission.py shows what is passed)
 #   just lab2 gate speed_controller_class:=lab2_waypoint.speed_pid:SpeedPID "speed_controller_params:={kp: 15.0}"
 #   just lab2 gate --only lab2_straight ...
 [positional-arguments]
 gate *ARGS:
     #!/usr/bin/env bash
     source scripts/env.sh
-    exec python3 scripts/testing/lab2/bench_gate.py "$@"
+    source scripts/testing/lab2/submission.sh
+    lab2_apply_submission "$@" || exit 2
+    exec python3 scripts/testing/lab2/bench_gate.py "${LAB2_ARGS[@]}"
 
 # Bench checks on fresh benches (follow, marker loss, path publisher loss, faults); PASS/FAIL lines
 [positional-arguments]

@@ -213,6 +213,27 @@ the reference tracker driving): 12 fixes/s, longest gap 1.2 s / 0.9 m, fix vs
 odometry median 10 cm / p95 24 cm with the bench's default detection noise
 (1.4 cm / 2.9 cm with that noise set to zero), off path median 1 cm, max 6 cm.
 
+## Running a student's submission (gate, bench, car)
+
+One argument loads a team's `SpeedPID` and calibration into `gate`, `bench` and
+`vehicle`:
+
+```bash
+just lab2 gate    submission:=~/lab2/B12345678_lab_2_1
+just lab2 vehicle submission:=~/lab2/B12345678_lab_2_1 course_dir:=...
+python3 scripts/testing/lab2/submission.py DIR     # shows what it passes
+```
+
+`DIR` is the `<student_id>_lab_2_1/` directory or the `lab2_waypoint/` package
+itself. `scripts/testing/lab2/submission.py` puts the package on `PYTHONPATH`,
+sets `speed_controller_class:=lab2_waypoint.speed_pid:SpeedPID` and builds
+`speed_controller_params` from `config/speed_pid.yaml` with `ff_deadband` and
+`ff_gain` from `config/calibration.yaml` (the keys `speed_pid.yaml` sets itself
+win). It reads the files itself instead of importing the student's bench, so a
+modified bench changes nothing. An uncalibrated file (gain 0) is a warning, not an
+error; the stub then fails the gate by not moving the car. Do not
+combine it with explicit `speed_controller_*:=` arguments. The shell side is `scripts/testing/lab2/submission.sh`.
+
 ## The bench
 
 `vehicle_bench_plant` (from the coach lab) starts in the course's start box
