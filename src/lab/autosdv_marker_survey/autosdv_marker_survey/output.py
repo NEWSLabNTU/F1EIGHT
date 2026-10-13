@@ -41,7 +41,8 @@ def write_course(course_dir: str, markers: List[SurveyedMarker], origin_id: int,
     }
     course['markers'] = [
         {'id': m.id, 'x': round(m.x, 4), 'y': round(m.y, 4), 'z': round(m.z, 4),
-         'yaw': round(m.yaw, 4)} for m in markers]
+         'yaw': round(m.yaw, 4), 'pitch': round(m.pitch, 4), 'roll': round(m.roll, 4)}
+        for m in markers]
     order = ['path', 'closed', 'laps', 'v_ref', 'start_pose', 'marker_size', 'dictionary',
              'marker_height', 'survey', 'markers']
     ordered = {k: course[k] for k in order if k in course}
@@ -60,6 +61,7 @@ def write_course(course_dir: str, markers: List[SurveyedMarker], origin_id: int,
         'markers': [{
             'id': m.id, 'x': round(m.x, 4), 'y': round(m.y, 4), 'z': round(m.z, 4),
             'yaw_deg': round(math.degrees(m.yaw), 2), 'tilt_deg': round(m.tilt_deg, 2),
+            'pitch_deg': round(math.degrees(m.pitch), 2), 'roll_deg': round(math.degrees(m.roll), 2),
             'views': m.views, 'reproj_rms_px': round(m.reproj_rms_px, 3),
             'sd_xy_cm': None if m.sd_xy is None else round(m.sd_xy * 100, 2),
             'sd_yaw_deg': None if m.sd_yaw_deg is None else round(m.sd_yaw_deg, 3),
@@ -85,10 +87,10 @@ def write_course(course_dir: str, markers: List[SurveyedMarker], origin_id: int,
 
 
 def format_table(markers: List[SurveyedMarker]) -> str:
-    rows = ['  id      x [m]    y [m]    z [m]  yaw [deg]  views  reproj  sd_xy  sd_yaw  flags']
+    rows = ['  id      x [m]    y [m]    z [m]  yaw [deg]  tilt  views  reproj  sd_xy  sd_yaw  flags']
     for m in markers:
         sdxy = '   -  ' if m.sd_xy is None else f'{m.sd_xy * 100:4.1f}cm'
         sdy = '   -  ' if m.sd_yaw_deg is None else f'{m.sd_yaw_deg:4.2f}d'
-        rows.append(f'  {m.id:3d} {m.x:9.3f} {m.y:8.3f} {m.z:8.3f} {math.degrees(m.yaw):9.1f}'
+        rows.append(f'  {m.id:3d} {m.x:9.3f} {m.y:8.3f} {m.z:8.3f} {math.degrees(m.yaw):9.1f} {m.tilt_deg:4.1f}d'
                     f' {m.views:6d} {m.reproj_rms_px:6.2f}px {sdxy} {sdy}  {"; ".join(m.flags)}')
     return '\n'.join(rows)

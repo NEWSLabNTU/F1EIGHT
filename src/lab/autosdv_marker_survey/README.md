@@ -53,13 +53,19 @@ markers (default `DICT_5X5_1000`, 0.48 m: the LCTK calibration boards).
    - the origin is on the floor below the origin marker's centre;
    - x points the way the origin marker faces.
 
-   `course.yaml` gets every marker's `id, x, y, z, yaw`, plus `marker_size`
-   and `dictionary`. A new course also gets the recording's start as its
+   `course.yaml` gets every marker's `id, x, y, z, yaw, pitch, roll`, plus
+   `marker_size` and `dictionary`. A board is rarely exactly upright, and the
+   localizer reads each marker's full orientation from its corners, so the
+   measured tilt goes into the map: `pitch` is the top leaning back, `roll`
+   the board turned in its own plane, counter-clockwise from the front (both
+   radians; `autosdv_waypoint_lab/course.py` defines them). Left out, a 3°
+   tilt alone would put every fix from that marker about 5 cm off at 1 m. A new course also gets the recording's start as its
    `start_pose`; an existing `course.yaml` keeps everything but those fields.
    Write `path.csv` in this same frame.
 
 `survey_report.yaml` lists each marker's views, reprojection error, 1σ position
-and yaw uncertainty, and tilt from vertical. It flags markers seen fewer than 3
+and yaw uncertainty, and tilt from vertical (also split into `pitch_deg` and
+`roll_deg`). It flags markers seen fewer than 3
 times, with more than 5 cm or 1° of uncertainty, or tilted more than 10°.
 `survey_data.npz` keeps the recording's keyframes and detections, so
 `just lab2 survey-solve courses/my_hall [--origin ID]` can solve it again

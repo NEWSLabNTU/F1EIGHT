@@ -399,9 +399,23 @@ class SurveyedMarker:
     tilt_deg: float               # deviation of the marker's up axis from vertical
     views: int
     reproj_rms_px: float
+    pitch: float = 0.0            # top leaning back (course.yaml's convention)
+    roll: float = 0.0             # turned in its own plane, counter-clockwise from the front
     sd_xy: Optional[float] = None   # [m] 1-sigma, worst horizontal direction
     sd_yaw_deg: Optional[float] = None
     flags: List[str] = field(default_factory=list)
+
+
+def tilt_angles(R, yaw: float):
+    """(pitch, roll) of a marker orientation R in the course frame, given its yaw: the
+    inverse of autosdv_waypoint_lab.course.Marker.axes (upright at yaw, leaned back by
+    pitch about x, turned by roll about the normal)."""
+    cy, sy = math.cos(yaw), math.sin(yaw)
+    R0 = np.array([[-sy, 0.0, cy], [cy, 0.0, sy], [0.0, 1.0, 0.0]])   # columns: right, up, facing
+    M = R0.T @ R                       # = Rx(-pitch) @ Rz(roll)
+    a = math.atan2(-M[1, 2], M[2, 2])
+    b = math.atan2(-M[0, 1], M[0, 0])
+    return -a, b
 
 
 def to_course(markers: Dict[int, np.ndarray], stats: dict, frame: CourseFrame,
@@ -415,9 +429,11 @@ def to_course(markers: Dict[int, np.ndarray], stats: dict, frame: CourseFrame,
         yaw = math.atan2(facing[1], facing[0])
         up = Tc[:3, 1]
         tilt = math.degrees(math.acos(max(-1.0, min(1.0, up[2]))))
+        pitch, roll = tilt_angles(Tc[:3, :3], yaw)
         st = stats.get(mid, {})
         sm = SurveyedMarker(mid, float(Tc[0, 3]), float(Tc[1, 3]), float(Tc[2, 3]), yaw, tilt,
-                            int(st.get('views', 0)), float(st.get('reproj_rms_px', float('nan'))))
+                            int(st.get('views', 0)), float(st.get('reproj_rms_px', float('nan'))),
+                            pitch=pitch, roll=roll)
         C = st.get('cov_world')
         if C is not None:
             R = Tci[:3, :3]

@@ -18,11 +18,11 @@ R_BASE_OPT = np.array([[0, 0, 1], [-1, 0, 0], [0, -1, 0]], float)   # columns: o
 T_BASE_CAM = make_T(R_BASE_OPT, [0.20, 0.0, 0.25])
 
 
-def marker_T(x, y, z, yaw) -> np.ndarray:
-    right = [-math.sin(yaw), math.cos(yaw), 0.0]
-    up = [0.0, 0.0, 1.0]
-    facing = [math.cos(yaw), math.sin(yaw), 0.0]
-    return make_T(np.column_stack([right, up, facing]), [x, y, z])
+def marker_T(x, y, z, yaw, pitch=0.0, roll=0.0) -> np.ndarray:
+    """A board at (x, y, z) facing yaw; tilted like course.yaml's pitch and roll."""
+    from autosdv_waypoint_lab.course import Marker
+    xa, ya, za = Marker(0, x, y, z, yaw, pitch, roll).axes()
+    return make_T(np.column_stack([xa, ya, za]), [x, y, z])
 
 
 def zed_K(width=1920, height=1200, hfov_deg=102.0):

@@ -20,9 +20,14 @@ BOARDS = {
 LOOP = [(0, 0), (6, 0), (7.5, 1.5), (6, 3), (0, 3), (-1, 1.5), (0, 0)]
 
 
+# boards standing on the floor but not quite upright: (pitch, roll), rad
+TILT = {25: (0.12, 0.0), 27: (0.0, -0.10), 29: (-0.06, 0.05)}
+
+
 @pytest.fixture(scope='module')
 def result():
-    truth = {mid: marker_T(x, y, 0.40, yaw) for mid, (x, y, yaw) in BOARDS.items()}
+    truth = {mid: marker_T(x, y, 0.40, yaw, *TILT.get(mid, (0.0, 0.0)))
+             for mid, (x, y, yaw) in BOARDS.items()}
     poses = drive(LOOP, step=0.05, sweeps={2: math.radians(50), 5: math.radians(50)})
     sv = simulate(truth, poses, 0.48, seed=3)
     return truth, sv, finish(sv, 24, 'DICT_5X5_1000', None, log=lambda *a: None)
@@ -43,7 +48,9 @@ def test_markers_land_within_a_few_centimetres(result):
         yaw_t = math.atan2(Tt[1, 2], Tt[0, 2])
         assert abs(math.atan2(math.sin(m.yaw - yaw_t), math.cos(m.yaw - yaw_t))) < math.radians(1.5)
         assert abs(m.z - 0.40) < 0.03
-        assert m.tilt_deg < 2.0
+        p, r = TILT.get(m.id, (0.0, 0.0))
+        assert m.pitch == pytest.approx(p, abs=math.radians(1.5)), m
+        assert m.roll == pytest.approx(r, abs=math.radians(1.5)), m
 
 
 def test_the_origin_marker_defines_the_frame(result):
@@ -76,11 +83,18 @@ def test_dump_round_trip_solves_the_same(result, tmp_path):
 
 
 def test_writes_a_course_the_lab_can_load(result, tmp_path):
-    from autosdv_waypoint_lab.course import load_course
-    _, sv, _ = result
+    from autosdv_waypoint_lab.course import load_course, make_osm, parse_osm_landmarks
+    truth, sv, _ = result
     res = finish(sv, 24, 'DICT_5X5_1000', str(tmp_path), log=lambda *a: None)
     c = load_course(str(tmp_path))
     assert {m.id for m in c.markers} == set(BOARDS)
+    # the localizer's map carries the measured tilt: its marker normals match the truth
+    fr = course_frame(truth[24], np.zeros(3), np.array([0, 0, 1.0]))
+    Ti = inv_T(fr.T_world_course)
+    lms = parse_osm_landmarks(make_osm(c))
+    for mid in BOARDS:
+        n_true = (Ti @ truth[mid])[:3, 2]
+        assert np.dot(lms[str(mid)][0].z_axis, n_true) > math.cos(math.radians(1.5)), mid
     assert c.dictionary == 'DICT_5X5_1000' and c.marker_size == 0.48
     for f in ('lanelet2_map.osm', 'ar_tag.param.yaml', 'survey_report.yaml', 'map_projector_info.yaml'):
         assert (tmp_path / f).exists()

@@ -69,3 +69,23 @@ def test_shipped_course_map_is_up_to_date():
         assert f.read() == c.make_osm(c.load_course(d)), 'run: just lab2 course-map'
     with open(os.path.join(d, 'ar_tag.param.yaml')) as f:
         assert f.read() == c.make_ar_tag_params(c.load_course(d)), 'run: just lab2 course-map'
+
+
+@pytest.mark.parametrize('pitch,roll', [(0.1, 0.0), (0.0, -0.08), (-0.05, 0.12)])
+def test_a_tilted_marker_round_trips_with_its_tilt(pitch, roll):
+    m = Marker(5, 1.0, 2.0, 0.4, 0.7, pitch, roll)
+    lm = parse_osm_landmarks(make_osm(course([m])))['5'][0]
+    xa, ya, za = m.axes()
+    assert lm.position == pytest.approx((1.0, 2.0, 0.4), abs=1e-3)
+    assert lm.x_axis == pytest.approx(xa, abs=2e-3)
+    assert lm.y_axis == pytest.approx(ya, abs=2e-3)
+    assert lm.z_axis == pytest.approx(za, abs=2e-3)
+    # leaning back tips the normal upward
+    if pitch > 0:
+        assert za[2] > 0
+
+
+def test_an_upright_marker_is_unchanged_by_the_tilt_fields():
+    a = Marker(1, 0.5, -1.0, 0.25, 2.0)
+    b = Marker(1, 0.5, -1.0, 0.25, 2.0, 0.0, 0.0)
+    assert a.corners(0.25) == b.corners(0.25)

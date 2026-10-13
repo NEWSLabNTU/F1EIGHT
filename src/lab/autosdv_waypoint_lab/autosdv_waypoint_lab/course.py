@@ -21,6 +21,14 @@ course.yaml:
     markers:              # yaw: the direction the marker FACES (its normal)
       - {id: 0, x: 6.0, y: 0.0, yaw: 3.1416}
       - {id: 1, x: 3.0, y: 2.5, yaw: -1.5708, z: 0.30}
+      - {id: 2, x: 0.0, y: 4.0, yaw: 0.0, pitch: 0.05, roll: -0.02}
+
+`pitch` and `roll` (radians, default 0) describe a board that does not stand
+exactly upright, as `just lab2 survey` measures it: pitch is its top leaning
+back, away from the viewer; roll is the board turned in its own plane,
+counter-clockwise as seen from the front. The localizer reads a marker's full
+orientation from its corners, so a map that leaves a measured tilt out puts
+every fix from that marker off by about range x tilt (mostly in height).
 
 The map is what Autoware's ar_tag_based_localizer reads: one lanelet2
 `pose_marker` polygon per marker (subtype apriltag_16h5, the subtype the stock
@@ -63,14 +71,31 @@ class Marker:
     y: float
     z: float
     yaw: float          # facing direction
+    pitch: float = 0.0  # top leaning back, away from the viewer
+    roll: float = 0.0   # turned in its own plane, counter-clockwise from the front
+
+    def axes(self):
+        """The marker's x (viewer's right), y (up) and z (facing) axes in the course frame:
+        upright at `yaw`, then leaned back by `pitch` about its x axis, then turned by `roll`
+        about its normal."""
+        cy, sy = math.cos(self.yaw), math.sin(self.yaw)
+        right, up, facing = (-sy, cy, 0.0), (0.0, 0.0, 1.0), (cy, sy, 0.0)
+        a = -self.pitch                    # about x: up turns toward -facing for a backward lean
+        ca, sa = math.cos(a), math.sin(a)
+        y1 = tuple(ca * u + sa * f for u, f in zip(up, facing))
+        z1 = tuple(-sa * u + ca * f for u, f in zip(up, facing))
+        cb, sb = math.cos(self.roll), math.sin(self.roll)
+        x2 = tuple(cb * r + sb * yy for r, yy in zip(right, y1))
+        y2 = tuple(-sb * r + cb * yy for r, yy in zip(right, y1))
+        return x2, y2, z1
 
     def corners(self, size: float) -> List[Tuple[float, float, float]]:
         """bottom-left, bottom-right, top-right, top-left, seen from the front."""
         h = size / 2.0
-        rx, ry = -math.sin(self.yaw), math.cos(self.yaw)   # viewer's right
+        xa, ya, _ = self.axes()
         out = []
         for u, w in ((-h, -h), (h, -h), (h, h), (-h, h)):
-            out.append((self.x + u * rx, self.y + u * ry, self.z + w))
+            out.append(tuple(c + u * xx + w * yy for c, xx, yy in zip((self.x, self.y, self.z), xa, ya)))
         return out
 
 
@@ -114,7 +139,8 @@ def load_course(directory: str) -> Course:
             raise ValueError(f'{directory}: marker id {mid} appears twice; ids must be unique')
         seen.add(mid)
         markers.append(Marker(mid, float(m['x']), float(m['y']),
-                              float(m.get('z', height)), float(m['yaw'])))
+                              float(m.get('z', height)), float(m['yaw']),
+                              float(m.get('pitch', 0.0)), float(m.get('roll', 0.0))))
     dictionary = str(d.get('dictionary', 'ALL_DICTS'))
     if dictionary not in ARUCO_DICTIONARIES + SHIPPED_DICTIONARIES:
         raise ValueError(f'{directory}: unknown dictionary {dictionary!r}; one of '
