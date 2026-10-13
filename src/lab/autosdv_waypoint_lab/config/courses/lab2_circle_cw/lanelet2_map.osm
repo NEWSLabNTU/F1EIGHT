@@ -1,0 +1,244 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<osm version="0.6" generator="autosdv_waypoint_lab make_course_map">
+  <MetaInfo format_version="1" map_version="1" />
+  <node id="1" lat="0" lon="0">
+    <tag k="local_x" v="0.0000" />
+    <tag k="local_y" v="-0.2400" />
+    <tag k="ele" v="0.0600" />
+  </node>
+  <node id="2" lat="0" lon="0">
+    <tag k="local_x" v="0.0000" />
+    <tag k="local_y" v="0.2400" />
+    <tag k="ele" v="0.0600" />
+  </node>
+  <node id="3" lat="0" lon="0">
+    <tag k="local_x" v="0.0000" />
+    <tag k="local_y" v="0.2400" />
+    <tag k="ele" v="0.5400" />
+  </node>
+  <node id="4" lat="0" lon="0">
+    <tag k="local_x" v="0.0000" />
+    <tag k="local_y" v="-0.2400" />
+    <tag k="ele" v="0.5400" />
+  </node>
+  <node id="5" lat="0" lon="0">
+    <tag k="local_x" v="1.1947" />
+    <tag k="local_y" v="-2.6447" />
+    <tag k="ele" v="0.0600" />
+  </node>
+  <node id="6" lat="0" lon="0">
+    <tag k="local_x" v="0.8553" />
+    <tag k="local_y" v="-2.3053" />
+    <tag k="ele" v="0.0600" />
+  </node>
+  <node id="7" lat="0" lon="0">
+    <tag k="local_x" v="0.8553" />
+    <tag k="local_y" v="-2.3053" />
+    <tag k="ele" v="0.5400" />
+  </node>
+  <node id="8" lat="0" lon="0">
+    <tag k="local_x" v="1.1947" />
+    <tag k="local_y" v="-2.6447" />
+    <tag k="ele" v="0.5400" />
+  </node>
+  <node id="9" lat="0" lon="0">
+    <tag k="local_x" v="3.7400" />
+    <tag k="local_y" v="-3.5000" />
+    <tag k="ele" v="0.0600" />
+  </node>
+  <node id="10" lat="0" lon="0">
+    <tag k="local_x" v="3.2600" />
+    <tag k="local_y" v="-3.5000" />
+    <tag k="ele" v="0.0600" />
+  </node>
+  <node id="11" lat="0" lon="0">
+    <tag k="local_x" v="3.2600" />
+    <tag k="local_y" v="-3.5000" />
+    <tag k="ele" v="0.5400" />
+  </node>
+  <node id="12" lat="0" lon="0">
+    <tag k="local_x" v="3.7400" />
+    <tag k="local_y" v="-3.5000" />
+    <tag k="ele" v="0.5400" />
+  </node>
+  <node id="13" lat="0" lon="0">
+    <tag k="local_x" v="6.1447" />
+    <tag k="local_y" v="-2.3053" />
+    <tag k="ele" v="0.0600" />
+  </node>
+  <node id="14" lat="0" lon="0">
+    <tag k="local_x" v="5.8053" />
+    <tag k="local_y" v="-2.6447" />
+    <tag k="ele" v="0.0600" />
+  </node>
+  <node id="15" lat="0" lon="0">
+    <tag k="local_x" v="5.8053" />
+    <tag k="local_y" v="-2.6447" />
+    <tag k="ele" v="0.5400" />
+  </node>
+  <node id="16" lat="0" lon="0">
+    <tag k="local_x" v="6.1447" />
+    <tag k="local_y" v="-2.3053" />
+    <tag k="ele" v="0.5400" />
+  </node>
+  <node id="17" lat="0" lon="0">
+    <tag k="local_x" v="7.0000" />
+    <tag k="local_y" v="0.2400" />
+    <tag k="ele" v="0.0600" />
+  </node>
+  <node id="18" lat="0" lon="0">
+    <tag k="local_x" v="7.0000" />
+    <tag k="local_y" v="-0.2400" />
+    <tag k="ele" v="0.0600" />
+  </node>
+  <node id="19" lat="0" lon="0">
+    <tag k="local_x" v="7.0000" />
+    <tag k="local_y" v="-0.2400" />
+    <tag k="ele" v="0.5400" />
+  </node>
+  <node id="20" lat="0" lon="0">
+    <tag k="local_x" v="7.0000" />
+    <tag k="local_y" v="0.2400" />
+    <tag k="ele" v="0.5400" />
+  </node>
+  <node id="21" lat="0" lon="0">
+    <tag k="local_x" v="5.8053" />
+    <tag k="local_y" v="2.6447" />
+    <tag k="ele" v="0.0600" />
+  </node>
+  <node id="22" lat="0" lon="0">
+    <tag k="local_x" v="6.1447" />
+    <tag k="local_y" v="2.3053" />
+    <tag k="ele" v="0.0600" />
+  </node>
+  <node id="23" lat="0" lon="0">
+    <tag k="local_x" v="6.1447" />
+    <tag k="local_y" v="2.3053" />
+    <tag k="ele" v="0.5400" />
+  </node>
+  <node id="24" lat="0" lon="0">
+    <tag k="local_x" v="5.8053" />
+    <tag k="local_y" v="2.6447" />
+    <tag k="ele" v="0.5400" />
+  </node>
+  <node id="25" lat="0" lon="0">
+    <tag k="local_x" v="3.2600" />
+    <tag k="local_y" v="3.5000" />
+    <tag k="ele" v="0.0600" />
+  </node>
+  <node id="26" lat="0" lon="0">
+    <tag k="local_x" v="3.7400" />
+    <tag k="local_y" v="3.5000" />
+    <tag k="ele" v="0.0600" />
+  </node>
+  <node id="27" lat="0" lon="0">
+    <tag k="local_x" v="3.7400" />
+    <tag k="local_y" v="3.5000" />
+    <tag k="ele" v="0.5400" />
+  </node>
+  <node id="28" lat="0" lon="0">
+    <tag k="local_x" v="3.2600" />
+    <tag k="local_y" v="3.5000" />
+    <tag k="ele" v="0.5400" />
+  </node>
+  <node id="29" lat="0" lon="0">
+    <tag k="local_x" v="0.8553" />
+    <tag k="local_y" v="2.3053" />
+    <tag k="ele" v="0.0600" />
+  </node>
+  <node id="30" lat="0" lon="0">
+    <tag k="local_x" v="1.1947" />
+    <tag k="local_y" v="2.6447" />
+    <tag k="ele" v="0.0600" />
+  </node>
+  <node id="31" lat="0" lon="0">
+    <tag k="local_x" v="1.1947" />
+    <tag k="local_y" v="2.6447" />
+    <tag k="ele" v="0.5400" />
+  </node>
+  <node id="32" lat="0" lon="0">
+    <tag k="local_x" v="0.8553" />
+    <tag k="local_y" v="2.3053" />
+    <tag k="ele" v="0.5400" />
+  </node>
+  <way id="1000">
+    <nd ref="1" />
+    <nd ref="2" />
+    <nd ref="3" />
+    <nd ref="4" />
+    <tag k="type" v="pose_marker" />
+    <tag k="subtype" v="apriltag_16h5" />
+    <tag k="marker_id" v="24" />
+    <tag k="area" v="yes" />
+  </way>
+  <way id="1001">
+    <nd ref="5" />
+    <nd ref="6" />
+    <nd ref="7" />
+    <nd ref="8" />
+    <tag k="type" v="pose_marker" />
+    <tag k="subtype" v="apriltag_16h5" />
+    <tag k="marker_id" v="25" />
+    <tag k="area" v="yes" />
+  </way>
+  <way id="1002">
+    <nd ref="9" />
+    <nd ref="10" />
+    <nd ref="11" />
+    <nd ref="12" />
+    <tag k="type" v="pose_marker" />
+    <tag k="subtype" v="apriltag_16h5" />
+    <tag k="marker_id" v="26" />
+    <tag k="area" v="yes" />
+  </way>
+  <way id="1003">
+    <nd ref="13" />
+    <nd ref="14" />
+    <nd ref="15" />
+    <nd ref="16" />
+    <tag k="type" v="pose_marker" />
+    <tag k="subtype" v="apriltag_16h5" />
+    <tag k="marker_id" v="27" />
+    <tag k="area" v="yes" />
+  </way>
+  <way id="1004">
+    <nd ref="17" />
+    <nd ref="18" />
+    <nd ref="19" />
+    <nd ref="20" />
+    <tag k="type" v="pose_marker" />
+    <tag k="subtype" v="apriltag_16h5" />
+    <tag k="marker_id" v="28" />
+    <tag k="area" v="yes" />
+  </way>
+  <way id="1005">
+    <nd ref="21" />
+    <nd ref="22" />
+    <nd ref="23" />
+    <nd ref="24" />
+    <tag k="type" v="pose_marker" />
+    <tag k="subtype" v="apriltag_16h5" />
+    <tag k="marker_id" v="29" />
+    <tag k="area" v="yes" />
+  </way>
+  <way id="1006">
+    <nd ref="25" />
+    <nd ref="26" />
+    <nd ref="27" />
+    <nd ref="28" />
+    <tag k="type" v="pose_marker" />
+    <tag k="subtype" v="apriltag_16h5" />
+    <tag k="marker_id" v="30" />
+    <tag k="area" v="yes" />
+  </way>
+  <way id="1007">
+    <nd ref="29" />
+    <nd ref="30" />
+    <nd ref="31" />
+    <nd ref="32" />
+    <tag k="type" v="pose_marker" />
+    <tag k="subtype" v="apriltag_16h5" />
+    <tag k="marker_id" v="31" />
+    <tag k="area" v="yes" />
+  </way>
+</osm>

@@ -142,6 +142,40 @@ frame of the origin marker. Write `path.csv` in that frame. Details and
 accuracy: `src/lab/autosdv_marker_survey/README.md` (simulated: 1–3 cm median,
 under 5 cm worst).
 
+## The grading routes (`lab2_straight`, `lab2_circle_cw`, `lab2_circle_ccw`)
+
+The three graded bags each have a course template, already in the frame the
+survey writes (origin on the floor below the origin board's marker, x the way
+it faces), so the TA lays the boards out as the template's header says,
+surveys a copy of the directory with that board as the origin, and keeps its
+`path.csv` and `start_pose`:
+
+| course | route | origin board | boards |
+|---|---|---|---|
+| `lab2_straight` | open 8 m, x 9.5 → 1.5 heading −x, 1 run at 0.8 m/s, end ramp stops it | the end board, (0, 0) facing +x, 1.5 m past the stop | end + 2 angled side boards |
+| `lab2_circle_cw` | clockwise R 1.5 m about (3.5, 0), 3 laps at 0.8 m/s | a ring board, (0, 0) facing +x | ring of 8 at R 3.5 m facing the centre |
+| `lab2_circle_ccw` | counter-clockwise R 2.5 m about (3.5, 0), 3 laps | the same ring board | the same ring |
+
+All LCTK 600 mm boards standing on the floor (`DICT_5X5_1000`, 0.48 m,
+`marker_height: 0.30`); the ids are placeholders the survey replaces. The two
+circles share one ring, so one recording serves both: survey into one
+directory, then `lab2_marker_survey_solve <dir>/survey_data.npz --course
+<other dir>`.
+
+```bash
+just lab2 vehicle course:=lab2_circle_cw                     # the template as shipped
+just lab2 vehicle course_dir:=$PWD/courses/circle_cw_today   # a surveyed copy
+```
+
+`just lab2 course-map` on the templates: a marker in view on 100 % of every
+route, no gap, the start box always covered. The kinematic bench (reference
+tracker, default lookahead, 5 cm / 2° pose noise) completes each with cross-track
+under 3 cm, a 1.5 m circle at mean radius ±3 mm, and the straight stopping
+within 8 cm of its last waypoint; these runs are tests in `test_course.py`.
+The R 1.5 m circle needs 0.21 rad of tire angle (0.13 rad for R 2.5 m): it is meaningless until the
+car's `tire_angle_to_steer_ratio` is measured (`lab2-field-calibration.md`,
+car gate; `known-config-defects.md` §8).
+
 ## Checking localization by hand (`just lab2 loc-check`)
 
 Before letting the tracker drive a freshly surveyed course, drive it by hand

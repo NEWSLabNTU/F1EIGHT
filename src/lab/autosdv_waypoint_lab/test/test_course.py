@@ -60,11 +60,20 @@ def test_shipped_dictionary_files_exist():
         assert os.path.isfile(os.path.join(here, 'config', 'dictionaries', name + '.dict'))
 
 
-def test_shipped_course_map_is_up_to_date():
+SHIPPED_COURSES = ('hall_demo', 'lab2_straight', 'lab2_circle_cw', 'lab2_circle_ccw')
+
+
+def _course_dir(name):
+    import os
+    here = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
+    return os.path.join(here, 'config', 'courses', name)
+
+
+@pytest.mark.parametrize('name', SHIPPED_COURSES)
+def test_shipped_course_map_is_up_to_date(name):
     import os
     from autosdv_waypoint_lab import course as c
-    here = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
-    d = os.path.join(here, 'config', 'courses', 'hall_demo')
+    d = _course_dir(name)
     with open(os.path.join(d, 'lanelet2_map.osm')) as f:
         assert f.read() == c.make_osm(c.load_course(d)), 'run: just lab2 course-map'
     with open(os.path.join(d, 'ar_tag.param.yaml')) as f:
@@ -89,3 +98,68 @@ def test_an_upright_marker_is_unchanged_by_the_tilt_fields():
     a = Marker(1, 0.5, -1.0, 0.25, 2.0)
     b = Marker(1, 0.5, -1.0, 0.25, 2.0, 0.0, 0.0)
     assert a.corners(0.25) == b.corners(0.25)
+
+
+# ------------------------------------------------ the Lab 2 grading routes
+
+LAB2_ROUTES = ('lab2_straight', 'lab2_circle_cw', 'lab2_circle_ccw')
+
+
+@pytest.mark.parametrize('name', LAB2_ROUTES)
+def test_lab2_route_is_covered_from_start_box_to_finish(name):
+    from autosdv_waypoint_lab.marker_sim import CameraModel, coverage
+    from autosdv_waypoint_lab.path import CoursePath, Path, load_csv
+    c = load_course(_course_dir(name))
+    x, y, v = load_csv(c.path_file, c.v_ref)
+    cp = CoursePath(x, y, v, closed=c.closed)
+    sp = c.start_pose
+    cov = coverage(Path(cp.x, cp.y, cp.v), parse_osm_landmarks(make_osm(c)),
+                   (sp.x, sp.y, sp.yaw), CameraModel(marker_size=c.marker_size))
+    assert cov.fraction == 1.0
+    assert cov.start_box_min >= 1
+
+
+@pytest.mark.parametrize('name', LAB2_ROUTES)
+def test_lab2_route_is_in_the_origin_boards_frame(name):
+    # `just lab2 survey DIR ORIGIN` puts the origin board at (0, 0) facing +x
+    # and keeps path.csv: the template must already be in that frame.
+    from autosdv_waypoint_lab.path import load_csv
+    c = load_course(_course_dir(name))
+    origin = [m for m in c.markers if (m.x, m.y) == (0.0, 0.0)]
+    assert len(origin) == 1 and origin[0].yaw == pytest.approx(0.0)
+    assert all(m.z == pytest.approx(0.30) for m in c.markers)   # floor-standing LCTK board
+    x, y, _ = load_csv(c.path_file, c.v_ref)
+    assert (c.start_pose.x, c.start_pose.y) == pytest.approx((x[0], y[0]), abs=1e-3)
+
+
+def test_lab2_circles_share_one_ring_about_3_5_0():
+    cw = load_course(_course_dir('lab2_circle_cw'))
+    ccw = load_course(_course_dir('lab2_circle_ccw'))
+    assert cw.markers == ccw.markers
+    for m in cw.markers:
+        assert math.hypot(m.x - 3.5, m.y) == pytest.approx(3.5, abs=1e-3)
+        # each board faces the centre
+        assert math.cos(math.atan2(-m.y, 3.5 - m.x) - m.yaw) == pytest.approx(1.0, abs=1e-6)
+
+
+@pytest.mark.parametrize('name,radius,laps', [('lab2_circle_cw', 1.5, 3),
+                                              ('lab2_circle_ccw', 2.5, 3),
+                                              ('lab2_straight', None, 1)])
+def test_reference_tracker_completes_the_lab2_route(name, radius, laps):
+    from autosdv_waypoint_lab import kinematic_bench as kb
+    from autosdv_waypoint_lab.path import CoursePath, load_csv
+    from autosdv_waypoint_lab.reference.path_tracker import PathTracker
+    from autosdv_waypoint_lab.tracker_api import VehicleGeometry
+    c = load_course(_course_dir(name))
+    x, y, v = load_csv(c.path_file, c.v_ref)
+    cp = CoursePath(x, y, v, closed=c.closed, v_max=0.8, decel=0.3, laps=c.laps)
+    veh = VehicleGeometry()
+    r = kb.run(PathTracker({}, veh), cp, (c.start_pose.x, c.start_pose.y, c.start_pose.yaw), veh,
+               kb.BenchParams(pose_noise_std=0.05, yaw_noise_std=math.radians(2.0)))
+    assert r.finished and r.laps == laps
+    assert r.cross_track_max < 0.1
+    if radius is None:
+        assert math.hypot(r.x[-1] - x[-1], r.y[-1] - y[-1]) < 0.15
+    else:
+        rad = [math.hypot(px - 3.5, py) for px, py, s in zip(r.x, r.y, r.speed) if s > 0.7]
+        assert sum(rad) / len(rad) == pytest.approx(radius, abs=0.05)

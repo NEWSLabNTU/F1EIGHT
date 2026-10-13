@@ -1,0 +1,44 @@
+# Lab 2 grading route 1 of 3: the STRAIGHT (bag 1, 20 pts: steady-window
+# speed RMSE, start overshoot, stop error). An open 8 m path driven once at
+# v_ref 0.8 m/s; the path publisher's end ramp (decel 0.3 m/s^2) brings the
+# car to rest on the last waypoint, which is the graded stop point.
+#
+# Floor: about 11 m x 3 m, clear.
+#
+# Frame: the course frame `just lab2 survey` writes -- origin on the floor
+# below the ORIGIN BOARD's marker centre, x the way that board faces, y to
+# its left, z up. The origin board is the END board (id 24 here): it stands
+# at x = 0 facing +x, i.e. facing the car, which drives -x towards it.
+#
+# Boards (LCTK, DICT_5X5_1000, 0.48 m marker on a 600 mm plate standing on
+# the floor, so the marker centre is 0.30 m up):
+#   end board    (0.0, 0.0)   facing +x, square to the route   -> origin
+#   side board   (6.5, -1.0)  facing 30 deg left of +x, angled at the start
+#   side board   (3.5, +1.0)  facing 30 deg right of +x, angled at the car
+# A side board square to the route is seen only from the side, and too late.
+#
+# Tape marks, measured from the origin board along the route centreline:
+#   start box    x = 9.5 (the car's rear axle), car pointing -x at the board
+#   stop line    x = 1.5 (rear axle), 1.5 m short of the end board
+#
+# Setting up: place the boards as above, survey with the end board as the
+# origin (`just lab2 survey <copy of this dir> <end board id>`), and keep
+# path.csv and start_pose: the survey replaces only `markers`,
+# `marker_size`, `dictionary` and `survey`, so a course laid out as this
+# file says stays consistent with the measured boards. The ids below are
+# placeholders (24 is a real LCTK board); the survey writes the ids the
+# boards actually carry, and the origin id is the one named on its command
+# line.
+path: path.csv
+closed: false
+laps: 1
+v_ref: 0.8
+start_pose: {x: 9.500, y: 0.000, yaw: 3.1416}
+marker_size: 0.48
+dictionary: DICT_5X5_1000
+# LCTK board: a 600 mm plate standing on the floor, the 0.48 m marker centred on it
+marker_height: 0.30
+markers:
+  - {id: 24, x: 0.000, y: 0.000, yaw: 0.0000}
+  - {id: 20, x: 6.500, y: -1.000, yaw: 0.5236}
+  - {id: 21, x: 3.500, y: 1.000, yaw: -0.5236}
