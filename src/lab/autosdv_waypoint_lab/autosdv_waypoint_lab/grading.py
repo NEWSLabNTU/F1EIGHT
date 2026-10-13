@@ -27,6 +27,7 @@ import bisect
 import json
 import math
 import os
+import sys
 from dataclasses import asdict, dataclass, field
 from typing import Dict, List, Optional, Sequence, Tuple
 
@@ -249,12 +250,61 @@ def main(argv=None):
     ap.add_argument('--course', default=None,
                     help='course directory, for the true cross-track on bench bags')
     ap.add_argument('--json', action='store_true')
+    ap.add_argument('--score', action='store_true',
+                    help='route grading (straight / circle): points, gates and the team total; see route_grade.py')
+    ap.add_argument('--reference', action='append', default=[], metavar='BAG',
+                    help='with --score: the car\'s TA reference bag for a route (repeat per route)')
+    ap.add_argument('--route', choices=['straight', 'circle_cw', 'circle_ccw'], default=None,
+                    help='with --score: the route, when the bag has no metadata (one bag only)')
     args = ap.parse_args(argv)
+    if args.score:
+        return score_main(args)
     out = [grade_bag(b, args.course) for b in args.bags]
     if args.json:
         print(json.dumps([asdict(m) for m in out], indent=2))
     else:
         print('\n\n'.join(format_metrics(m) for m in out))
+    return 0
+
+
+def score_main(args):
+    from autosdv_waypoint_lab import route_grade as rg
+    if args.route and len(args.bags) > 1:
+        print('--route names one route; give one bag', file=sys.stderr)
+        return 2
+    refs = {}
+    for r in args.reference:
+        m, _ = rg.read_route_bag(r, None, args.course)
+        if m.route is None:
+            print(f'reference {r}: {"; ".join(m.notes)}', file=sys.stderr)
+            return 2
+        if m.route in refs:
+            print(f'two references for {m.route}', file=sys.stderr)
+            return 2
+        refs[m.route] = m
+    scores, out = [], []
+    for b in args.bags:
+        m, meta = rg.read_route_bag(b, args.route, args.course)
+        if m.route is None:
+            print(f'{b}: {"; ".join(m.notes)}', file=sys.stderr)
+            return 2
+        s = rg.score_route(m, refs.get(m.route))
+        if m.route not in refs:
+            m.notes.append('no reference bag for this route: fixed absolute pass lines')
+        scores.append(s)
+        out.append((m, s, meta))
+    if args.json:
+        print(json.dumps([{'metrics': asdict(m), 'points': s.points, 'total': s.total,
+                           'max': s.max_total, 'lines': s.lines, 'gate_failures': s.gate_failures}
+                          for m, s, _ in out], indent=2))
+    else:
+        print('\n\n'.join(rg.format_route(m, s) for m, s, _ in out))
+    if len(scores) > 1:
+        tot, mx = rg.team_total(scores)
+        print(f'\nteam total: {tot:.2f} / {mx:g}')
+        for m, s_, _ in out:
+            if s_.invalid:
+                print(f'  {m.name}: INVALID, re-run (counts 0 until a valid bag exists)')
     return 0
 
 
