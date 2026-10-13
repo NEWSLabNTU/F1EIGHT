@@ -175,6 +175,14 @@ fit-motor BAG *ARGS:
     source scripts/env.sh
     exec ros2 run autosdv_coach_lab lab2_fit_motor "$@"
 
+# Export a speed-step bag as t,pwm,measured_speed -- the CSV the Lab 2 students fit their
+# feed-forward from (course repo: ta/cars/car_tool.py install-fit ships it to the handout)
+[positional-arguments]
+export-speed-csv BAG *ARGS:
+    #!/usr/bin/env bash
+    source scripts/env.sh
+    exec ros2 run autosdv_coach_lab lab2_export_speed_csv "$@"
+
 # Reaction time and deceleration per stop, and the envelope they support
 [positional-arguments]
 braking-report BAG *ARGS:

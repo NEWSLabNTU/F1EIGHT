@@ -34,6 +34,7 @@ setup(
             'sim_pose_init = autosdv_coach_lab.sim_pose_init:main',
             'speed_step_planner = autosdv_coach_lab.speed_step_planner_node:main',
             'lab2_fit_motor = autosdv_coach_lab.calibration.motor_fit:main',
+            'lab2_export_speed_csv = autosdv_coach_lab.calibration.speed_csv:main',
             'lab2_braking_report = autosdv_coach_lab.calibration.braking:main',
             'vehicle_bench_plant = autosdv_coach_lab.vehicle_bench_plant_node:main',
         ],
