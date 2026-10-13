@@ -26,7 +26,12 @@
   <let name="launch_vehicle_velocity_converter" value="false"/>
   <let name="launch_gyro_bias_estimator" value="false"/>
 
-  <!-- the kit with its drivers off; the ZED driver is zed_aruco.launch.xml -->
+  <!-- the kit with its drivers off; the ZED driver is zed_aruco.launch.xml.
+       Scoped, with rviz off: `rviz` would otherwise reach autosdv_autoware.launch.xml
+       and open Autoware's RViz too, and two RViz starting together fail to create a
+       GL context (GLXBadDrawable), leaving both windows' views black. -->
+  <group scoped="true">
+  <let name="rviz" value="false"/>
   <include file="$(find-pkg-share autosdv_launch)/launch/autosdv.launch.yaml">
     <arg name="sensor_suite" value="$(var sensor_suite)"/>
     <arg name="camera_model" value="zedxm"/>
@@ -46,6 +51,7 @@
     <arg name="launch_sensing_driver" value="false"/>
     <arg name="is_simulation" value="true"/>
   </include>
+  </group>
 
   <include file="$(find-pkg-share autosdv_waypoint_lab)/launch/zed_aruco.launch.xml"/>
 
