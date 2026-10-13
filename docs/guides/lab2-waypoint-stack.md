@@ -159,7 +159,7 @@ surveys a copy of the directory with that board as the origin, and keeps its
 
 | course | route | origin board | boards |
 |---|---|---|---|
-| `lab2_straight` | open 8 m, x 9.5 → 1.5 heading −x, 1 run at 0.8 m/s, end ramp stops it | the end board, (0, 0) facing +x, 1.5 m past the stop | end + 2 angled side boards |
+| `lab2_straight` | open 10 m, x 11.5 → 1.5 heading −x, 1 run at 0.8 m/s, end ramp stops it | the end board, (0, 0) facing +x, 1.5 m past the stop | end + 3 angled side boards |
 | `lab2_circle_cw` | clockwise R 1.5 m about (3.5, 0), 3 laps at 0.8 m/s | a ring board, (0, 0) facing +x | ring of 8 at R 3.5 m facing the centre |
 | `lab2_circle_ccw` | counter-clockwise R 2.5 m about (3.5, 0), 3 laps | the same ring board | the same ring |
 
@@ -178,9 +178,9 @@ just lab2 vehicle course_dir:=$PWD/courses/circle_cw_today   # a surveyed copy
 route, no gap, the start box always covered. The kinematic bench (reference
 tracker, default lookahead, 5 cm / 2° pose noise) completes each with cross-track
 under 3 cm, a 1.5 m circle at mean radius ±3 mm, and the straight stopping
-within 8 cm of its last waypoint. With the 0.38 m boards' measured 9 cm / 1.6°
+within 7 cm of its last waypoint. With the 0.38 m boards' measured 9 cm / 1.6°
 instead, it still completes each: cross-track under 5 cm, mean radius within
-6 mm, the straight stopping within 13 cm. Coverage is unchanged at 0.38 m
+6 mm, the straight stopping within 14 cm. Coverage is unchanged at 0.38 m
 (the field-of-view test uses the marker's width, and it stays inside the 100°
 camera). Course-file checks are tests in `test_course.py`.
 The R 1.5 m circle needs 0.21 rad of tire angle (0.13 rad for R 2.5 m): it is meaningless until the

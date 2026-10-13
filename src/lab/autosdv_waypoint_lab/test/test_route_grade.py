@@ -46,19 +46,19 @@ def msgs_for(route, *, x_stop=0.0, overshoot=0.0, wobble=0.0, radius_off=0.0, mr
            for t in ts if t >= 1.0]
     cmd = [(t, NS(longitudinal=NS(velocity=cmd_profile(t - 1.0, t_ramp, t_stop)))) for t in ts if t >= 1.0]
     if route == 'straight':
-        # drive along -x from 9.5; stop point at (0, 0) heading -x; car rests at x_stop
+        # drive along -x from 11.5; stop point at (0, 0) heading -x; car rests at x_stop
         pos = []
         s = 0.0
         for t, v in vel:
             s += v.longitudinal_velocity * 0.1
-            pos.append((t, kin(9.5 - s * (9.5 - x_stop) / max(1e-9, 9.5), 0.0)))
+            pos.append((t, kin(11.5 - s * (11.5 - x_stop) / max(1e-9, 11.5), 0.0)))
         # rescale so the final position is exactly x_stop
         final_s = s
         pos = []
         s = 0.0
         for t, v in vel:
             s += v.longitudinal_velocity * 0.1
-            pos.append((t, kin(9.5 + (x_stop - 9.5) * s / final_s, 0.0)))
+            pos.append((t, kin(11.5 + (x_stop - 11.5) * s / final_s, 0.0)))
     else:
         R = 1.5 if route == 'circle_cw' else 2.5
         w = 1 if route == 'circle_ccw' else -1
