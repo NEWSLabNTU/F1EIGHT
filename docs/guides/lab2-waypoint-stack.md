@@ -130,7 +130,7 @@ markers:
 
 Checked through the real node with `synthetic_camera/run.sh` on a 480 mm
 course: with the EKF pose 0.3 m off, the fixes land 2 cm and 0.3° from the true
-pose. The same check on the car with a 380 mm marker gave about 9 cm and 1.6°,
+pose. The same synthetic check with a 380 mm marker gave about 9 cm and 1.6°,
 so a smaller marker is a noisier one. The bench's noise model
 (`marker_sim.NoiseModel`: 2 cm + 1 cm per metre of range, 1.5° yaw) is not
 scaled by marker size, and the 9 cm / 1.6° figure comes from one synthetic
