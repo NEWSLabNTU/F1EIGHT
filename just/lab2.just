@@ -52,6 +52,15 @@ vehicle *ARGS:
     source scripts/env.sh
     exec "${cmd[@]}"
 
+# Gate before car time: your SpeedPID on the three graded routes, full stack; PASS/FAIL per route
+#   just lab2 gate speed_controller_class:=lab2_waypoint.speed_pid:SpeedPID "speed_controller_params:={kp: 15.0}"
+#   just lab2 gate --only lab2_straight ...
+[positional-arguments]
+gate *ARGS:
+    #!/usr/bin/env bash
+    source scripts/env.sh
+    exec python3 scripts/testing/lab2/bench_gate.py "$@"
+
 # Bench checks on fresh benches (follow, marker loss, path publisher loss, faults); PASS/FAIL lines
 [positional-arguments]
 bench-checks *ARGS:
@@ -93,28 +102,27 @@ reinit:
     ros2 service call /localization/pose_twist_fusion_filter/start_pose_init/reinit \
         std_srvs/srv/Trigger {}
 
-# Record the topics the Lab 2 grading reads, to rosbags/lab2wp_<time>
-record NAME="":
+# Record the submission bag: the fixed topic list, the compressed camera, course hash, car and team
+#   just lab2 record --car A --team 3 [--name straight_1]
+# Start it after `just lab2 vehicle`, before `just lab2 engage`; Ctrl-C ends it. The course is read
+# from the running stack. Writes rosbags/lab2_<name>; check it with `just lab2 check-bags`.
+[positional-arguments]
+record *ARGS:
     #!/usr/bin/env bash
     source scripts/env.sh
-    name='{{ NAME }}'
-    out="rosbags/lab2wp_${name:-$(date +%Y%m%d_%H%M%S)}"
-    mkdir -p rosbags
-    topics=(
-        /planning/waypoint_path_publisher/progress /planning/trajectory
-        /control/path_tracker/debug /control/trajectory_follower/control_cmd
-        /control/command/control_cmd /vehicle/status/velocity_status
-        /vehicle/status/steering_status /localization/kinematic_state
-        /localization/pose_estimator/pose_with_covariance
-        /localization/twist_estimator/twist_with_covariance
-        /api/operation_mode/state /system/fail_safe/mrm_state
-        /sensing/imu/imu_data /vehicle_bench_plant/odometry
-        /tf /tf_static
-    )
-    echo "recording to $out"
-    exec ros2 bag record -o "$out" "${topics[@]}"
+    exec ros2 run autosdv_waypoint_lab lab2_record "$@"
+
+# Would the grader accept these bags? Missing topic, modified course, wrong speed, laps, MRM
+#   just lab2 check-bags rosbags/lab2_straight rosbags/lab2_cw rosbags/lab2_ccw --car A --team 3
+[positional-arguments]
+check-bags *ARGS:
+    #!/usr/bin/env bash
+    source scripts/env.sh
+    exec ros2 run autosdv_waypoint_lab lab2_check_bags "$@"
 
 # Run metrics of recorded runs: laps, cross-track, speed tracking, MRM
+#   just lab2 grade BAG...                                        the engineering metrics
+#   just lab2 grade --score BAG... --reference REFBAG...          TA scoring of the route bags
 [positional-arguments]
 grade *ARGS:
     #!/usr/bin/env bash
