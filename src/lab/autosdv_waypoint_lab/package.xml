@@ -16,6 +16,7 @@
   <depend>rclpy</depend>
   <depend>autosdv_lab_msgs</depend>
   <depend>geometry_msgs</depend>
+  <depend>sensor_msgs</depend>
   <depend>nav_msgs</depend>
   <depend>std_srvs</depend>
   <depend>diagnostic_msgs</depend>

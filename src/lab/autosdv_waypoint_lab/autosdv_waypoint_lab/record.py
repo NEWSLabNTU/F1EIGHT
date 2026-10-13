@@ -15,8 +15,10 @@ one named on the command line, so a bag cannot describe a course it was not
 recorded on. Ctrl-C stops the recording.
 
 The ZED's compressed stream comes from image_transport's plugin on the
-wrapper's rectified image; decoding only the frames that are kept costs about a
-fifth of one Orin core.
+wrapper's rectified image. The subscription is raw (serialised bytes), so a frame
+that is thinned away is never deserialised; a kept frame is deserialised, decoded,
+resized and re-encoded. Measured on the Orin with every frame deserialised (rclpy
+building a Python message from each 656 kB frame at 15 Hz): 43.5 % of one core.
 """
 
 import argparse
@@ -44,6 +46,13 @@ def git_info(cwd: Optional[str] = None):
     return commit, dirty
 
 
+def keep_slot(now: float, period: float, last_slot: Optional[int]):
+    """(keep, slot): one frame per `period` slot, so a 15 Hz stream gives 10 Hz and a
+    30 Hz one too. Decided from the arrival time alone, before any deserialising."""
+    slot = int(now / period)
+    return slot != last_slot, slot
+
+
 def resize_jpeg(data: bytes, size=bm.CAMERA_SIZE, quality: int = 80) -> Optional[bytes]:
     import cv2
     import numpy as np
@@ -60,6 +69,7 @@ def make_node(meta_json: str, source: str, rate: float):
     import rclpy
     from rclpy.node import Node
     from rclpy.qos import DurabilityPolicy, QoSProfile, ReliabilityPolicy, qos_profile_sensor_data
+    from rclpy.serialization import deserialize_message
     from sensor_msgs.msg import CompressedImage
     from std_msgs.msg import String
 
@@ -74,19 +84,22 @@ def make_node(meta_json: str, source: str, rate: float):
             self.period = 1.0 / rate
             self.last_slot = None
             self.n_in = self.n_out = 0
-            self.create_subscription(CompressedImage, source, self.on_image, qos_profile_sensor_data)
+            # raw=True: the callback gets the serialised bytes, so a thinned-away frame
+            # costs no Python message construction
+            self.create_subscription(CompressedImage, source, self.on_image,
+                                     qos_profile_sensor_data, raw=True)
             self.create_timer(1.0, self.on_timer)
             self.on_timer()
 
         def on_timer(self):
             self.pub_meta.publish(String(data=self.meta))
 
-        def on_image(self, msg):
+        def on_image(self, raw):
             self.n_in += 1
-            # one frame per 1/rate slot: a 15 Hz stream gives 10 Hz, a 30 Hz one too
-            slot = int(time.monotonic() / self.period)
-            if slot == self.last_slot:
+            keep, slot = keep_slot(time.monotonic(), self.period, self.last_slot)
+            if not keep:
                 return
+            msg = deserialize_message(raw, CompressedImage)
             data = resize_jpeg(bytes(msg.data))
             if data is None:
                 return
@@ -100,6 +113,13 @@ def make_node(meta_json: str, source: str, rate: float):
 
     rclpy.init()
     return Aux()
+
+
+def missing_path_file(course: str) -> Optional[str]:
+    """The course's path file name if it is not on disk (a survey-only course), else None."""
+    from autosdv_waypoint_lab.course import load_course
+    c = load_course(course)
+    return None if os.path.isfile(c.path_file) else os.path.basename(c.path_file)
 
 
 def course_dir_from_stack(timeout: float = 15.0) -> Optional[str]:
@@ -143,6 +163,15 @@ def main(argv=None):
     rclpy.shutdown()
 
     commit, dirty = git_info()
+    if not os.path.isfile(os.path.join(course, 'course.yaml')):
+        print(f'lab2_record: {course} has no course.yaml; is it a course directory?',
+              file=sys.stderr)
+        return 2
+    missing = missing_path_file(course)
+    if missing:
+        print(f'lab2_record: course {course} has no {missing}; write the path first '
+              '(the marker survey does not write it), then record', file=sys.stderr)
+        return 2
     meta = bm.build_meta(course, args.car, args.team, commit, time.time())
     meta['git_dirty'] = dirty
     meta['course_dir'] = os.path.abspath(course)

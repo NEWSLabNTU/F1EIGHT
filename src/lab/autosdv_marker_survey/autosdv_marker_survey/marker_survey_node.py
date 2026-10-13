@@ -335,6 +335,11 @@ class MarkerSurveyNode(Node):
                                         'lab2_marker_survey_solve can try again.')
                 return False, str(e)
         self.saved = True
+        if not os.path.isfile(os.path.join(self.course_dir, 'path.csv')):
+            self.get_logger().warn(
+                f'{self.course_dir} has no path.csv: the survey writes the markers, not the path. '
+                'Write path.csv (the route in the origin marker\'s frame) before the course is '
+                'followed, loc-checked or recorded (lab2_record needs it).')
         flagged = [m.id for m in res['markers'] if m.flags]
         return True, (f'{len(res["markers"])} markers written to {self.course_dir}'
                       + (f'; check {flagged}' if flagged else ''))

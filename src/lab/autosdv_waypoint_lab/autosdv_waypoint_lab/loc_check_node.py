@@ -15,6 +15,8 @@ and logs a summary every 10 s and on exit:
                what odometry and the marker disagree by. Small (a few cm) on a
                good survey; a fix that is consistently far off points at a
                marker surveyed wrong, or knocked since.
+  no twist     an ERROR line when marker fixes arrive but gyro_odometer's twist (and the
+               IMU behind it) has no messages: the EKF then has no prediction between fixes
   off path     the trail's distance from the course path, if you drive along it
 """
 
@@ -26,10 +28,12 @@ from collections import deque
 import numpy as np
 import rclpy
 from geometry_msgs.msg import Pose, PoseArray, PoseStamped, PoseWithCovarianceStamped
+from geometry_msgs.msg import TwistWithCovarianceStamped
 from nav_msgs.msg import Odometry, Path as PathMsg
 from rclpy.executors import ExternalShutdownException
 from rclpy.node import Node
 from rclpy.qos import DurabilityPolicy, QoSProfile, ReliabilityPolicy, qos_profile_sensor_data
+from sensor_msgs.msg import Imu
 
 from autosdv_waypoint_lab.course import load_course
 from autosdv_waypoint_lab.path import CoursePath, Path, load_csv
@@ -37,6 +41,25 @@ from autosdv_waypoint_lab.path import CoursePath, Path, load_csv
 
 def stamp_sec(s) -> float:
     return s.sec + 1e-9 * s.nanosec
+
+
+def input_warning(n_imu: int, n_twist: int, n_fix: int, n_odom: int):
+    """Why the EKF has no twist input, or None when it has one (or nothing is up yet).
+
+    The EKF predicts between marker fixes from gyro_odometer's twist; without it the
+    pose only jumps at fixes and nothing says so. Judged only once the camera is
+    demonstrably up (fixes arriving) and the EKF is running (odometry arriving)."""
+    if n_twist > 0 or n_fix == 0 or n_odom == 0:
+        return None
+    if n_imu == 0:
+        return ('NO TWIST: /localization/twist_estimator/twist_with_covariance and '
+                '/sensing/imu/imu_data have no messages while marker fixes arrive, so the EKF '
+                'has no prediction between fixes. imu_corrector gets nothing from the ZED IMU: '
+                'a QoS mismatch (the ZED publishes best-effort, imu_corrector subscribes '
+                'reliable; see qos_overrides in zed_aruco.yaml) or no base_link -> zedxm_imu_link TF')
+    return ('NO TWIST: /sensing/imu/imu_data flows but /localization/twist_estimator/'
+            'twist_with_covariance has no messages: gyro_odometer also needs '
+            '/vehicle/status/velocity_status (velocity_report, or the bench plant)')
 
 
 class PoseHistory:
@@ -109,6 +132,12 @@ class LocCheck(Node):
         self.create_subscription(PoseWithCovarianceStamped,
                                  '/localization/pose_estimator/pose_with_covariance', self.on_fix,
                                  qos_profile_sensor_data)
+        self.n_imu = self.n_twist = 0
+        self.create_subscription(Imu, '/sensing/imu/imu_data', self.on_imu, qos_profile_sensor_data)
+        self.create_subscription(TwistWithCovarianceStamped,
+                                 '/localization/twist_estimator/twist_with_covariance',
+                                 self.on_twist, qos_profile_sensor_data)
+        self.n_odom = 0
         self.create_timer(float(gp('report_period')), self.report)
         self.create_timer(0.5, self.publish)
 
@@ -143,7 +172,14 @@ class LocCheck(Node):
             msg.poses.append(ps)
         self.pub_path.publish(msg)
 
+    def on_imu(self, msg):
+        self.n_imu += 1
+
+    def on_twist(self, msg):
+        self.n_twist += 1
+
     def on_odom(self, msg):
+        self.n_odom += 1
         t = stamp_sec(msg.header.stamp)
         p = msg.pose.pose.position
         self.moving = abs(msg.twist.twist.linear.x) > 0.05
@@ -208,6 +244,9 @@ class LocCheck(Node):
         if self.off_path:
             op = np.array(self.off_path) * 100
             parts.append(f'off the course path: median {np.median(op):.0f} cm, max {op.max():.0f} cm')
+        warn = input_warning(self.n_imu, self.n_twist, self.n_fix, self.n_odom)
+        if warn:
+            parts.append(warn)
         return '; '.join(parts)
 
     def report(self):
@@ -215,6 +254,9 @@ class LocCheck(Node):
             self.get_logger().info('waiting for /localization/kinematic_state (EKF seeded?)',
                                    throttle_duration_sec=30.0)
             return
+        warn = input_warning(self.n_imu, self.n_twist, self.n_fix, self.n_odom)
+        if warn:
+            self.get_logger().error(warn)
         self.get_logger().info(self.summary())
 
 

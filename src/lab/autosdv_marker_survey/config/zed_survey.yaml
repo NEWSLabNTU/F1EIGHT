@@ -44,3 +44,13 @@
       sensors_pub_rate: 100.0
       publish_imu: true
       publish_imu_tf: false
+    # The wrapper publishes every topic BEST_EFFORT; the stock imu_corrector
+    # subscribes RELIABLE, and a best-effort publisher never matches a reliable
+    # subscriber: the topic ran at 100 Hz and /sensing/imu/imu_data stayed empty,
+    # so gyro_odometer never produced a twist. The wrapper declares per-topic QoS
+    # override parameters (QosOverridingOptions::with_default_policies); the key
+    # is the fully resolved topic name.
+    qos_overrides:
+      /sensing/camera/zedxm/imu/data:
+        publisher:
+          reliability: reliable

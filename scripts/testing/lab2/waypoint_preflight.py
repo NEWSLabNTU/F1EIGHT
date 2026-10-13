@@ -10,8 +10,11 @@ the start box, before the first engage:
 One line per check, PASS / WARN / FAIL, and exit status 1 if any FAIL:
 
   nodes        the nodes the waypoint stack needs are alive, per mode
-  rates        camera image and IMU (vehicle), velocity_status, IMU,
-               kinematic_state, the trajectory and path_tracker's command
+  rates        camera image and IMU (vehicle), velocity_status, IMU, the
+               gyro_odometer twist, kinematic_state, the trajectory and path_tracker's command
+  imu qos      the ZED IMU's publisher and imu_corrector's subscription can
+               match (best-effort vs reliable never do: silent, 100 Hz in,
+               nothing out)
   fixes        the AR-tag localizer has accepted marker fixes recently (the
                car sees a marker from the start box)
   start        the localized pose is near the course's start box (from
@@ -72,9 +75,14 @@ FORBIDDEN = ['/control/trajectory_follower/controller_node_exe', '/dead_reckon_o
 
 # topic: (label, fail below [Hz], warn below [Hz], modes)
 IMAGE = '/sensing/camera/zedxm/rgb/color/rect/image'
+IMU_RAW = '/sensing/camera/zedxm/imu/data'
+IMU_OUT = '/sensing/imu/imu_data'
+TWIST = '/localization/twist_estimator/twist_with_covariance'
 RATES = [
     (IMAGE, 'camera image', 8.0, 12.0, ('vehicle',)),
     ('/sensing/imu/imu_data', 'IMU', 20.0, 50.0, ('vehicle', 'bench')),
+    (TWIST, 'gyro_odometer twist (the EKF\'s only prediction input)', 5.0, 10.0,
+     ('vehicle', 'bench')),
     ('/vehicle/status/velocity_status', 'velocity_status', 10.0, 18.0, ('vehicle', 'bench')),
     ('/localization/kinematic_state', 'kinematic_state', 20.0, 40.0, ('vehicle', 'bench')),
     ('/planning/trajectory', 'trajectory', 5.0, 8.0, ('vehicle', 'bench')),
@@ -83,6 +91,18 @@ RATES = [
 ]
 FIX = '/localization/pose_estimator/pose_with_covariance'
 PROGRESS = '/planning/waypoint_path_publisher/progress'
+
+
+def qos_mismatch(pub_reliability, sub_reliability):
+    """Reliability names ('RELIABLE'/'BEST_EFFORT') of each publisher and subscription on
+    a topic; the (publisher, subscriber) pairs that DDS will not connect. A best-effort
+    publisher never matches a reliable subscription."""
+    return [(p, s) for p in pub_reliability for s in sub_reliability
+            if p == 'BEST_EFFORT' and s == 'RELIABLE']
+
+
+def reliability_names(infos):
+    return [i.qos_profile.reliability.name for i in infos]
 
 
 def main():
@@ -157,11 +177,28 @@ def main():
     for topic, label, fail_hz, warn_hz in plan:
         hz = node.counts[topic] / elapsed
         level = FAIL if hz < fail_hz else WARN if hz < warn_hz else PASS
-        out(level, 'rates', f'{label} {hz:.1f} Hz (fail < {fail_hz:g}, warn < {warn_hz:g})')
+        out(level, 'rates', f'{label} {hz:.1f} Hz (fail < {fail_hz:g}, warn < {warn_hz:g})'
+            + (' -- NOTHING: see the imu qos line below' if hz == 0 and topic in (IMU_OUT, TWIST)
+               else ''))
         if topic == IMAGE and topic in node.first:
             from rclpy.serialization import deserialize_message
             cam_frame = deserialize_message(node.first[topic],
                                             get_message(types[topic][0])).header.frame_id
+
+    # ---- the ZED IMU into imu_corrector: a QoS mismatch is silent but for one log line
+    if mode == 'vehicle':
+        bad = qos_mismatch(reliability_names(node.get_publishers_info_by_topic(IMU_RAW)),
+                           reliability_names(node.get_subscriptions_info_by_topic(IMU_RAW)))
+        n_pub = len(node.get_publishers_info_by_topic(IMU_RAW))
+        if bad:
+            out(FAIL, 'imu qos', f'{IMU_RAW}: publisher BEST_EFFORT, subscriber RELIABLE '
+                '(imu_corrector): never connects, so no /sensing/imu/imu_data and no EKF twist. '
+                'The ZED params need qos_overrides (config/zed_aruco.yaml)')
+        elif n_pub == 0:
+            out(FAIL, 'imu qos', f'{IMU_RAW} has no publisher: the ZED IMU is off '
+                '(sensors.publish_imu)')
+        else:
+            out(PASS, 'imu qos', f'{IMU_RAW}: publisher and subscribers can connect')
 
     # ---- marker fixes and the start box
     recent = [t for t in fixes if time.monotonic() - t < elapsed + 0.5]
