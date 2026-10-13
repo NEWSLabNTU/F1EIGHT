@@ -13,10 +13,14 @@
 # (id 24 here), so the circle centre C is at (3.5, 0).
 #
 # Boards (DICT_5X5_1000, 0.38 m black square on a 500 mm plate standing on
-# the floor, so the marker centre is 0.25 m up): 8 boards on a ring of
-# radius 3.5 m about C, every 45 deg, each facing C. Seen from C, with +x as
-# east: west (the origin, at (0, 0)), south-west, south, south-east, east,
-# north-east, north, north-west.
+# the floor, so the marker centre is 0.25 m up): 6 boards on a ring of
+# radius 3.5 m about C, every 60 deg, each facing C. Seen from C, with +x as
+# east: west (the origin, at (0, 0)), south-west, south-east, east,
+# north-east, north-west. Why 6: a coverage simulation (marker_sim.visible,
+# hfov 100 deg, range 5 m = ar_tag distance_threshold, 60 deg incidence limit,
+# 0.38 m marker) over both circles says 5 is the minimum that keeps a board in
+# view all the way round on both; 4 leaves blind gaps of up to 0.44 m. 6 gives
+# one spare: two boards in view for about 40% of the lap.
 #
 # Tape marks:
 #   centre       C = (3.5, 0)
@@ -45,10 +49,8 @@ dictionary: DICT_5X5_1000
 marker_height: 0.25
 markers:
   - {id: 24, x: 0.000, y: 0.000, yaw: 0.0000}
-  - {id: 25, x: 1.025, y: -2.475, yaw: 0.7854}
-  - {id: 26, x: 3.500, y: -3.500, yaw: 1.5708}
-  - {id: 27, x: 5.975, y: -2.475, yaw: 2.3562}
-  - {id: 28, x: 7.000, y: 0.000, yaw: 3.1416}
-  - {id: 29, x: 5.975, y: 2.475, yaw: -2.3562}
-  - {id: 30, x: 3.500, y: 3.500, yaw: -1.5708}
-  - {id: 31, x: 1.025, y: 2.475, yaw: -0.7854}
+  - {id: 25, x: 1.750, y: -3.031, yaw: 1.0472}
+  - {id: 26, x: 5.250, y: -3.031, yaw: 2.0944}
+  - {id: 27, x: 7.000, y: 0.000, yaw: 3.1416}
+  - {id: 28, x: 5.250, y: 3.031, yaw: -2.0944}
+  - {id: 29, x: 1.750, y: 3.031, yaw: -1.0472}

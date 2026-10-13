@@ -159,8 +159,8 @@ surveys a copy of the directory with that board as the origin, and keeps its
 
 | course | route | origin board | boards |
 |---|---|---|---|
-| `lab2_straight` | open 10 m, x 11.5 → 1.5 heading −x, 1 run at 0.8 m/s, end ramp stops it | the end board, (0, 0) facing +x, 1.5 m past the stop | end + 3 angled side boards |
-| `lab2_circle_cw` | clockwise R 1.5 m about (3.5, 0), 3 laps at 0.8 m/s | a ring board, (0, 0) facing +x | ring of 8 at R 3.5 m facing the centre |
+| `lab2_straight` | open 10 m, x 11.5 → 1.5 heading −x, 1 run at 0.8 m/s, end ramp stops it | the end board, (0, 0) facing +x, 1.5 m past the stop | end board + 2 angled side boards (3 boards) |
+| `lab2_circle_cw` | clockwise R 1.5 m about (3.5, 0), 3 laps at 0.8 m/s | a ring board, (0, 0) facing +x | ring of 6 at R 3.5 m facing the centre |
 | `lab2_circle_ccw` | counter-clockwise R 2.5 m about (3.5, 0), 3 laps | the same ring board | the same ring |
 
 All the lab's 500 mm boards standing on the floor (`DICT_5X5_1000`, black

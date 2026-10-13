@@ -22,143 +22,103 @@
     <tag k="ele" v="0.4400" />
   </node>
   <node id="5" lat="0" lon="0">
-    <tag k="local_x" v="1.1594" />
-    <tag k="local_y" v="-2.6094" />
+    <tag k="local_x" v="1.9145" />
+    <tag k="local_y" v="-3.1260" />
     <tag k="ele" v="0.0600" />
   </node>
   <node id="6" lat="0" lon="0">
-    <tag k="local_x" v="0.8906" />
-    <tag k="local_y" v="-2.3406" />
+    <tag k="local_x" v="1.5855" />
+    <tag k="local_y" v="-2.9360" />
     <tag k="ele" v="0.0600" />
   </node>
   <node id="7" lat="0" lon="0">
-    <tag k="local_x" v="0.8906" />
-    <tag k="local_y" v="-2.3406" />
+    <tag k="local_x" v="1.5855" />
+    <tag k="local_y" v="-2.9360" />
     <tag k="ele" v="0.4400" />
   </node>
   <node id="8" lat="0" lon="0">
-    <tag k="local_x" v="1.1594" />
-    <tag k="local_y" v="-2.6094" />
+    <tag k="local_x" v="1.9145" />
+    <tag k="local_y" v="-3.1260" />
     <tag k="ele" v="0.4400" />
   </node>
   <node id="9" lat="0" lon="0">
-    <tag k="local_x" v="3.6900" />
-    <tag k="local_y" v="-3.5000" />
+    <tag k="local_x" v="5.4145" />
+    <tag k="local_y" v="-2.9360" />
     <tag k="ele" v="0.0600" />
   </node>
   <node id="10" lat="0" lon="0">
-    <tag k="local_x" v="3.3100" />
-    <tag k="local_y" v="-3.5000" />
+    <tag k="local_x" v="5.0855" />
+    <tag k="local_y" v="-3.1260" />
     <tag k="ele" v="0.0600" />
   </node>
   <node id="11" lat="0" lon="0">
-    <tag k="local_x" v="3.3100" />
-    <tag k="local_y" v="-3.5000" />
+    <tag k="local_x" v="5.0855" />
+    <tag k="local_y" v="-3.1260" />
     <tag k="ele" v="0.4400" />
   </node>
   <node id="12" lat="0" lon="0">
-    <tag k="local_x" v="3.6900" />
-    <tag k="local_y" v="-3.5000" />
+    <tag k="local_x" v="5.4145" />
+    <tag k="local_y" v="-2.9360" />
     <tag k="ele" v="0.4400" />
   </node>
   <node id="13" lat="0" lon="0">
-    <tag k="local_x" v="6.1093" />
-    <tag k="local_y" v="-2.3406" />
+    <tag k="local_x" v="7.0000" />
+    <tag k="local_y" v="0.1900" />
     <tag k="ele" v="0.0600" />
   </node>
   <node id="14" lat="0" lon="0">
-    <tag k="local_x" v="5.8407" />
-    <tag k="local_y" v="-2.6094" />
+    <tag k="local_x" v="7.0000" />
+    <tag k="local_y" v="-0.1900" />
     <tag k="ele" v="0.0600" />
   </node>
   <node id="15" lat="0" lon="0">
-    <tag k="local_x" v="5.8407" />
-    <tag k="local_y" v="-2.6094" />
+    <tag k="local_x" v="7.0000" />
+    <tag k="local_y" v="-0.1900" />
     <tag k="ele" v="0.4400" />
   </node>
   <node id="16" lat="0" lon="0">
-    <tag k="local_x" v="6.1093" />
-    <tag k="local_y" v="-2.3406" />
+    <tag k="local_x" v="7.0000" />
+    <tag k="local_y" v="0.1900" />
     <tag k="ele" v="0.4400" />
   </node>
   <node id="17" lat="0" lon="0">
-    <tag k="local_x" v="7.0000" />
-    <tag k="local_y" v="0.1900" />
+    <tag k="local_x" v="5.0855" />
+    <tag k="local_y" v="3.1260" />
     <tag k="ele" v="0.0600" />
   </node>
   <node id="18" lat="0" lon="0">
-    <tag k="local_x" v="7.0000" />
-    <tag k="local_y" v="-0.1900" />
+    <tag k="local_x" v="5.4145" />
+    <tag k="local_y" v="2.9360" />
     <tag k="ele" v="0.0600" />
   </node>
   <node id="19" lat="0" lon="0">
-    <tag k="local_x" v="7.0000" />
-    <tag k="local_y" v="-0.1900" />
+    <tag k="local_x" v="5.4145" />
+    <tag k="local_y" v="2.9360" />
     <tag k="ele" v="0.4400" />
   </node>
   <node id="20" lat="0" lon="0">
-    <tag k="local_x" v="7.0000" />
-    <tag k="local_y" v="0.1900" />
+    <tag k="local_x" v="5.0855" />
+    <tag k="local_y" v="3.1260" />
     <tag k="ele" v="0.4400" />
   </node>
   <node id="21" lat="0" lon="0">
-    <tag k="local_x" v="5.8407" />
-    <tag k="local_y" v="2.6094" />
+    <tag k="local_x" v="1.5855" />
+    <tag k="local_y" v="2.9360" />
     <tag k="ele" v="0.0600" />
   </node>
   <node id="22" lat="0" lon="0">
-    <tag k="local_x" v="6.1093" />
-    <tag k="local_y" v="2.3406" />
+    <tag k="local_x" v="1.9145" />
+    <tag k="local_y" v="3.1260" />
     <tag k="ele" v="0.0600" />
   </node>
   <node id="23" lat="0" lon="0">
-    <tag k="local_x" v="6.1093" />
-    <tag k="local_y" v="2.3406" />
+    <tag k="local_x" v="1.9145" />
+    <tag k="local_y" v="3.1260" />
     <tag k="ele" v="0.4400" />
   </node>
   <node id="24" lat="0" lon="0">
-    <tag k="local_x" v="5.8407" />
-    <tag k="local_y" v="2.6094" />
-    <tag k="ele" v="0.4400" />
-  </node>
-  <node id="25" lat="0" lon="0">
-    <tag k="local_x" v="3.3100" />
-    <tag k="local_y" v="3.5000" />
-    <tag k="ele" v="0.0600" />
-  </node>
-  <node id="26" lat="0" lon="0">
-    <tag k="local_x" v="3.6900" />
-    <tag k="local_y" v="3.5000" />
-    <tag k="ele" v="0.0600" />
-  </node>
-  <node id="27" lat="0" lon="0">
-    <tag k="local_x" v="3.6900" />
-    <tag k="local_y" v="3.5000" />
-    <tag k="ele" v="0.4400" />
-  </node>
-  <node id="28" lat="0" lon="0">
-    <tag k="local_x" v="3.3100" />
-    <tag k="local_y" v="3.5000" />
-    <tag k="ele" v="0.4400" />
-  </node>
-  <node id="29" lat="0" lon="0">
-    <tag k="local_x" v="0.8906" />
-    <tag k="local_y" v="2.3406" />
-    <tag k="ele" v="0.0600" />
-  </node>
-  <node id="30" lat="0" lon="0">
-    <tag k="local_x" v="1.1594" />
-    <tag k="local_y" v="2.6094" />
-    <tag k="ele" v="0.0600" />
-  </node>
-  <node id="31" lat="0" lon="0">
-    <tag k="local_x" v="1.1594" />
-    <tag k="local_y" v="2.6094" />
-    <tag k="ele" v="0.4400" />
-  </node>
-  <node id="32" lat="0" lon="0">
-    <tag k="local_x" v="0.8906" />
-    <tag k="local_y" v="2.3406" />
+    <tag k="local_x" v="1.5855" />
+    <tag k="local_y" v="2.9360" />
     <tag k="ele" v="0.4400" />
   </node>
   <way id="1000">
@@ -219,26 +179,6 @@
     <tag k="type" v="pose_marker" />
     <tag k="subtype" v="apriltag_16h5" />
     <tag k="marker_id" v="29" />
-    <tag k="area" v="yes" />
-  </way>
-  <way id="1006">
-    <nd ref="25" />
-    <nd ref="26" />
-    <nd ref="27" />
-    <nd ref="28" />
-    <tag k="type" v="pose_marker" />
-    <tag k="subtype" v="apriltag_16h5" />
-    <tag k="marker_id" v="30" />
-    <tag k="area" v="yes" />
-  </way>
-  <way id="1007">
-    <nd ref="29" />
-    <nd ref="30" />
-    <nd ref="31" />
-    <nd ref="32" />
-    <tag k="type" v="pose_marker" />
-    <tag k="subtype" v="apriltag_16h5" />
-    <tag k="marker_id" v="31" />
     <tag k="area" v="yes" />
   </way>
 </osm>

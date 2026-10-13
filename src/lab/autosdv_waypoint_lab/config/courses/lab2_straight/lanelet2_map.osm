@@ -22,22 +22,22 @@
     <tag k="ele" v="0.4400" />
   </node>
   <node id="5" lat="0" lon="0">
-    <tag k="local_x" v="9.5950" />
+    <tag k="local_x" v="6.5950" />
     <tag k="local_y" v="-1.1645" />
     <tag k="ele" v="0.0600" />
   </node>
   <node id="6" lat="0" lon="0">
-    <tag k="local_x" v="9.4050" />
+    <tag k="local_x" v="6.4050" />
     <tag k="local_y" v="-0.8355" />
     <tag k="ele" v="0.0600" />
   </node>
   <node id="7" lat="0" lon="0">
-    <tag k="local_x" v="9.4050" />
+    <tag k="local_x" v="6.4050" />
     <tag k="local_y" v="-0.8355" />
     <tag k="ele" v="0.4400" />
   </node>
   <node id="8" lat="0" lon="0">
-    <tag k="local_x" v="9.5950" />
+    <tag k="local_x" v="6.5950" />
     <tag k="local_y" v="-1.1645" />
     <tag k="ele" v="0.4400" />
   </node>
@@ -59,26 +59,6 @@
   <node id="12" lat="0" lon="0">
     <tag k="local_x" v="6.4050" />
     <tag k="local_y" v="0.8355" />
-    <tag k="ele" v="0.4400" />
-  </node>
-  <node id="13" lat="0" lon="0">
-    <tag k="local_x" v="3.5950" />
-    <tag k="local_y" v="-1.1645" />
-    <tag k="ele" v="0.0600" />
-  </node>
-  <node id="14" lat="0" lon="0">
-    <tag k="local_x" v="3.4050" />
-    <tag k="local_y" v="-0.8355" />
-    <tag k="ele" v="0.0600" />
-  </node>
-  <node id="15" lat="0" lon="0">
-    <tag k="local_x" v="3.4050" />
-    <tag k="local_y" v="-0.8355" />
-    <tag k="ele" v="0.4400" />
-  </node>
-  <node id="16" lat="0" lon="0">
-    <tag k="local_x" v="3.5950" />
-    <tag k="local_y" v="-1.1645" />
     <tag k="ele" v="0.4400" />
   </node>
   <way id="1000">
@@ -109,16 +89,6 @@
     <tag k="type" v="pose_marker" />
     <tag k="subtype" v="apriltag_16h5" />
     <tag k="marker_id" v="21" />
-    <tag k="area" v="yes" />
-  </way>
-  <way id="1003">
-    <nd ref="13" />
-    <nd ref="14" />
-    <nd ref="15" />
-    <nd ref="16" />
-    <tag k="type" v="pose_marker" />
-    <tag k="subtype" v="apriltag_16h5" />
-    <tag k="marker_id" v="22" />
     <tag k="area" v="yes" />
   </way>
 </osm>

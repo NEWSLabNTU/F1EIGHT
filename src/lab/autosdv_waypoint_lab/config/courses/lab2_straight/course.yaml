@@ -13,12 +13,19 @@
 # at x = 0 facing +x, i.e. facing the car, which drives -x towards it.
 #
 # Boards (DICT_5X5_1000, 0.38 m black square on a 500 mm plate standing on
-# the floor, so the marker centre is 0.25 m up):
-#   end board    (0.0, 0.0)   facing +x, square to the route   -> origin
-#   side board   (9.5, -1.0)  facing 30 deg left of +x, angled at the start
-#   side board   (6.5, +1.0)  facing 30 deg right of +x, angled at the car
-#   side board   (3.5, -1.0)  facing 30 deg left of +x, angled at the car
+# the floor, so the marker centre is 0.25 m up). Three boards. Seen from the
+# start box, looking down the route (-x), the car's left is -y:
+#   end board     (0.0, 0.0)   facing +x, square to the route   -> origin
+#   front-left    (6.5, -1.0)  yaw +30 deg, angled at the car
+#   front-right   (6.5, +1.0)  yaw -30 deg, angled at the car
 # A side board square to the route is seen only from the side, and too late.
+# Why these: a coverage simulation (marker_sim.visible, hfov 100 deg, range
+# 5 m = ar_tag distance_threshold, 60 deg incidence limit, 0.38 m marker)
+# along the route says the start box sees both side boards, so the car has a
+# fix before it moves. The one blind stretch is x = 7.84 to 5.2 (2.6 m, about
+# 3.3 s at 0.8 m/s), under localization_monitor's error_age of 5 s; after it
+# the end board is in range. Boards only at the far end would leave the start
+# box with no fix and a blind stretch of about 6 m.
 #
 # Tape marks, measured from the origin board along the route centreline:
 #   start box    x = 11.5 (the car's rear axle), car pointing -x at the board
@@ -43,6 +50,5 @@ dictionary: DICT_5X5_1000
 marker_height: 0.25
 markers:
   - {id: 24, x: 0.000, y: 0.000, yaw: 0.0000}
-  - {id: 20, x: 9.500, y: -1.000, yaw: 0.5236}
+  - {id: 20, x: 6.500, y: -1.000, yaw: 0.5236}
   - {id: 21, x: 6.500, y: 1.000, yaw: -0.5236}
-  - {id: 22, x: 3.500, y: -1.000, yaw: 0.5236}
