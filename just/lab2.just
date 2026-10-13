@@ -155,11 +155,17 @@ camera-check COURSE="src/lab/autosdv_waypoint_lab/config/courses/hall_demo" SECO
 
 #   just lab2 loc-check courses/my_hall       car in the start box; selector on the joystick
 # Nothing here can drive the car (no tracker, no engage, the actuator as a dry run).
+#   just lab2 loc-check                         surveys/latest, the most recent survey
 # Localization check: drive the surveyed course BY HAND, watch the trail in RViz
 [positional-arguments]
-loc-check COURSE_DIR *ARGS:
+loc-check *ARGS:
     #!/usr/bin/env bash
-    dir=$(realpath -m "$1"); shift
+    dir=surveys/latest
+    if [ $# -gt 0 ] && [[ $1 != -* && $1 != *:=* ]]; then dir=$1; shift; fi
+    if [ ! -d "$dir" ]; then
+        echo "error: no course directory '$dir': run \`just lab2 survey ORIGIN_ID\` first, or name one" >&2; exit 1
+    fi
+    dir=$(realpath "$dir")
     # DISPLAY is usable only if an X connection works. An empty or dead DISPLAY makes Argus
     # fail and the ZED wrapper hang at "CAMERA OPENING": unset it (never leave it empty).
     if [ "${DISPLAY+set}" = set ]; then
@@ -207,13 +213,30 @@ steer-fit *PAIRS:
 
 # --- Marker survey: map the hall's markers with the car's ZED --------------------------------
 # Drive or push the car slowly past every marker, then Ctrl-C (or `just lab2 survey-save`):
-#   just lab2 survey courses/my_hall 24                    origin marker 24, the lab's 0.50 m boards, marker_size 0.38
+#   just lab2 survey 24                                    a new surveys/<date>_<time>, origin marker 24
+#   just lab2 survey courses/my_hall 24                    or name the directory
 #   just lab2 survey courses/my_hall 3 dictionary:=ARUCO_MIP_36h12 marker_size:=0.25
-# Writes COURSE_DIR/course.yaml (markers in the origin marker's frame), the map, and a report.
+# surveys/latest points at the directory of the most recent survey, named or dated, and
+# survey-solve and loc-check use it when no directory is given.
+# Writes COURSE_DIR (default surveys/<date>_<time>)/course.yaml, the map, and a report.
 [positional-arguments]
-survey COURSE_DIR ORIGIN_ID *ARGS:
+survey *ARGS:
     #!/usr/bin/env bash
-    dir=$(realpath -m "$1"); origin="$2"; shift 2
+    if [[ ${1-} =~ ^[0-9]+$ ]]; then
+        dir=$PWD/surveys/$(date +%Y-%m-%d_%H-%M-%S)
+    elif [ $# -ge 2 ]; then
+        dir=$(realpath -m "$1"); shift
+    else
+        echo "usage: just lab2 survey [COURSE_DIR] ORIGIN_ID [ARGS...]" >&2; exit 2
+    fi
+    origin="$1"; shift
+    if ! [[ $origin =~ ^[0-9]+$ ]]; then
+        echo "error: ORIGIN_ID must be a marker id, got '$origin'" >&2; exit 2
+    fi
+    mkdir -p "$dir" surveys
+    case "$dir" in "$PWD"/surveys/*) target=${dir#"$PWD"/surveys/} ;; *) target=$dir ;; esac
+    ln -sfn "$target" surveys/latest
+    echo "survey -> $dir (surveys/latest)"
     # DISPLAY is usable only if an X connection works. An empty or dead DISPLAY makes Argus
     # fail and the ZED wrapper hang at "CAMERA OPENING": unset it (never leave it empty).
     if [ "${DISPLAY+set}" = set ]; then
@@ -244,10 +267,16 @@ survey-save:
     source scripts/env.sh
     ros2 service call /marker_survey/save std_srvs/srv/Trigger {}
 
-# Solve a saved survey again (COURSE_DIR/survey_data.npz), e.g. with another origin
+#   just lab2 survey-solve                       surveys/latest
+#   just lab2 survey-solve courses/my_hall --origin 3
+# Solve a saved survey again (COURSE_DIR/survey_data.npz, default surveys/latest)
 [positional-arguments]
-survey-solve COURSE_DIR *ARGS:
+survey-solve *ARGS:
     #!/usr/bin/env bash
-    dir="$1"; shift
+    dir=surveys/latest
+    if [ $# -gt 0 ] && [[ $1 != -* && $1 != *:=* ]]; then dir=$1; shift; fi
+    if [ ! -d "$dir" ]; then
+        echo "error: no survey directory '$dir': run \`just lab2 survey ORIGIN_ID\` first, or name one" >&2; exit 1
+    fi
     source scripts/env.sh
     exec ros2 run autosdv_marker_survey lab2_marker_survey_solve "$dir/survey_data.npz" --course "$dir" "$@"

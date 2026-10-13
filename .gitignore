@@ -49,3 +49,6 @@ setup/.markers/
 
 # Recordings from `just bag record` and `just lab2 record`
 /rosbags/
+
+# Marker surveys from `just lab2 survey ORIGIN_ID` (dated directories, and latest)
+/surveys/
