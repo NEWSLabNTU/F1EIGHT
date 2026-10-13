@@ -97,7 +97,8 @@ the left-camera-to-IMU edge, and stops it starting its own IMU-only ZED.
 
 A course is a directory: `course.yaml` (path file, laps, `v_ref`, start box,
 marker size, dictionary, every marker's `id, x, y, yaw` with yaw the direction
-it faces), `path.csv` (`x, y[, v]`), and the generated `lanelet2_map.osm`,
+it faces, and optionally `z`, `pitch` and `roll` for a board that does not
+stand upright), `path.csv` (`x, y[, v]`), and the generated `lanelet2_map.osm`,
 `ar_tag.param.yaml` and `map_projector_info.yaml`. `ar_tag.param.yaml` is the
 localizer's `dictionary`, `marker_size` and `target_tag_ids`, loaded after the
 lab's `ar_tag_based_localizer.param.yaml`, so a course's markers are described
@@ -141,6 +142,32 @@ frame of the origin marker. Write `path.csv` in that frame. Details and
 accuracy: `src/lab/autosdv_marker_survey/README.md` (simulated: 1–3 cm median,
 under 5 cm worst).
 
+## Checking localization by hand (`just lab2 loc-check`)
+
+Before letting the tracker drive a freshly surveyed course, drive it by hand
+and watch where the localizer puts the car:
+`just lab2 loc-check COURSE_DIR`, with the car in the start box (the EKF is
+seeded there) and the selector switch on the joystick. It runs the waypoint
+stack's localization unchanged and nothing that drives: no path publisher, no
+tracker, no engage, and the actuator as a dry run, so the transmitter has the
+car. With a display, RViz opens on `rviz/loc_check.rviz`: the course path
+(white), the localized trail (red), the surveyed markers, the latest marker
+fixes (green arrows) and the camera's detection image.
+
+`loc_check` logs a summary every 10 s and on exit:
+- fixes per second while moving, and the longest stretch without one (seconds
+  and metres): where the EKF coasts on odometry alone;
+- fix vs odometry: how far each fix lands from the EKF's pose at the fix's
+  stamp. A few centimetres on a good survey; one marker's fixes consistently
+  far off means that marker was surveyed wrong, or knocked since;
+- off the course path: the trail's distance from `path.csv`, if you drive
+  along it.
+
+On the bench (`loc_check.launch.xml` beside `just lab2 bench`, hall_demo,
+the reference tracker driving): 12 fixes/s, longest gap 1.2 s / 0.9 m, fix vs
+odometry median 10 cm / p95 24 cm with the bench's default detection noise
+(1.4 cm / 2.9 cm with that noise set to zero), off path median 1 cm, max 6 cm.
+
 ## The bench
 
 `vehicle_bench_plant` (from the coach lab) starts in the course's start box
@@ -176,6 +203,8 @@ The car stops within 5 cm of the start. `just lab2 bench-checks`: 5/5:
 ## Not checked without a car
 
 - The ZED driver with `zed_aruco.yaml`.
+- `just lab2 loc-check` on the car, and its RViz view (checked headless: the
+  file parses and every topic it names is published).
 - The localizer's CPU use on the Orin at full resolution.
 - Real detection range and noise in the hall's lighting, which set
   `distance_threshold` and the bench's noise model.

@@ -135,6 +135,20 @@ camera-check COURSE="src/lab/autosdv_waypoint_lab/config/courses/hall_demo" SECO
     source scripts/env.sh
     exec ros2 run autosdv_waypoint_lab lab2_camera_check '{{ COURSE }}' --duration '{{ SECONDS }}'
 
+#   just lab2 loc-check courses/my_hall       car in the start box; selector on the joystick
+# Nothing here can drive the car (no tracker, no engage, the actuator as a dry run).
+# Localization check: drive the surveyed course BY HAND, watch the trail in RViz
+[positional-arguments]
+loc-check COURSE_DIR *ARGS:
+    #!/usr/bin/env bash
+    dir=$(realpath -m "$1"); shift
+    rviz=false; [ -n "${DISPLAY:-}" ] && rviz=true
+    cmd=(play_launch launch --web-addr '{{ web_addr }}' autosdv_launch waypoint_loc_check.launch.xml
+         "course_dir:=$dir" "rviz:=$rviz" "$@")
+    printf '\033[2m%s\033[0m\n' "${cmd[*]}"
+    source scripts/env.sh
+    exec "${cmd[@]}"
+
 # --- Marker survey: map the hall's markers with the car's ZED --------------------------------
 # Drive or push the car slowly past every marker, then Ctrl-C (or `just lab2 survey-save`):
 #   just lab2 survey courses/my_hall 24                    origin marker 24, the LCTK boards

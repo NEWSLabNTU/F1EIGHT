@@ -23,6 +23,7 @@ setup(
         ('share/ament_index/resource_index/packages', ['resource/' + package_name]),
         ('share/' + package_name, ['package.xml']),
         (os.path.join('share', package_name, 'launch'), glob('launch/*.launch.xml')),
+        (os.path.join('share', package_name, 'rviz'), glob('rviz/*.rviz')),
         (os.path.join('share', package_name, 'config'), glob('config/*.yaml')),
         (os.path.join('share', package_name, 'config', 'dictionaries'),
          glob('config/dictionaries/*.dict')),
@@ -44,6 +45,7 @@ setup(
             'make_course_map = autosdv_waypoint_lab.course:main',
             'lab2_grade_run = autosdv_waypoint_lab.grading:main',
             'lab2_camera_check = autosdv_waypoint_lab.camera_check:main',
+            'loc_check = autosdv_waypoint_lab.loc_check_node:main',
         ],
     },
 )

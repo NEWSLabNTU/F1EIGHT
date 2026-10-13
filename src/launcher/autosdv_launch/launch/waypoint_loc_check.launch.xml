@@ -1,0 +1,68 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<!--
+  Lab 2 localization check: drive the car BY HAND around a surveyed course and
+  watch where the localizer puts it. `just lab2 loc-check COURSE_DIR`.
+
+    ZED -> ar_tag_based_localizer ─┐
+    velocity_report + ZED IMU -> gyro_odometer ─┴> ekf_localizer -> /localization/kinematic_state
+    loc_check: the course path, the car's trail, the marker fixes (RViz), and a
+    summary of fix rate, blind gaps and fix-vs-odometry disagreement
+
+  The localization of waypoint_follow.launch.xml, unchanged, and nothing that
+  drives: no path publisher, no tracker, no gate, no operation-mode manager, so
+  the car cannot be engaged. The actuator runs as a dry run (it never writes
+  the PCA9685): drive with the transmitter, the selector switch on the
+  joystick. velocity_report still reads the wheel, which the EKF needs.
+
+  Start with the car in the start box: start_pose_init seeds the EKF there.
+-->
+<launch>
+  <arg name="course_dir" description="the surveyed course directory"/>
+  <arg name="sensor_suite" default="robin_zed"/>
+  <arg name="rviz" default="false" description="open RViz on the check (`just lab2 loc-check` sets it when DISPLAY is set)"/>
+
+  <let name="launch_vehicle_interface" value="false"/>
+  <let name="launch_pointcloud_preprocessor" value="false"/>
+  <let name="launch_vehicle_velocity_converter" value="false"/>
+  <let name="launch_gyro_bias_estimator" value="false"/>
+
+  <!-- the kit with its drivers off; the ZED driver is zed_aruco.launch.xml -->
+  <include file="$(find-pkg-share autosdv_launch)/launch/autosdv.launch.yaml">
+    <arg name="sensor_suite" value="$(var sensor_suite)"/>
+    <arg name="camera_model" value="zedxm"/>
+    <arg name="imu_source" value="zed"/>
+    <arg name="use_gnss" value="false"/>
+    <arg name="use_ntrip" value="false"/>
+    <arg name="launch_map" value="false"/>
+    <arg name="launch_localization" value="false"/>
+    <arg name="launch_perception" value="false"/>
+    <arg name="launch_planning" value="false"/>
+    <arg name="launch_control" value="false"/>
+    <arg name="launch_system_monitor" value="false"/>
+    <arg name="launch_system" value="false"/>
+    <arg name="launch_api" value="false"/>
+    <arg name="launch_shared_pointcloud_container" value="false"/>
+    <arg name="launch_empty_objects_publisher" value="false"/>
+    <arg name="launch_sensing_driver" value="false"/>
+    <arg name="is_simulation" value="true"/>
+  </include>
+
+  <include file="$(find-pkg-share autosdv_waypoint_lab)/launch/zed_aruco.launch.xml"/>
+
+  <!-- wheel speed for the EKF; the actuator as a dry run, never driving -->
+  <include file="$(find-pkg-share autosdv_vehicle_launch)/launch/vehicle_interface.launch.xml">
+    <arg name="launch_vehicle_interface" value="true"/>
+    <arg name="is_simulation" value="true"/>
+    <arg name="launch_signal_manager" value="false"/>
+  </include>
+
+  <include file="$(find-pkg-share autosdv_waypoint_lab)/launch/waypoint_localization.launch.xml">
+    <arg name="course_dir" value="$(var course_dir)"/>
+    <arg name="ar_tag_container" value="/sensing/camera/zedxm/zed_container"/>
+  </include>
+
+  <include file="$(find-pkg-share autosdv_waypoint_lab)/launch/loc_check.launch.xml">
+    <arg name="course_dir" value="$(var course_dir)"/>
+    <arg name="rviz" value="$(var rviz)"/>
+  </include>
+</launch>

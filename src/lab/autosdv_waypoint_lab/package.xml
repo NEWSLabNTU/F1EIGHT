@@ -38,6 +38,7 @@
   <!-- the vehicle bench's plant and the bag reader -->
   <exec_depend>autosdv_coach_lab</exec_depend>
 
+  <exec_depend>rviz2</exec_depend>
   <test_depend>python3-pytest</test_depend>
 
   <export>
