@@ -170,7 +170,7 @@ directory, then `lab2_marker_survey_solve <dir>/survey_data.npz --course
 <other dir>`.
 
 ```bash
-just lab2 vehicle course:=lab2_circle_cw                     # the template as shipped
+just lab2 vehicle route:=lab2_circle_cw                      # the template as shipped
 just lab2 vehicle course_dir:=$PWD/courses/circle_cw_today   # a surveyed copy
 ```
 

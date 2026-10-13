@@ -17,7 +17,10 @@
   and the actuator's safety shell are the car's.
 -->
 <launch>
-  <arg name="course" default="hall_demo"/>
+  <!-- `route` is the name the Lab 2 handout uses (a "course" reads as a class);
+       `course` stays, so older commands keep working. -->
+  <arg name="route" default="hall_demo" description="a directory under autosdv_waypoint_lab/config/courses"/>
+  <arg name="course" default="$(var route)" description="old name of route"/>
   <arg name="course_dir" default="$(find-pkg-share autosdv_waypoint_lab)/config/courses/$(var course)"/>
   <arg name="laps" default="0"/>
 

@@ -3,7 +3,7 @@
 #
 #   just lab2 bench
 #   just lab2 bench tracker_class:=my_lab2.path_tracker:PathTracker
-#   just lab2 vehicle course:=hall_demo
+#   just lab2 vehicle route:=hall_demo
 #   just lab2 gate submission:=~/lab2/B12345678_lab_2_1     a student's SpeedPID and calibration
 #   just lab2 vehicle course_dir:=$PWD/courses/my_hall 'speed_controller_params:={kp: 15.0}'
 #

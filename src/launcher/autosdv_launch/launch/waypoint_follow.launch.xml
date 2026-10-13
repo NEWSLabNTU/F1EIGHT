@@ -39,7 +39,10 @@
 -->
 <launch>
   <!-- the course -->
-  <arg name="course" default="hall_demo" description="a directory under autosdv_waypoint_lab/config/courses"/>
+  <!-- `route` is the name the Lab 2 handout uses (a "course" reads as a class);
+       `course` stays, so older commands keep working. -->
+  <arg name="route" default="hall_demo" description="a directory under autosdv_waypoint_lab/config/courses"/>
+  <arg name="course" default="$(var route)" description="old name of route"/>
   <arg name="course_dir" default="$(find-pkg-share autosdv_waypoint_lab)/config/courses/$(var course)"
        description="or any course directory, e.g. one surveyed on site"/>
   <arg name="laps" default="0" description="0: the course's own"/>
