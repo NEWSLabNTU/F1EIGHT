@@ -280,3 +280,15 @@ survey-solve *ARGS:
     fi
     source scripts/env.sh
     exec ros2 run autosdv_marker_survey lab2_marker_survey_solve "$dir/survey_data.npz" --course "$dir" "$@"
+
+#   just lab2 plot rosbags/lab2_straight_1
+# PlotJuggler asks which topics to load: select all (Ctrl+A), then OK.
+# Open a bag in PlotJuggler: target vs measured speed, motor PWM, EKF path vs marker fixes
+plot BAG:
+    #!/usr/bin/env bash
+    source scripts/env.sh
+    bag=$(realpath "{{ BAG }}")
+    [ -f "$bag/metadata.yaml" ] || { echo "error: '$bag' is not a bag directory (no metadata.yaml)" >&2; exit 1; }
+    # --disable_opengl: under a remote desktop without GL the plots otherwise draw black
+    exec ros2 run plotjuggler plotjuggler --nosplash --disable_opengl \
+        -d "$bag/metadata.yaml" -l src/lab/autosdv_waypoint_lab/config/plotjuggler/lab2_run.xml

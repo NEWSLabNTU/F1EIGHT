@@ -1,0 +1,57 @@
+<?xml version='1.0' encoding='UTF-8'?>
+<root version="2.3.8">
+ <tabbed_widget name="Main Window" parent="main_window">
+  <Tab tab_name="Lab 2 run" containers="1">
+   <Container>
+    <DockSplitter orientation="|" count="2" sizes="0.58;0.42">
+     <DockSplitter orientation="-" count="2" sizes="0.6;0.4">
+      <DockArea name="speed">
+       <plot mode="TimeSeries" style="Lines" flip_x="false" flip_y="false">
+        <range bottom="-0.05" top="0.9" left="8" right="34"/>
+        <limitY/>
+        <curve name="/control/command/control_cmd/longitudinal/velocity" color="#d62728"/>
+        <curve name="/vehicle/status/velocity_status/longitudinal_velocity" color="#1f77b4"/>
+       </plot>
+      </DockArea>
+      <DockArea name="pwm">
+       <plot mode="TimeSeries" style="Lines" flip_x="false" flip_y="false">
+        <range bottom="335" top="410" left="8" right="34"/>
+        <limitY/>
+        <curve name="/autosdv/actuator_node/debug/pwm_values/data[0]" color="#2ca02c"/>
+       </plot>
+      </DockArea>
+     </DockSplitter>
+     <DockArea name="xy">
+      <plot mode="XYPlot" style="Lines" flip_x="false" flip_y="false">
+       <range bottom="-0.5" top="0.5" left="0" right="12"/>
+       <limitY/>
+       <curve curve_x="/localization/kinematic_state/pose/pose/position/x" curve_y="/localization/kinematic_state/pose/pose/position/y" name="/localization/kinematic_state/pose/pose/position/y[/localization/kinematic_state/pose/pose/position/x]" color="#1f77b4"/>
+       <curve curve_x="/localization/pose_estimator/pose_with_covariance/pose/pose/position/x" curve_y="/localization/pose_estimator/pose_with_covariance/pose/pose/position/y" name="/localization/pose_estimator/pose_with_covariance/pose/pose/position/y[/localization/pose_estimator/pose_with_covariance/pose/pose/position/x]" color="#ff7f0e"/>
+      </plot>
+     </DockArea>
+    </DockSplitter>
+   </Container>
+  </Tab>
+  <currentTabIndex index="0"/>
+ </tabbed_widget>
+ <use_relative_time_offset enabled="1"/>
+ <Plugins>
+  <plugin ID="DataLoad ROS2 bags">
+   <use_header_stamp value="false"/>
+   <discard_large_arrays value="true"/>
+   <max_array_size value="100"/>
+   <boolean_strings_to_number value="true"/>
+   <remove_suffix_from_strings value="true"/>
+   <selected_topics value="/control/command/control_cmd;/vehicle/status/velocity_status;/autosdv/actuator_node/debug/pwm_values;/localization/kinematic_state;/localization/pose_estimator/pose_with_covariance"/>
+  </plugin>
+  <plugin ID="UDP Server"/>
+  <plugin ID="WebSocket Server"/>
+  <plugin ID="ZMQ Subscriber"/>
+  <plugin ID="Fast Fourier Transform"/>
+  <plugin ID="Quaternion to RPY"/>
+  <plugin ID="Reactive Script Editor"/>
+ </Plugins>
+ <previouslyLoaded_Datafiles/>
+ <customMathEquations/>
+ <snippets/>
+</root>
