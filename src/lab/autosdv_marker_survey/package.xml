@@ -29,6 +29,7 @@
   <exec_depend>tier4_vehicle_launch</exec_depend>
   <exec_depend>autosdv_sensor_kit_launch</exec_depend>
   <exec_depend>individual_params</exec_depend>
+  <exec_depend>rqt_image_view</exec_depend>
 
   <test_depend>python3-pytest</test_depend>
 

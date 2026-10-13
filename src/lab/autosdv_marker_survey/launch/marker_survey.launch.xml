@@ -9,6 +9,8 @@
       -> COURSE_DIR/course.yaml (markers in the frame of marker ORIGIN_ID),
          lanelet2_map.osm, ar_tag.param.yaml, survey_report.yaml,
          survey_data.npz
+      -> /marker_survey/debug/image: the frames with the detections drawn
+         (viewer:=true opens rqt_image_view on it)
 
   With launch_camera:=false it runs the survey node alone, for a recorded bag
   (ros2 bag play ... with the image, camera_info, the ZED odometry and
@@ -26,6 +28,8 @@
   <arg name="launch_camera" default="true" description="false: survey a bag instead"/>
   <arg name="use_sim_time" default="false"/>
   <arg name="compressed" default="false" description="subscribe to the compressed image (a bag recorded that way)"/>
+  <arg name="viewer" default="false"
+       description="true: open rqt_image_view on the detections (needs a display); `just lab2 survey` sets it when DISPLAY is set"/>
   <arg name="vehicle_model" default="autosdv_vehicle"/>
   <arg name="sensor_model" default="autosdv_sensor_kit"/>
   <arg name="vehicle_id" default="$(env VEHICLE_ID default)"/>
@@ -57,4 +61,9 @@
     <param name="compressed" value="$(var compressed)"/>
     <param name="use_sim_time" value="$(var use_sim_time)"/>
   </node>
+
+  <!-- the processed frames with the detections drawn: green known, yellow new,
+       red too small; the origin outlined thicker -->
+  <node pkg="rqt_image_view" exec="rqt_image_view" name="survey_viewer"
+        args="/marker_survey/debug/image" if="$(var viewer)"/>
 </launch>

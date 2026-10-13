@@ -144,8 +144,9 @@ camera-check COURSE="src/lab/autosdv_waypoint_lab/config/courses/hall_demo" SECO
 survey COURSE_DIR ORIGIN_ID *ARGS:
     #!/usr/bin/env bash
     dir=$(realpath -m "$1"); origin="$2"; shift 2
+    viewer=false; [ -n "${DISPLAY:-}" ] && viewer=true      # the detection video, given a display
     cmd=(play_launch launch --web-addr '{{ web_addr }}' autosdv_marker_survey marker_survey.launch.xml
-         "course_dir:=$dir" "origin_id:=$origin" "$@")
+         "course_dir:=$dir" "origin_id:=$origin" "viewer:=$viewer" "$@")
     printf '\033[2m%s\033[0m\n' "${cmd[*]}"
     source scripts/env.sh
     exec "${cmd[@]}"

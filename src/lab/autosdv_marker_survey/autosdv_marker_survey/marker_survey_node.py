@@ -14,6 +14,9 @@ convention).
        tracking) or TF world_frame -> image frame (pose_source: tf)
        TF image frame -> base_link (static): where the floor is
   out  ~/markers                      visualization_msgs/MarkerArray, live
+       ~/debug/image                  the processed frames with the detections drawn
+                                      (only while something subscribes; viewer:=true
+                                      in the launch file opens rqt_image_view on it)
        course_dir/course.yaml, lanelet2_map.osm, ar_tag.param.yaml,
        survey_report.yaml, survey_data.npz (re-solve with lab2_marker_survey_solve)
 """
@@ -88,6 +91,7 @@ class MarkerSurveyNode(Node):
         P('keyframe_angle_deg', math.degrees(d.keyframe_angle))
         P('odom_drift', d.odom_drift)
         P('min_marker_px', d.min_marker_px)
+        P('debug_width', 960)                 # [px] width of ~/debug/image
         gp = lambda k: self.get_parameter(k).value  # noqa: E731
 
         self.origin_id = int(gp('origin_id'))
@@ -125,6 +129,8 @@ class MarkerSurveyNode(Node):
         if self.pose_source == 'odom':
             self.create_subscription(Odometry, gp('odom_topic'), self.on_odom, 50)
         self.pub = self.create_publisher(MarkerArray, '~/markers', 1)
+        self.pub_dbg = self.create_publisher(Image, '~/debug/image', 1)
+        self.debug_width = int(gp('debug_width'))
         self.create_service(Trigger, '~/save', self.on_save)
         self.create_timer(1.0 / float(gp('rate')), self.on_tick)
         self.create_timer(5.0, self.on_status)
@@ -207,13 +213,19 @@ class MarkerSurveyNode(Node):
                                    throttle_duration_sec=5.0)
             return
         try:
-            dets = self.detector.detect(decode(msg, self.compressed))
+            gray = decode(msg, self.compressed)
+            dets = self.detector.detect(gray)
         except Exception as e:  # noqa: BLE001
             self.get_logger().error(f'image: {e}', throttle_duration_sec=5.0)
             return
         self.frames += 1
         with self.lock:
+            known = set(self.survey.markers)
+            n_kf = len(self.survey.keyframes)
             new = self.survey.add(t, T, dets)
+            keyframe = len(self.survey.keyframes) > n_kf
+        if self.pub_dbg.get_subscription_count() > 0:
+            self.publish_debug(msg.header, gray, dets, known, keyframe)
         for mid in new:
             m = self.survey.markers[mid]
             dist = np.linalg.norm(m.T_world_marker[:3, 3] - T[:3, 3])
@@ -233,6 +245,41 @@ class MarkerSurveyNode(Node):
         self.get_logger().info(f'{self.frames} frames, {len(self.survey.keyframes)} keyframes; '
                                f'markers (views) {views or "none"}{origin}')
         self.publish_markers()
+
+    def publish_debug(self, header, gray, dets, known, keyframe):
+        """The frame with every detection drawn: green a known marker, yellow one seen
+        for the first time, red one too small to use; the origin is outlined thicker."""
+        import cv2
+        img = cv2.cvtColor(gray, cv2.COLOR_GRAY2BGR)
+        scale = min(1.0, self.debug_width / img.shape[1])
+        for d in dets:
+            c = d.corners.astype(np.int32).reshape(-1, 1, 2)
+            usable = self.survey.usable(d)
+            color = (0, 0, 255) if not usable else (0, 220, 0) if d.id in known else (0, 220, 255)
+            thick = max(2, int(round(3 / scale))) * (2 if d.id == self.origin_id else 1)
+            cv2.polylines(img, [c], True, color, thick)
+            cv2.circle(img, tuple(int(v) for v in d.corners[0]), thick * 2, color, -1)   # top-left
+            label = f'{d.id}' + (' ORIGIN' if d.id == self.origin_id else '')
+            if d.id in self.survey.markers:
+                label += f' ({self.survey.markers[d.id].views})'
+            org = (int(d.corners[:, 0].min()), max(20, int(d.corners[:, 1].min()) - 10))
+            cv2.putText(img, label, org, cv2.FONT_HERSHEY_SIMPLEX, 0.9 / scale, color,
+                        max(1, int(round(2 / scale))), cv2.LINE_AA)
+        if scale < 1.0:
+            img = cv2.resize(img, None, fx=scale, fy=scale, interpolation=cv2.INTER_AREA)
+        origin = 'origin seen' if self.origin_id in self.survey.markers else \
+            f'origin {self.origin_id} NOT SEEN'
+        status = (f'markers {len(self.survey.markers)}  keyframes {len(self.survey.keyframes)}'
+                  f'{"  [KEYFRAME]" if keyframe else ""}  {origin}')
+        cv2.rectangle(img, (0, 0), (img.shape[1], 34), (0, 0, 0), -1)
+        cv2.putText(img, status, (10, 24), cv2.FONT_HERSHEY_SIMPLEX, 0.7, (255, 255, 255), 2,
+                    cv2.LINE_AA)
+        out = Image()
+        out.header = header
+        out.height, out.width = img.shape[:2]
+        out.encoding, out.step = 'bgr8', img.shape[1] * 3
+        out.data = img.tobytes()
+        self.pub_dbg.publish(out)
 
     def publish_markers(self):
         arr = MarkerArray()

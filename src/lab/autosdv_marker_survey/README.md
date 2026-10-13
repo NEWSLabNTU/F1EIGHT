@@ -14,6 +14,20 @@ just lab2 course-map courses/my_hall         # coverage check, as for any course
 just lab2 camera-check courses/my_hall       # car in the start box: verify
 ```
 
+With a display (`DISPLAY` set), `just lab2 survey` also opens **rqt_image_view
+on `/marker_survey/debug/image`**: the processed frames (5 Hz) with every
+detection drawn.
+- **Green:** a known marker, labelled `id (views)`.
+- **Yellow:** a marker seen for the first time.
+- **Red:** too small to use.
+
+The origin is outlined thicker, and a dot marks each marker's top-left corner.
+A status bar shows the marker and keyframe counts, `[KEYFRAME]` when a frame
+is kept, and whether the origin has been seen. Without a display, or with
+`viewer:=false`, nothing opens. Over SSH, run `rqt_image_view
+/marker_survey/debug/image` on a machine on the same network and ROS domain;
+the image is published only while someone watches.
+
 Arguments after the origin go to the launch file:
 `dictionary:=ARUCO_MIP_36h12 marker_size:=0.25` for the course's printed
 markers (default `DICT_5X5_1000`, 0.48 m: the LCTK calibration boards).
