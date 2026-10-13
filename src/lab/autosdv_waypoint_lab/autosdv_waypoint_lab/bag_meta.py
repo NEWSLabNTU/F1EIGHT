@@ -61,8 +61,12 @@ REQUIRED_TOPICS = [
 # Nice to have; a missing one is a warning.
 OPTIONAL_TOPICS = [
     TRACKER_DEBUG, STEERING, TWIST, DIAG_GRAPH, IMU, TRAJECTORY, ACT_CONTROL,
+    '/vehicle/status/control_mode', '/vehicle/status/gear_status',
 ]
-RECORD_TOPICS = [t for t in REQUIRED_TOPICS if t != CAMERA_TOPIC and t != META_TOPIC] + OPTIONAL_TOPICS
+# Recorded, never required or warned about: published on change only.
+ON_CHANGE_TOPICS = ['/autosdv/actuator_node/debug/mode']
+RECORD_TOPICS = ([t for t in REQUIRED_TOPICS if t != CAMERA_TOPIC and t != META_TOPIC]
+                 + OPTIONAL_TOPICS + ON_CHANGE_TOPICS)
 
 
 def _read(path: str) -> bytes:
