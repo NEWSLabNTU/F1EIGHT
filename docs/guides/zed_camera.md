@@ -158,6 +158,28 @@ sleep 25  # Wait for driver reconfiguration
 
 **Note**: Restarting `nvargus-daemon` alone is NOT sufficient.
 
+### IMU reaches the topic but not `/sensing/imu/imu_data` (QoS)
+
+Symptom: `/sensing/camera/zedxm/imu/data` runs at 100 Hz, `/sensing/imu/imu_data`
+is empty, `imu_corrector` warns about incompatible QoS, and `gyro_odometer`
+publishes no twist (the EKF then runs on its other inputs alone).
+
+Cause: the wrapper (`zed-ros2-wrapper` humble-v5.0.0) hard-codes BEST_EFFORT,
+and the stock `imu_corrector` subscribes RELIABLE; the two never match.
+
+Fix (in the sensor kit, applies to `imu_source:=zed` on every path): both ZED
+launches (`zed_with_object_detection.launch.xml`, `zed_imu_only.launch.xml`)
+load `config/zed_imu_qos.yaml`, which sets
+`qos_overrides./sensing/camera/zedxm/imu/data.publisher.reliability: reliable`.
+The wrapper creates its publishers with `QosOverridingOptions::with_default_policies()`,
+so the override key is the fully resolved topic name. Check on the car:
+
+```bash
+ros2 topic info -v /sensing/camera/zedxm/imu/data | grep -A6 'Publisher'   # Reliability: RELIABLE
+ros2 topic hz /sensing/imu/imu_data                                         # ~100 Hz
+ros2 topic hz /localization/twist_estimator/twist_with_covariance          # ~20 Hz
+```
+
 ### Check Service Logs
 
 ```bash

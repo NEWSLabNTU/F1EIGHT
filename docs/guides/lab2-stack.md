@@ -51,6 +51,13 @@ directly. The ZED container and camera node for the IMU, and the ZED's
 `/sensing/imu/imu_data` feeds dead reckoning. (`mpu9250driver` instead of the
 ZED with `imu_source:=mpu9250`.)
 
+The ZED IMU path is the sensor kit's `zed_imu_only.launch.xml`, which loads
+`config/zed_imu_qos.yaml` so the wrapper's IMU publisher is RELIABLE; the stock
+`imu_corrector` subscribes RELIABLE and would otherwise receive nothing from the
+wrapper's default BEST_EFFORT. Confirmed by `play_launch dump` of
+`coach_pursuit.launch.xml`: the ZED node carries
+`qos_overrides./sensing/camera/zedxm/imu/data.publisher.reliability: reliable`.
+
 **Vehicle (vehicle).** `actuator` (brakes on `/control/command/emergency_cmd`
 and on any MRM), `velocity_report` (wheel speed; dead reckoning and the
 velocity rate check), `steering_status` (the steering rate check, and the
