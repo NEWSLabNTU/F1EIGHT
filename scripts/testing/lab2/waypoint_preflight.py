@@ -80,7 +80,10 @@ IMU_OUT = '/sensing/imu/imu_data'
 TWIST = '/localization/twist_estimator/twist_with_covariance'
 RATES = [
     (IMAGE, 'camera image', 8.0, 12.0, ('vehicle',)),
-    ('/sensing/imu/imu_data', 'IMU', 20.0, 50.0, ('vehicle', 'bench')),
+    # imu_corrector (depth-1 subscription) keeps only the last of each ~3-message
+    # burst the ZED delivers every ~33 ms: 33-37 Hz on car B (2026-10-14) from a
+    # 100 Hz source. gyro_odometer emits at the 20 Hz velocity rate, so that is enough.
+    ('/sensing/imu/imu_data', 'IMU', 20.0, 30.0, ('vehicle', 'bench')),
     (TWIST, 'gyro_odometer twist (the EKF\'s only prediction input)', 5.0, 10.0,
      ('vehicle', 'bench')),
     ('/vehicle/status/velocity_status', 'velocity_status', 10.0, 18.0, ('vehicle', 'bench')),
