@@ -8,7 +8,7 @@ from autosdv_marker_survey.simulate import drive, marker_T, simulate
 from autosdv_marker_survey.survey import (
     Detection, Detector, course_frame, inv_T, make_T, opencv_dictionary, to_course)
 
-# a small room: six upright 0.48 m boards around a 6 m x 3 m loop
+# a small room: six upright 0.38 m boards around a 6 m x 3 m loop
 BOARDS = {
     24: (8.0, 1.5, math.pi),
     25: (6.0, -2.0, math.radians(120)),
@@ -29,7 +29,7 @@ def result():
     truth = {mid: marker_T(x, y, 0.40, yaw, *TILT.get(mid, (0.0, 0.0)))
              for mid, (x, y, yaw) in BOARDS.items()}
     poses = drive(LOOP, step=0.05, sweeps={2: math.radians(50), 5: math.radians(50)})
-    sv = simulate(truth, poses, 0.48, seed=3)
+    sv = simulate(truth, poses, 0.38, seed=3)
     return truth, sv, finish(sv, 24, 'DICT_5X5_1000', None, log=lambda *a: None)
 
 
@@ -95,7 +95,7 @@ def test_writes_a_course_the_lab_can_load(result, tmp_path):
     for mid in BOARDS:
         n_true = (Ti @ truth[mid])[:3, 2]
         assert np.dot(lms[str(mid)][0].z_axis, n_true) > math.cos(math.radians(1.5)), mid
-    assert c.dictionary == 'DICT_5X5_1000' and c.marker_size == 0.48
+    assert c.dictionary == 'DICT_5X5_1000' and c.marker_size == 0.38
     for f in ('lanelet2_map.osm', 'ar_tag.param.yaml', 'survey_report.yaml', 'map_projector_info.yaml'):
         assert (tmp_path / f).exists()
 
@@ -180,7 +180,7 @@ def test_the_detector_works_without_arucodetector(monkeypatch):
 def test_a_single_keyframe_is_saved_without_adjustment(tmp_path):
     truth = {mid: marker_T(x, y, 0.40, yaw) for mid, (x, y, yaw) in {
         24: (3.0, 0.0, math.pi), 25: (3.0, 1.2, math.pi)}.items()}
-    sv = simulate(truth, [drive([(0, 0), (0.05, 0)], step=0.05)[0]], 0.48, seed=2)
+    sv = simulate(truth, [drive([(0, 0), (0.05, 0)], step=0.05)[0]], 0.38, seed=2)
     assert len(sv.keyframes) == 1
     with pytest.raises(ValueError, match='not enough data'):
         sv.solve()
@@ -234,20 +234,20 @@ def test_a_rotated_marker_round_trips_through_the_lanelet_map(tmp_path):
           31: marker_T(2, -1, 0.4, -0.4, math.radians(-4), math.radians(-90))}
     surveyed = _course_markers(Ts)
     from autosdv_marker_survey import output
-    output.write_course(str(tmp_path), surveyed, 24, 'DICT_5X5_1000', 0.48, None,
+    output.write_course(str(tmp_path), surveyed, 24, 'DICT_5X5_1000', 0.38, None,
                         {'keyframes': 1, 'reproj_rms_px': 0.0})
     c = course_lib.load_course(str(tmp_path))
     osm = (tmp_path / 'lanelet2_map.osm').read_text()
     parsed = course_lib.parse_osm_landmarks(osm)
     frame = course_frame(Ts[24], np.zeros(3), np.array([0, 0, 1.0]))
     Tci = inv_T(frame.T_world_course)
-    h = 0.24
+    h = 0.19
     assert {mk.id for mk in c.markers} == {24, 30, 31}
     for mk in c.markers:
         Tc = Tci @ Ts[mk.id]
         truth = [Tc[:3, :3] @ np.array(p) + Tc[:3, 3] for p in
                  ([-h, -h, 0], [h, -h, 0], [h, h, 0], [-h, h, 0])]
-        for a, b in zip(mk.corners(0.48), truth):
+        for a, b in zip(mk.corners(0.38), truth):
             assert np.allclose(a, b, atol=2e-3), (mk.id, a, b)
         lm = parsed[str(mk.id)][0]
         assert np.allclose(lm.position, Tc[:3, 3], atol=2e-3)
@@ -263,7 +263,7 @@ def _stand_survey(h):
         24: (3.0, 0.0, math.pi), 25: (3.0, 1.2, math.pi)}.items()}
     pose = drive([(0, 0), (0.05, 0)], step=0.05)[0].copy()
     pose[2, 3] = h                                   # base_link h above the floor: wheels off
-    return simulate(truth, [pose], 0.48, seed=2)
+    return simulate(truth, [pose], 0.38, seed=2)
 
 
 def test_floor_offset_corrects_a_car_on_a_stand(tmp_path):

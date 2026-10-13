@@ -10,8 +10,8 @@
 # its left, z up. The origin board is the END board (id 24 here): it stands
 # at x = 0 facing +x, i.e. facing the car, which drives -x towards it.
 #
-# Boards (LCTK, DICT_5X5_1000, 0.48 m marker on a 600 mm plate standing on
-# the floor, so the marker centre is 0.30 m up):
+# Boards (DICT_5X5_1000, 0.38 m black square on a 500 mm plate standing on
+# the floor, so the marker centre is 0.25 m up):
 #   end board    (0.0, 0.0)   facing +x, square to the route   -> origin
 #   side board   (6.5, -1.0)  facing 30 deg left of +x, angled at the start
 #   side board   (3.5, +1.0)  facing 30 deg right of +x, angled at the car
@@ -26,7 +26,7 @@
 # path.csv and start_pose: the survey replaces only `markers`,
 # `marker_size`, `dictionary` and `survey`, so a course laid out as this
 # file says stays consistent with the measured boards. The ids below are
-# placeholders (24 is a real LCTK board); the survey writes the ids the
+# placeholders (24 is a real board id); the survey writes the ids the
 # boards actually carry, and the origin id is the one named on its command
 # line.
 path: path.csv
@@ -34,10 +34,10 @@ closed: false
 laps: 1
 v_ref: 0.8
 start_pose: {x: 9.500, y: 0.000, yaw: 3.1416}
-marker_size: 0.48
+marker_size: 0.38
 dictionary: DICT_5X5_1000
-# LCTK board: a 600 mm plate standing on the floor, the 0.48 m marker centred on it
-marker_height: 0.30
+# 500 mm plate standing on the floor, the 0.38 m black square centred on it
+marker_height: 0.25
 markers:
   - {id: 24, x: 0.000, y: 0.000, yaw: 0.0000}
   - {id: 20, x: 6.500, y: -1.000, yaw: 0.5236}

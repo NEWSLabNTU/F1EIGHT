@@ -116,20 +116,27 @@ It is a stand-in until a real hall is surveyed.
 The detector is the aruco library's, not OpenCV's, and it ships none of
 OpenCV's `DICT_*` families. Those are decoded from a file exported by
 `config/dictionaries/export_opencv_dictionary.py`. `DICT_5X5_1000` is shipped,
-for the LCTK calibration boards: the solid 600 mm board is one 480 mm marker,
-ID 24, so a course using it sets
+for the lab's boards: a 500 mm plate with a 380 mm black square. (The LCTK
+calibration boards are 600 mm with a 480 mm square, ID 24; a course using those
+sets `marker_size: 0.48`.) A Lab 2 course sets
 
 ```yaml
-marker_size: 0.48
+marker_size: 0.38     # the black square, not the plate: measure it
 dictionary: DICT_5X5_1000
+marker_height: 0.25   # the square's centre above the floor (plate 0.50 m, standing)
 markers:
-  - {id: 24, x: ..., y: ..., yaw: ..., z: ...}   # z: the marker centre's height
+  - {id: 24, x: ..., y: ..., yaw: ..., z: ...}   # z overrides marker_height per board
 ```
 
-Checked through the real node with `synthetic_camera/run.sh` on such a course:
-with the EKF pose 0.3 m off, the fixes land 2 cm and 0.3° from the true pose.
-A 480 mm marker is about twice the 250 mm sheet, so `distance_threshold` (5 m)
-could be raised for it. That has not been measured.
+Checked through the real node with `synthetic_camera/run.sh` on a 480 mm
+course: with the EKF pose 0.3 m off, the fixes land 2 cm and 0.3° from the true
+pose. The same check on the car with a 380 mm marker gave about 9 cm and 1.6°,
+so a smaller marker is a noisier one. The bench's noise model
+(`marker_sim.NoiseModel`: 2 cm + 1 cm per metre of range, 1.5° yaw) is not
+scaled by marker size, and the 9 cm / 1.6° figure comes from one synthetic
+camera run, so it is not fitted in. To see what it would cost, run the bench
+with `pose_noise_std` 0.09 and yaw noise 1.6° (below). `distance_threshold`
+(5 m) could be raised for a 480 mm marker; that has not been measured.
 
 ## Surveying a hall with the car (`just lab2 survey`)
 
@@ -156,8 +163,8 @@ surveys a copy of the directory with that board as the origin, and keeps its
 | `lab2_circle_cw` | clockwise R 1.5 m about (3.5, 0), 3 laps at 0.8 m/s | a ring board, (0, 0) facing +x | ring of 8 at R 3.5 m facing the centre |
 | `lab2_circle_ccw` | counter-clockwise R 2.5 m about (3.5, 0), 3 laps | the same ring board | the same ring |
 
-All LCTK 600 mm boards standing on the floor (`DICT_5X5_1000`, 0.48 m,
-`marker_height: 0.30`); the ids are placeholders the survey replaces. The two
+All the lab's 500 mm boards standing on the floor (`DICT_5X5_1000`, black
+square 0.38 m, `marker_height: 0.25`); the ids are placeholders the survey replaces. The two
 circles share one ring, so one recording serves both: survey into one
 directory, then `lab2_marker_survey_solve <dir>/survey_data.npz --course
 <other dir>`.
@@ -171,7 +178,11 @@ just lab2 vehicle course_dir:=$PWD/courses/circle_cw_today   # a surveyed copy
 route, no gap, the start box always covered. The kinematic bench (reference
 tracker, default lookahead, 5 cm / 2° pose noise) completes each with cross-track
 under 3 cm, a 1.5 m circle at mean radius ±3 mm, and the straight stopping
-within 8 cm of its last waypoint; these runs are tests in `test_course.py`.
+within 8 cm of its last waypoint. With the 0.38 m boards' measured 9 cm / 1.6°
+instead, it still completes each: cross-track under 5 cm, mean radius within
+6 mm, the straight stopping within 13 cm. Coverage is unchanged at 0.38 m
+(the field-of-view test uses the marker's width, and it stays inside the 100°
+camera). Course-file checks are tests in `test_course.py`.
 The R 1.5 m circle needs 0.21 rad of tire angle (0.13 rad for R 2.5 m): it is meaningless until the
 car's `tire_angle_to_steer_ratio` is measured (`lab2-field-calibration.md`,
 car gate; `known-config-defects.md` §8).

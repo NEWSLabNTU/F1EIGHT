@@ -197,7 +197,7 @@ steer-fit *PAIRS:
 
 # --- Marker survey: map the hall's markers with the car's ZED --------------------------------
 # Drive or push the car slowly past every marker, then Ctrl-C (or `just lab2 survey-save`):
-#   just lab2 survey courses/my_hall 24                    origin marker 24, the LCTK boards
+#   just lab2 survey courses/my_hall 24                    origin marker 24, the lab's 0.50 m boards, marker_size 0.38
 #   just lab2 survey courses/my_hall 3 dictionary:=ARUCO_MIP_36h12 marker_size:=0.25
 # Writes COURSE_DIR/course.yaml (markers in the origin marker's frame), the map, and a report.
 [positional-arguments]

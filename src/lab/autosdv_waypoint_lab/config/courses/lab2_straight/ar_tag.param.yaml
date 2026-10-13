@@ -2,5 +2,5 @@
 /**:
   ros__parameters:
     dictionary: "$(find-pkg-share autosdv_waypoint_lab)/config/dictionaries/DICT_5X5_1000.dict"
-    marker_size: 0.48
+    marker_size: 0.38
     target_tag_ids: ['20', '21', '24']

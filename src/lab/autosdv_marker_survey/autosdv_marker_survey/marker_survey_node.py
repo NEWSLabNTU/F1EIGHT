@@ -76,7 +76,7 @@ class MarkerSurveyNode(Node):
         P('origin_id', -1)
         P('course_dir', '')
         P('dictionary', 'DICT_5X5_1000')
-        P('marker_size', 0.48)
+        P('marker_size', 0.38)
         P('image_topic', '/sensing/camera/zedxm/rgb/color/rect/image')
         P('camera_info_topic', '/sensing/camera/zedxm/rgb/color/rect/camera_info')
         P('compressed', False)
@@ -142,8 +142,8 @@ class MarkerSurveyNode(Node):
         self.create_timer(5.0, self.on_status)
         self.get_logger().info(
             f'surveying {self.dictionary} markers; marker_size {self.settings.marker_size} m is the '
-            'edge of the BLACK SQUARE, not the board: measure it (LCTK 600 mm board: 0.48 m; '
-            'a 0.50 m plate with a 0.38 m square: 0.38 m). A wrong size scales every distance. '
+            'edge of the BLACK SQUARE, not the board: measure it (the lab's 0.50 m plate: 0.38 m; '
+            'an LCTK 600 mm board: 0.48 m). A wrong size scales every distance. '
             f'Origin marker {self.origin_id}; course -> {self.course_dir}. Drive slowly past '
             'every marker; Ctrl-C (or the ~/save service) solves and writes the course.')
 

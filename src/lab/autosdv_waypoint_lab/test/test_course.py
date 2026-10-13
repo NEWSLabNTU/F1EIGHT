@@ -39,11 +39,11 @@ def test_unknown_dictionary_is_refused(tmp_path):
 def test_ar_tag_params_name_a_shipped_dictionary_file():
     import yaml
     c = course([Marker(24, 3.0, 0.0, 0.5, math.pi)])
-    c.marker_size, c.dictionary = 0.48, 'DICT_5X5_1000'
+    c.marker_size, c.dictionary = 0.38, 'DICT_5X5_1000'
     p = yaml.safe_load(make_ar_tag_params(c))['/**']['ros__parameters']
     assert p['dictionary'] == ('$(find-pkg-share autosdv_waypoint_lab)'
                                '/config/dictionaries/DICT_5X5_1000.dict')
-    assert p['marker_size'] == 0.48
+    assert p['marker_size'] == 0.38
     assert p['target_tag_ids'] == ['24']
 
 
@@ -127,7 +127,7 @@ def test_lab2_route_is_in_the_origin_boards_frame(name):
     c = load_course(_course_dir(name))
     origin = [m for m in c.markers if (m.x, m.y) == (0.0, 0.0)]
     assert len(origin) == 1 and origin[0].yaw == pytest.approx(0.0)
-    assert all(m.z == pytest.approx(0.30) for m in c.markers)   # floor-standing LCTK board
+    assert all(m.z == pytest.approx(0.25) for m in c.markers)   # floor-standing 500 mm board
     x, y, _ = load_csv(c.path_file, c.v_ref)
     assert (c.start_pose.x, c.start_pose.y) == pytest.approx((x[0], y[0]), abs=1e-3)
 

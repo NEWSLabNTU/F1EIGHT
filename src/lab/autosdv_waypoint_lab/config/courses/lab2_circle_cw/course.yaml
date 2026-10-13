@@ -12,8 +12,8 @@
 # its left, z up. The origin board is the ring board at (0, 0) facing +x
 # (id 24 here), so the circle centre C is at (3.5, 0).
 #
-# Boards (LCTK, DICT_5X5_1000, 0.48 m marker on a 600 mm plate standing on
-# the floor, so the marker centre is 0.30 m up): 8 boards on a ring of
+# Boards (DICT_5X5_1000, 0.38 m black square on a 500 mm plate standing on
+# the floor, so the marker centre is 0.25 m up): 8 boards on a ring of
 # radius 3.5 m about C, every 45 deg, each facing C. Seen from C, with +x as
 # east: west (the origin, at (0, 0)), south-west, south, south-east, east,
 # north-east, north, north-west.
@@ -32,17 +32,17 @@
 # both circles: solve it again into the other directory with
 #   ros2 run autosdv_marker_survey lab2_marker_survey_solve \
 #       <this dir>/survey_data.npz --course <the other dir>
-# The ids below are placeholders (24 is a real LCTK board); the survey
+# The ids below are placeholders (24 is a real board id); the survey
 # writes the ids the boards actually carry.
 path: path.csv
 closed: true
 laps: 3
 v_ref: 0.8
 start_pose: {x: 3.500, y: -1.500, yaw: 3.1416}
-marker_size: 0.48
+marker_size: 0.38
 dictionary: DICT_5X5_1000
-# LCTK board: a 600 mm plate standing on the floor, the 0.48 m marker centred on it
-marker_height: 0.30
+# 500 mm plate standing on the floor, the 0.38 m black square centred on it
+marker_height: 0.25
 markers:
   - {id: 24, x: 0.000, y: 0.000, yaw: 0.0000}
   - {id: 25, x: 1.025, y: -2.475, yaw: 0.7854}

@@ -7,7 +7,7 @@ them as the origin, drive or push the car past all of them, stop: the course
 written for you.
 
 ```bash
-just lab2 survey courses/my_hall 24          # origin: marker 24 (an LCTK board)
+just lab2 survey courses/my_hall 24          # origin: marker 24 (one of the lab boards)
 #   ...drive slowly past every marker; the log names each new one...
 #   Ctrl-C, or in another terminal: just lab2 survey-save
 just lab2 course-map courses/my_hall         # coverage check, as for any course
@@ -30,7 +30,7 @@ the image is published only while someone watches.
 
 Arguments after the origin go to the launch file:
 `dictionary:=ARUCO_MIP_36h12 marker_size:=0.25` for the course's printed
-markers (default `DICT_5X5_1000`, 0.48 m: the LCTK calibration boards).
+markers (default `DICT_5X5_1000`, 0.38 m: the lab's 500 mm boards).
 
 **`marker_size` is the edge of the black square, not of the board, and it must
 be measured** with a ruler on every kind of board in use. A wrong size scales
@@ -38,8 +38,8 @@ every distance in the map. Two boards seen so far:
 
 | board | plate | black square (`marker_size`) |
 | --- | --- | --- |
-| LCTK 600 mm calibration board | 0.60 m | 0.48 m (the default) |
-| boards on the lab site | 0.50 m | 0.38 m |
+| LCTK 600 mm calibration board | 0.60 m | 0.48 m |
+| **the lab's boards** (Lab 2) | 0.50 m | **0.38 m (the default)**; marker centre 0.25 m above the floor |
 
 **The floor.** `z` is the marker centre above the floor, and the floor is
 taken to be at `base_link` (the mean of the car's poses). A car held up on a
