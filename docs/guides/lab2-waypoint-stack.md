@@ -130,6 +130,17 @@ with the EKF pose 0.3 m off, the fixes land 2 cm and 0.3° from the true pose.
 A 480 mm marker is about twice the 250 mm sheet, so `distance_threshold` (5 m)
 could be raised for it. That has not been measured.
 
+## Surveying a hall with the car (`just lab2 survey`)
+
+Boards that cannot stay on the walls are placed anew each visit, so the course
+is surveyed each visit too, with the car's own ZED:
+`just lab2 survey COURSE_DIR ORIGIN_ID`. Drive slowly past every board; the
+survey discovers the markers live, bundle-adjusts the recording (linked by the
+ZED's visual-inertial tracking) and writes `course.yaml` and the map in the
+frame of the origin marker. Write `path.csv` in that frame. Details and
+accuracy: `src/lab/autosdv_marker_survey/README.md` (simulated: 1–3 cm median,
+under 5 cm worst).
+
 ## The bench
 
 `vehicle_bench_plant` (from the coach lab) starts in the course's start box

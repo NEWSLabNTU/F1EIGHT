@@ -1,0 +1,38 @@
+<?xml version="1.0"?>
+<?xml-model href="http://download.ros.org/schema/package_format3.xsd" schematypens="http://www.w3.org/2001/XMLSchema"?>
+<package format="3">
+  <name>autosdv_marker_survey</name>
+  <version>0.1.0</version>
+  <description>
+    Map the ArUco markers around the car with its ZED camera: drive past them,
+    name one marker as the origin, and get the Lab 2 course (course.yaml,
+    lanelet2 marker map, localizer settings) from a bundle adjustment of the
+    recording linked by the camera's own tracking.
+  </description>
+  <maintainer email="jerry73204@gmail.com">aeon</maintainer>
+  <license>Apache-2.0</license>
+
+  <depend>rclpy</depend>
+  <depend>sensor_msgs</depend>
+  <depend>nav_msgs</depend>
+  <depend>std_srvs</depend>
+  <depend>visualization_msgs</depend>
+  <depend>tf2_ros</depend>
+  <exec_depend>autosdv_waypoint_lab</exec_depend>
+  <exec_depend>python3-numpy</exec_depend>
+  <exec_depend>python3-scipy</exec_depend>
+  <exec_depend>python3-opencv</exec_depend>
+  <exec_depend>python3-yaml</exec_depend>
+  <!-- the camera and the URDF, for launch_camera:=true -->
+  <exec_depend>zed_components</exec_depend>
+  <exec_depend>zed_wrapper</exec_depend>
+  <exec_depend>tier4_vehicle_launch</exec_depend>
+  <exec_depend>autosdv_sensor_kit_launch</exec_depend>
+  <exec_depend>individual_params</exec_depend>
+
+  <test_depend>python3-pytest</test_depend>
+
+  <export>
+    <build_type>ament_python</build_type>
+  </export>
+</package>

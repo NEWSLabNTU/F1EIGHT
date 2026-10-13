@@ -134,3 +134,32 @@ camera-check COURSE="src/lab/autosdv_waypoint_lab/config/courses/hall_demo" SECO
     #!/usr/bin/env bash
     source scripts/env.sh
     exec ros2 run autosdv_waypoint_lab lab2_camera_check '{{ COURSE }}' --duration '{{ SECONDS }}'
+
+# --- Marker survey: map the hall's markers with the car's ZED --------------------------------
+# Drive or push the car slowly past every marker, then Ctrl-C (or `just lab2 survey-save`):
+#   just lab2 survey courses/my_hall 24                    origin marker 24, the LCTK boards
+#   just lab2 survey courses/my_hall 3 dictionary:=ARUCO_MIP_36h12 marker_size:=0.25
+# Writes COURSE_DIR/course.yaml (markers in the origin marker's frame), the map, and a report.
+[positional-arguments]
+survey COURSE_DIR ORIGIN_ID *ARGS:
+    #!/usr/bin/env bash
+    dir=$(realpath -m "$1"); origin="$2"; shift 2
+    cmd=(play_launch launch --web-addr '{{ web_addr }}' autosdv_marker_survey marker_survey.launch.xml
+         "course_dir:=$dir" "origin_id:=$origin" "$@")
+    printf '\033[2m%s\033[0m\n' "${cmd[*]}"
+    source scripts/env.sh
+    exec "${cmd[@]}"
+
+# Solve and write the survey now, without stopping it
+survey-save:
+    #!/usr/bin/env bash
+    source scripts/env.sh
+    ros2 service call /marker_survey/save std_srvs/srv/Trigger {}
+
+# Solve a saved survey again (COURSE_DIR/survey_data.npz), e.g. with another origin
+[positional-arguments]
+survey-solve COURSE_DIR *ARGS:
+    #!/usr/bin/env bash
+    dir="$1"; shift
+    source scripts/env.sh
+    exec ros2 run autosdv_marker_survey lab2_marker_survey_solve "$dir/survey_data.npz" --course "$dir" "$@"
