@@ -32,6 +32,36 @@ Arguments after the origin go to the launch file:
 `dictionary:=ARUCO_MIP_36h12 marker_size:=0.25` for the course's printed
 markers (default `DICT_5X5_1000`, 0.48 m: the LCTK calibration boards).
 
+**`marker_size` is the edge of the black square, not of the board, and it must
+be measured** with a ruler on every kind of board in use. A wrong size scales
+every distance in the map. Two boards seen so far:
+
+| board | plate | black square (`marker_size`) |
+| --- | --- | --- |
+| LCTK 600 mm calibration board | 0.60 m | 0.48 m (the default) |
+| boards on the lab site | 0.50 m | 0.38 m |
+
+**The floor.** `z` is the marker centre above the floor, and the floor is
+taken to be at `base_link` (the mean of the car's poses). A car held up on a
+stand, wheels off the floor, puts the floor too high: every `z` comes out low
+by the stand's height. Pass `floor_offset:=0.12` (metres the floor lies below
+`base_link`) to correct it, or `lab2_marker_survey_solve ... --floor-offset
+0.12` afterwards. x, y and yaw do not depend on it. The survey warns, and flags
+the marker in `survey_report.yaml`, when a marker centre is below half the
+marker size above the floor: the causes are the car on a stand, a wrong camera
+mount TF, or a board that is not on the floor. A stand that is itself tilted
+also tilts the floor normal, and with it every pitch and tilt: level the car
+or survey it on the floor.
+
+**Stationary car.** `survey-save` with one keyframe (a car that has not moved)
+skips the bundle adjustment: each marker is that one view's estimate, with no
+uncertainty (`sd` null) and the report says `single keyframe, no bundle
+adjustment`. A quick look at the boards, not a survey.
+
+**OpenCV.** JetPack 6 ships OpenCV 4.5.4; the survey uses its function API
+there (`DetectorParameters_create`, `detectMarkers`) and the `ArucoDetector`
+class on 4.7 and later.
+
 ## How it works
 
 1. The ZED runs with **positional tracking** on (`config/zed_survey.yaml`): its
@@ -58,13 +88,16 @@ markers (default `DICT_5X5_1000`, 0.48 m: the LCTK calibration boards).
    localizer reads each marker's full orientation from its corners, so the
    measured tilt goes into the map: `pitch` is the top leaning back, `roll`
    the board turned in its own plane, counter-clockwise from the front (both
-   radians; `autosdv_waypoint_lab/course.py` defines them). Left out, a 3°
+   radians; `autosdv_waypoint_lab/course.py` defines them). A board mounted
+   rotated by 90° in its plane has `roll` ±90° and is not tilted: the
+   report's `tilt_deg` is the lean, the angle between the marker's normal and
+   the horizontal plane, and ignores `roll`. Left out, a 3°
    tilt alone would put every fix from that marker about 5 cm off at 1 m. A new course also gets the recording's start as its
    `start_pose`; an existing `course.yaml` keeps everything but those fields.
    Write `path.csv` in this same frame.
 
 `survey_report.yaml` lists each marker's views, reprojection error, 1σ position
-and yaw uncertainty, and tilt from vertical (also split into `pitch_deg` and
+and yaw uncertainty, and lean from vertical (`tilt_deg`; the orientation also split into `pitch_deg` and
 `roll_deg`). It flags markers seen fewer than 3
 times, with more than 5 cm or 1° of uncertainty, or tilted more than 10°.
 `survey_data.npz` keeps the recording's keyframes and detections, so
@@ -109,4 +142,6 @@ ros2 run autosdv_marker_survey lab2_marker_survey_compare tmp/synth/course tmp/s
   `camera_info`'s projection matrix is used and distortion is ignored.
 - `pose_source:=tf` uses TF `world_frame -> image frame` instead of the ZED
   odometry, for example the car's EKF.
-- DICT_ARUCO_MIP_36h12 needs OpenCV ≥ 4.7; DICT_5X5_1000 works with any.
+- DICT_ARUCO_MIP_36h12 needs OpenCV ≥ 4.7, so on JetPack 6 (OpenCV 4.5.4) only the
+  5X5 boards work; DICT_5X5_1000 works with any.
+- The ZED publishes its odometry BEST_EFFORT; the node subscribes the same way.

@@ -123,13 +123,22 @@ class Detector:
     def __init__(self, dictionary: str):
         import cv2
         self.cv2 = cv2
-        params = cv2.aruco.DetectorParameters()
-        params.cornerRefinementMethod = cv2.aruco.CORNER_REFINE_SUBPIX
-        self.detector = cv2.aruco.ArucoDetector(opencv_dictionary(dictionary), params)
+        self.dictionary = opencv_dictionary(dictionary)
+        # OpenCV >= 4.7 has ArucoDetector; 4.5.x (JetPack 6) has the function API only.
+        self.legacy = not hasattr(cv2.aruco, 'ArucoDetector')
+        if self.legacy:
+            self.params = cv2.aruco.DetectorParameters_create()
+        else:
+            self.params = cv2.aruco.DetectorParameters()
+        self.params.cornerRefinementMethod = cv2.aruco.CORNER_REFINE_SUBPIX
+        self.detector = None if self.legacy else cv2.aruco.ArucoDetector(self.dictionary, self.params)
 
     def detect(self, image) -> List[Detection]:
         gray = image if image.ndim == 2 else self.cv2.cvtColor(image, self.cv2.COLOR_BGR2GRAY)
-        corners, ids, _ = self.detector.detectMarkers(gray)
+        if self.legacy:
+            corners, ids, _ = self.cv2.aruco.detectMarkers(gray, self.dictionary, parameters=self.params)
+        else:
+            corners, ids, _ = self.detector.detectMarkers(gray)
         if ids is None:
             return []
         return [Detection(int(i), c.reshape(4, 2).astype(float)) for i, c in zip(ids.ravel(), corners)]
@@ -396,7 +405,7 @@ class SurveyedMarker:
     y: float
     z: float                      # height of the centre above the floor
     yaw: float                    # direction it faces, in the course frame
-    tilt_deg: float               # deviation of the marker's up axis from vertical
+    tilt_deg: float               # lean: angle between the marker's normal and the horizontal plane
     views: int
     reproj_rms_px: float
     pitch: float = 0.0            # top leaning back (course.yaml's convention)
@@ -427,8 +436,9 @@ def to_course(markers: Dict[int, np.ndarray], stats: dict, frame: CourseFrame,
         Tc = Tci @ Tw
         facing = Tc[:3, 2]
         yaw = math.atan2(facing[1], facing[0])
-        up = Tc[:3, 1]
-        tilt = math.degrees(math.acos(max(-1.0, min(1.0, up[2]))))
+        # lean from vertical = angle between the normal and the horizontal plane; turning the
+        # board in its own plane (roll) does not change it
+        tilt = math.degrees(math.asin(max(0.0, min(1.0, abs(facing[2])))))
         pitch, roll = tilt_angles(Tc[:3, :3], yaw)
         st = stats.get(mid, {})
         sm = SurveyedMarker(mid, float(Tc[0, 3]), float(Tc[1, 3]), float(Tc[2, 3]), yaw, tilt,

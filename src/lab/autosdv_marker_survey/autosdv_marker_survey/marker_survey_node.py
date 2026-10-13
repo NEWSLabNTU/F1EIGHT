@@ -30,7 +30,7 @@ import numpy as np
 import rclpy
 from nav_msgs.msg import Odometry
 from rclpy.node import Node
-from rclpy.qos import qos_profile_sensor_data
+from rclpy.qos import QoSProfile, ReliabilityPolicy, qos_profile_sensor_data
 from rclpy.time import Time
 from sensor_msgs.msg import CameraInfo, CompressedImage, Image
 from std_srvs.srv import Trigger
@@ -87,6 +87,7 @@ class MarkerSurveyNode(Node):
         P('rate', 5.0)                        # [Hz] frames processed
         P('pose_tolerance', 0.1)              # [s] image stamp vs the nearest pose
         P('save_on_exit', True)
+        P('floor_offset', 0.0)                # [m] the floor lies this far below base_link
         P('keyframe_distance', d.keyframe_distance)
         P('keyframe_angle_deg', math.degrees(d.keyframe_angle))
         P('odom_drift', d.odom_drift)
@@ -106,10 +107,12 @@ class MarkerSurveyNode(Node):
         self.detector = Detector(self.dictionary)
         self.compressed = bool(gp('compressed'))
         self.pose_source = gp('pose_source')
+        self.odom_topic = gp('odom_topic')
         self.world_frame = gp('world_frame')
         self.base_frame = gp('base_frame')
         self.pose_tol = float(gp('pose_tolerance'))
         self.save_on_exit = bool(gp('save_on_exit'))
+        self.floor_offset = float(gp('floor_offset'))
 
         self.survey = None
         self.lock = threading.Lock()
@@ -127,7 +130,10 @@ class MarkerSurveyNode(Node):
         self.create_subscription(img_type, topic, self.on_image, qos_profile_sensor_data)
         self.create_subscription(CameraInfo, gp('camera_info_topic'), self.on_info, qos_profile_sensor_data)
         if self.pose_source == 'odom':
-            self.create_subscription(Odometry, gp('odom_topic'), self.on_odom, 50)
+            # the ZED publishes odometry BEST_EFFORT; a RELIABLE subscription never matches it
+            self.create_subscription(
+                Odometry, gp('odom_topic'), self.on_odom,
+                QoSProfile(depth=50, reliability=ReliabilityPolicy.BEST_EFFORT))
         self.pub = self.create_publisher(MarkerArray, '~/markers', 1)
         self.pub_dbg = self.create_publisher(Image, '~/debug/image', 1)
         self.debug_width = int(gp('debug_width'))
@@ -135,9 +141,11 @@ class MarkerSurveyNode(Node):
         self.create_timer(1.0 / float(gp('rate')), self.on_tick)
         self.create_timer(5.0, self.on_status)
         self.get_logger().info(
-            f'surveying {self.dictionary} markers of {self.settings.marker_size} m; origin marker '
-            f'{self.origin_id}; course -> {self.course_dir}. Drive slowly past every marker; '
-            'Ctrl-C (or the ~/save service) solves and writes the course.')
+            f'surveying {self.dictionary} markers; marker_size {self.settings.marker_size} m is the '
+            'edge of the BLACK SQUARE, not the board: measure it (LCTK 600 mm board: 0.48 m; '
+            'a 0.50 m plate with a 0.38 m square: 0.38 m). A wrong size scales every distance. '
+            f'Origin marker {self.origin_id}; course -> {self.course_dir}. Drive slowly past '
+            'every marker; Ctrl-C (or the ~/save service) solves and writes the course.')
 
     # ------------------------------------------------------------ inputs
     def on_info(self, msg):
@@ -209,7 +217,9 @@ class MarkerSurveyNode(Node):
         t = stamp_sec(msg.header.stamp)
         T = self.pose_at(t, cam_frame)
         if T is None:
-            self.get_logger().info('no camera pose for this frame yet (is tracking on?)',
+            self.get_logger().info('no camera pose for this frame yet (is tracking on? is the odometry '
+                                   f'topic {self.odom_topic} arriving? a QoS mismatch gives exactly this: '
+                                   'the ZED publishes BEST_EFFORT)',
                                    throttle_duration_sec=5.0)
             return
         try:
@@ -318,7 +328,8 @@ class MarkerSurveyNode(Node):
             log(f'wrote {dump}')
             try:
                 res = finish(self.survey, self.origin_id, self.dictionary, self.course_dir,
-                             log=lambda s: [log(line) for line in str(s).splitlines()])
+                             log=lambda s: [log(line) for line in str(s).splitlines()],
+                             floor_offset=self.floor_offset)
             except ValueError as e:
                 self.get_logger().error(f'not solved: {e}. The recording is in {dump}: '
                                         'lab2_marker_survey_solve can try again.')

@@ -114,6 +114,15 @@ just launch "enable_zed_object_detection:=true"
 
 ## Troubleshooting
 
+### Hangs at "=== CAMERA OPENING ===" (empty or dead DISPLAY)
+
+An empty `DISPLAY=` or a `DISPLAY` with no X server behind it (`DISPLAY=:0` when
+the desktop is `:1`) makes Argus fail, and the ZED wrapper then waits forever at
+`=== CAMERA OPENING ===`. Unset it or point it at a live server: `unset DISPLAY`,
+or `export DISPLAY=:1` (check with `xdpyinfo`). `just lab2 survey` and
+`just lab2 loc-check` test the connection, warn, and unset a dead `DISPLAY` for
+the launch.
+
 ### Hardware Acceleration Required (VNC Sessions)
 
 The ZED node requires OpenGL hardware acceleration. Standard VNC will cause failures.

@@ -150,6 +150,23 @@ camera-check COURSE="src/lab/autosdv_waypoint_lab/config/courses/hall_demo" SECO
 loc-check COURSE_DIR *ARGS:
     #!/usr/bin/env bash
     dir=$(realpath -m "$1"); shift
+    # DISPLAY is usable only if an X connection works. An empty or dead DISPLAY makes Argus
+    # fail and the ZED wrapper hang at "CAMERA OPENING": unset it (never leave it empty).
+    if [ "${DISPLAY+set}" = set ]; then
+        ok=0
+        if [ -z "$DISPLAY" ]; then ok=1
+        elif command -v xdpyinfo >/dev/null 2>&1; then xdpyinfo -display "$DISPLAY" >/dev/null 2>&1 || ok=1
+        elif command -v xset >/dev/null 2>&1; then xset -display "$DISPLAY" q >/dev/null 2>&1 || ok=1
+        else
+            case "$DISPLAY" in
+                :*|unix:*) n=${DISPLAY#*:}; n=${n%%.*}; [ -S "/tmp/.X11-unix/X$n" ] || ok=1 ;;
+            esac
+        fi
+        if [ "$ok" != 0 ]; then
+            echo "warning: DISPLAY='$DISPLAY' has no working X server (a desktop is usually :1 on the car); unsetting it for this launch, no viewer." >&2
+            unset DISPLAY
+        fi
+    fi
     rviz=false; [ -n "${DISPLAY:-}" ] && rviz=true
     cmd=(play_launch launch --web-addr '{{ web_addr }}' autosdv_launch waypoint_loc_check.launch.xml
          "course_dir:=$dir" "rviz:=$rviz" "$@")
@@ -187,6 +204,23 @@ steer-fit *PAIRS:
 survey COURSE_DIR ORIGIN_ID *ARGS:
     #!/usr/bin/env bash
     dir=$(realpath -m "$1"); origin="$2"; shift 2
+    # DISPLAY is usable only if an X connection works. An empty or dead DISPLAY makes Argus
+    # fail and the ZED wrapper hang at "CAMERA OPENING": unset it (never leave it empty).
+    if [ "${DISPLAY+set}" = set ]; then
+        ok=0
+        if [ -z "$DISPLAY" ]; then ok=1
+        elif command -v xdpyinfo >/dev/null 2>&1; then xdpyinfo -display "$DISPLAY" >/dev/null 2>&1 || ok=1
+        elif command -v xset >/dev/null 2>&1; then xset -display "$DISPLAY" q >/dev/null 2>&1 || ok=1
+        else
+            case "$DISPLAY" in
+                :*|unix:*) n=${DISPLAY#*:}; n=${n%%.*}; [ -S "/tmp/.X11-unix/X$n" ] || ok=1 ;;
+            esac
+        fi
+        if [ "$ok" != 0 ]; then
+            echo "warning: DISPLAY='$DISPLAY' has no working X server (a desktop is usually :1 on the car); unsetting it for this launch, no viewer." >&2
+            unset DISPLAY
+        fi
+    fi
     viewer=false; [ -n "${DISPLAY:-}" ] && viewer=true      # the detection video, given a display
     cmd=(play_launch launch --web-addr '{{ web_addr }}' autosdv_marker_survey marker_survey.launch.xml
          "course_dir:=$dir" "origin_id:=$origin" "viewer:=$viewer" "$@")

@@ -13,26 +13,44 @@ import numpy as np
 from autosdv_marker_survey import output
 from autosdv_marker_survey.survey import (
     Detection, Keyframe, Survey, SurveySettings, course_frame, floor_from_base_poses, inv_T,
-    to_course)
+    marker_pose_in_camera, to_course)
 
 
 def finish(survey: Survey, origin_id: int, dictionary: str, course_dir: Optional[str],
-           log=print, max_nfev: int = 300) -> dict:
+           log=print, max_nfev: int = 300, floor_offset: float = 0.0) -> dict:
     if origin_id not in survey.markers:
         seen = sorted(survey.markers)
         raise ValueError(f'origin marker {origin_id} was never seen (seen: {seen})')
     if survey.T_cam_base is None:
         raise ValueError('no camera -> base_link transform: the floor cannot be found')
-    log(f'solving: {len(survey.keyframes)} keyframes, {len(survey.markers)} markers ...')
-    markers, poses, stats, info = survey.solve(max_nfev=max_nfev)
-    log(f'solved: reprojection RMS {info["reproj_rms_px"]:.2f} px ({info["status"]})')
+    if len(survey.keyframes) == 1:
+        markers, poses, stats, info = _single_keyframe(survey)
+        log('WARNING: single keyframe, no bundle adjustment: the markers are this one view\'s '
+            'estimates, with no uncertainty. A quick look, not a survey: drive past the '
+            'markers for the real thing.')
+    else:
+        log(f'solving: {len(survey.keyframes)} keyframes, {len(survey.markers)} markers ...')
+        markers, poses, stats, info = survey.solve(max_nfev=max_nfev)
+        log(f'solved: reprojection RMS {info["reproj_rms_px"]:.2f} px ({info["status"]})')
     base = [T @ survey.T_cam_base for T in poses]
     p, n = floor_from_base_poses(base)
+    # the floor lies floor_offset below base_link (a car on a stand: the wheels are in the air)
+    p = p - float(floor_offset) * n
     frame = course_frame(markers[origin_id], p, n)
     surveyed = to_course(markers, stats, frame)
     Tb0 = inv_T(frame.T_world_course) @ base[0]
     start = {'x': round(float(Tb0[0, 3]), 3), 'y': round(float(Tb0[1, 3]), 3),
              'yaw': round(math.atan2(Tb0[1, 0], Tb0[0, 0]), 4)}
+    low = float(survey.s.marker_size) / 2.0
+    for m in surveyed:
+        if m.z < low:
+            msg = (f'centre {m.z:.2f} m above the floor, below half the marker size ({low:.2f} m)'
+                   if m.z >= 0 else f'centre {m.z:.2f} m is BELOW the floor')
+            m.flags.append(msg)
+            log(f'WARNING: marker {m.id}: {msg}. Likely causes: the car was on a stand (wheels off '
+                'the floor, so base_link is higher than the floor: pass floor_offset:=<metres '
+                'base_link is above the floor>), a wrong camera mount TF, or the board is not '
+                'standing on the floor.')
     log(output.format_table(surveyed))
     written = []
     if course_dir:
@@ -42,6 +60,21 @@ def finish(survey: Survey, origin_id: int, dictionary: str, course_dir: Optional
             log(f'wrote {w}')
     return {'markers': surveyed, 'info': info, 'start_pose': start, 'written': written,
             'frame': frame, 'poses': poses}
+
+
+def _single_keyframe(survey: Survey):
+    """The solve()-shaped result for a stationary recording: no bundle adjustment, each
+    marker as its one view placed it."""
+    kf = survey.keyframes[0]
+    markers, stats, sq = {}, {}, []
+    for det in kf.detections:
+        T_cm, err = marker_pose_in_camera(det, survey.K, survey.s.marker_size)
+        markers[det.id] = kf.T_world_cam @ T_cm
+        stats[det.id] = {'views': 1, 'reproj_rms_px': err}
+        sq.append(err ** 2)
+    info = {'keyframes': 1, 'status': 'single keyframe, no bundle adjustment',
+            'reproj_rms_px': float(np.sqrt(np.mean(sq))) if sq else 0.0}
+    return markers, [kf.T_world_cam], stats, info
 
 
 # ------------------------------------------------------------------ the dump
@@ -93,6 +126,8 @@ def resolve_main(argv=None) -> int:
     ap.add_argument('--course', help='course directory to write (default: none, print only)')
     ap.add_argument('--origin', type=int, help='override the origin marker id')
     ap.add_argument('--odom-drift', type=float, help='tracking drift, sd per metre (default 0.01)')
+    ap.add_argument('--floor-offset', type=float, default=0.0,
+                    help='metres the floor lies below base_link (car on a stand), default 0')
     ap.add_argument('--max-nfev', type=int, default=300, help='solver iteration cap')
     args = ap.parse_args(argv)
     settings = SurveySettings(marker_size=0.0)
@@ -100,5 +135,5 @@ def resolve_main(argv=None) -> int:
         settings.odom_drift = args.odom_drift
     sv, dictionary, origin = load_dump(args.dump, settings)
     finish(sv, args.origin if args.origin is not None else origin, dictionary, args.course,
-           max_nfev=args.max_nfev)
+           max_nfev=args.max_nfev, floor_offset=args.floor_offset)
     return 0

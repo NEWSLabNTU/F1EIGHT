@@ -135,3 +135,157 @@ def test_the_detector_reads_a_rendered_marker():
     # corners TL, TR, BR, BL
     c = dets[0].corners
     assert c[0][0] < c[1][0] and c[0][1] < c[3][1]
+
+
+# ------------------------------------------------------------------ OpenCV 4.5 (JetPack 6)
+
+def test_the_detector_works_without_arucodetector(monkeypatch):
+    """OpenCV 4.5.4 has no ArucoDetector/DetectorParameters: the function API must serve."""
+    import cv2
+    real = cv2.aruco
+    calls = {}
+
+    class Legacy:
+        pass
+
+    legacy = Legacy()
+    for name in dir(real):
+        if name in ('ArucoDetector', 'DetectorParameters'):
+            continue
+        setattr(legacy, name, getattr(real, name))
+
+    def detect_markers(gray, dictionary, parameters=None):
+        calls['params'] = parameters
+        det = real.ArucoDetector(dictionary, parameters)
+        return det.detectMarkers(gray)
+
+    def create():
+        return real.DetectorParameters()
+
+    legacy.DetectorParameters_create = create
+    legacy.detectMarkers = detect_markers
+    monkeypatch.setattr(cv2, 'aruco', legacy)
+    assert not hasattr(cv2.aruco, 'ArucoDetector')
+    gen = getattr(real, 'generateImageMarker', None) or real.drawMarker
+    img = np.full((400, 400), 255, np.uint8)
+    img[100:300, 100:300] = gen(real.getPredefinedDictionary(real.DICT_5X5_1000), 24, 200)
+    det = Detector('DICT_5X5_1000')
+    assert det.legacy
+    assert [d.id for d in det.detect(img)] == [24]
+    assert calls['params'].cornerRefinementMethod == real.CORNER_REFINE_SUBPIX
+
+
+# ------------------------------------------------------------------ a stationary save
+
+def test_a_single_keyframe_is_saved_without_adjustment(tmp_path):
+    truth = {mid: marker_T(x, y, 0.40, yaw) for mid, (x, y, yaw) in {
+        24: (3.0, 0.0, math.pi), 25: (3.0, 1.2, math.pi)}.items()}
+    sv = simulate(truth, [drive([(0, 0), (0.05, 0)], step=0.05)[0]], 0.48, seed=2)
+    assert len(sv.keyframes) == 1
+    with pytest.raises(ValueError, match='not enough data'):
+        sv.solve()
+    logs = []
+    res = finish(sv, 24, 'DICT_5X5_1000', str(tmp_path), log=logs.append)
+    assert any('single keyframe' in str(x) and 'quick look' in str(x) for x in logs)
+    assert res['info']['status'] == 'single keyframe, no bundle adjustment'
+    assert all(m.sd_xy is None and m.sd_yaw_deg is None for m in res['markers'])
+    import yaml
+    rep = yaml.safe_load((tmp_path / 'survey_report.yaml').read_text())
+    assert rep['solve']['status'] == 'single keyframe, no bundle adjustment'
+    assert rep['markers'][0]['sd_xy_cm'] is None
+    m = {x.id: x for x in res['markers']}
+    assert m[24].x == pytest.approx(0.0, abs=0.02) and m[24].z == pytest.approx(0.40, abs=0.03)
+    assert m[25].y == pytest.approx(-1.2, abs=0.05) or m[25].y == pytest.approx(1.2, abs=0.05)
+
+
+# ------------------------------------------------------------------ tilt vs in-plane rotation
+
+def _course_markers(Ts, origin_T=None):
+    frame = course_frame(origin_T if origin_T is not None else Ts[24], np.zeros(3), np.array([0, 0, 1.0]))
+    return to_course(Ts, {}, frame)
+
+
+def test_rotating_a_board_in_its_plane_is_not_a_tilt():
+    Ts = {24: marker_T(0, 0, 0.4, 0.0), 30: marker_T(2, 1, 0.4, 0.7, 0.0, math.pi / 2),
+          31: marker_T(2, -1, 0.4, -0.4, 0.0, math.radians(-90))}
+    out = {m.id: m for m in _course_markers(Ts)}
+    for mid in (30, 31):
+        assert out[mid].tilt_deg == pytest.approx(0.0, abs=1e-6)
+        assert not any('tilted' in f for f in out[mid].flags)
+    assert math.degrees(out[30].roll) == pytest.approx(90.0, abs=1e-6)
+    assert math.degrees(out[30].pitch) == pytest.approx(0.0, abs=1e-6)
+
+
+def test_tilt_is_the_lean_of_the_normal():
+    Ts = {24: marker_T(0, 0, 0.4, 0.0), 30: marker_T(2, 1, 0.4, 0.7, math.radians(12), math.radians(90)),
+          31: marker_T(2, -1, 0.4, -0.4, math.radians(-12), math.radians(37))}
+    out = {m.id: m for m in _course_markers(Ts)}
+    assert out[30].tilt_deg == pytest.approx(12.0, abs=1e-6)
+    assert out[31].tilt_deg == pytest.approx(12.0, abs=1e-6)
+    assert any('tilted' in f for f in out[30].flags)
+    assert math.degrees(out[30].pitch) == pytest.approx(12.0, abs=1e-6)
+    assert math.degrees(out[30].roll) == pytest.approx(90.0, abs=1e-6)
+
+
+def test_a_rotated_marker_round_trips_through_the_lanelet_map(tmp_path):
+    import yaml
+    from autosdv_waypoint_lab import course as course_lib
+    Ts = {24: marker_T(0, 0, 0.4, 0.0), 30: marker_T(2, 1, 0.4, 0.7, math.radians(5), math.pi / 2),
+          31: marker_T(2, -1, 0.4, -0.4, math.radians(-4), math.radians(-90))}
+    surveyed = _course_markers(Ts)
+    from autosdv_marker_survey import output
+    output.write_course(str(tmp_path), surveyed, 24, 'DICT_5X5_1000', 0.48, None,
+                        {'keyframes': 1, 'reproj_rms_px': 0.0})
+    c = course_lib.load_course(str(tmp_path))
+    osm = (tmp_path / 'lanelet2_map.osm').read_text()
+    parsed = course_lib.parse_osm_landmarks(osm)
+    frame = course_frame(Ts[24], np.zeros(3), np.array([0, 0, 1.0]))
+    Tci = inv_T(frame.T_world_course)
+    h = 0.24
+    assert {mk.id for mk in c.markers} == {24, 30, 31}
+    for mk in c.markers:
+        Tc = Tci @ Ts[mk.id]
+        truth = [Tc[:3, :3] @ np.array(p) + Tc[:3, 3] for p in
+                 ([-h, -h, 0], [h, -h, 0], [h, h, 0], [-h, h, 0])]
+        for a, b in zip(mk.corners(0.48), truth):
+            assert np.allclose(a, b, atol=2e-3), (mk.id, a, b)
+        lm = parsed[str(mk.id)][0]
+        assert np.allclose(lm.position, Tc[:3, 3], atol=2e-3)
+        for got, col in ((lm.x_axis, 0), (lm.y_axis, 1), (lm.z_axis, 2)):
+            assert np.allclose(got, Tc[:3, col], atol=2e-3), (mk.id, col)
+    assert yaml.safe_load((tmp_path / 'course.yaml').read_text())['markers']
+
+
+# ------------------------------------------------------------------ a car on a stand
+
+def _stand_survey(h):
+    truth = {mid: marker_T(x, y, 0.25, yaw) for mid, (x, y, yaw) in {
+        24: (3.0, 0.0, math.pi), 25: (3.0, 1.2, math.pi)}.items()}
+    pose = drive([(0, 0), (0.05, 0)], step=0.05)[0].copy()
+    pose[2, 3] = h                                   # base_link h above the floor: wheels off
+    return simulate(truth, [pose], 0.48, seed=2)
+
+
+def test_floor_offset_corrects_a_car_on_a_stand(tmp_path):
+    logs = []
+    res = finish(_stand_survey(0.15), 24, 'DICT_5X5_1000', str(tmp_path), log=logs.append)
+    z = {m.id: m.z for m in res['markers']}
+    assert z[24] == pytest.approx(0.10, abs=0.03)           # true 0.25 - 0.15
+    assert all(any('half the marker size' in f for f in m.flags) for m in res['markers'])
+    assert any('floor_offset' in str(x) and 'stand' in str(x) for x in logs)
+    import yaml
+    rep = yaml.safe_load((tmp_path / 'survey_report.yaml').read_text())
+    assert any('floor_offset' not in f and 'half the marker size' in f for f in rep['markers'][0]['flags'])
+    fixed = finish(_stand_survey(0.15), 24, 'DICT_5X5_1000', None, log=lambda *a: None,
+                   floor_offset=0.15)
+    for m in fixed['markers']:
+        assert m.z == pytest.approx(0.25, abs=0.03)
+        assert not any('half the marker size' in f for f in m.flags)
+    # a pure vertical offset leaves x, y and yaw alone
+    for a, b in zip(res['markers'], fixed['markers']):
+        assert (a.x, a.y, a.yaw) == pytest.approx((b.x, b.y, b.yaw), abs=1e-6)
+
+
+def test_a_marker_below_the_floor_is_flagged():
+    res = finish(_stand_survey(0.40), 24, 'DICT_5X5_1000', None, log=lambda *a: None)
+    assert all(m.z < 0 and any('BELOW the floor' in f for f in m.flags) for m in res['markers'])
