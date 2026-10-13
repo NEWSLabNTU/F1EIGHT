@@ -1,0 +1,6 @@
+# GENERATED from course.yaml by make_course_map; edit that, not this.
+/**:
+  ros__parameters:
+    dictionary: "ALL_DICTS"
+    marker_size: 0.25
+    target_tag_ids: ['0', '1', '2', '3', '4', '5', '6', '7', '8', '9', '10']

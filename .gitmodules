@@ -73,3 +73,7 @@
 	path = src/perception/external/reflector_pose_init
 	url = https://github.com/NEWSLabNTU/reflector-pose-init.git
 	branch = main
+[submodule "src/localization/external/autoware_ar_tag_based_localizer"]
+	path = src/localization/external/autoware_ar_tag_based_localizer
+	url = https://github.com/NEWSLabNTU/autoware_ar_tag_based_localizer.git
+	branch = autosdv-1.5.0

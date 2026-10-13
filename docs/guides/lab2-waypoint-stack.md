@@ -34,8 +34,11 @@ course path.csv ─► waypoint_path_publisher ─► /planning/trajectory (+ ~/
 localization_monitor ─► /diagnostics ─► autosdv-waypoint-main.yaml ─► MRM
 ```
 
-Everything from Autoware is the installed 1.5.0, unmodified. The lab's nodes
-are in `src/lab/autosdv_waypoint_lab`.
+Everything from Autoware is the installed 1.5.0, unmodified, except the
+AR-tag localizer: that is AutoSDV's fork
+(`src/localization/external/autoware_ar_tag_based_localizer`, branch
+`autosdv-1.5.0`), which adds one parameter, `dictionary`, and overlays the
+installed package. The lab's nodes are in `src/lab/autosdv_waypoint_lab`.
 
 ## What is new, and why each piece is there
 
@@ -93,9 +96,12 @@ the left-camera-to-IMU edge, and stops it starting its own IMU-only ZED.
 ## Courses
 
 A course is a directory: `course.yaml` (path file, laps, `v_ref`, start box,
-marker size, every marker's `id, x, y, yaw` with yaw the direction it faces),
-`path.csv` (`x, y[, v]`), and the generated `lanelet2_map.osm` and
-`map_projector_info.yaml`. `just lab2 course-map DIR` regenerates the map and
+marker size, dictionary, every marker's `id, x, y, yaw` with yaw the direction
+it faces), `path.csv` (`x, y[, v]`), and the generated `lanelet2_map.osm`,
+`ar_tag.param.yaml` and `map_projector_info.yaml`. `ar_tag.param.yaml` is the
+localizer's `dictionary`, `marker_size` and `target_tag_ids`, loaded after the
+lab's `ar_tag_based_localizer.param.yaml`, so a course's markers are described
+once. `just lab2 course-map DIR` regenerates both and
 prints how well the markers cover the path for a 100°, 5 m camera, including
 whether a car anywhere in the start box (±0.3 m, ±10°) sees a marker.
 
@@ -103,8 +109,26 @@ The shipped `hall_demo` is a 10 m × 4 m oval with eleven markers: one in view
 on 89 % of the loop, the longest gap 0.8 m, and the start box always covered.
 It is a stand-in until a real hall is surveyed.
 
-Markers are ARUCO_MIP_36h12, the dictionary the stock detector decodes by
-default; AprilTag 36h11 rendered the same way is not detected.
+`hall_demo`'s markers are ARUCO_MIP_36h12, decoded under the default
+`dictionary: ALL_DICTS`; AprilTag 36h11 rendered the same way is not detected.
+
+The detector is the aruco library's, not OpenCV's, and it ships none of
+OpenCV's `DICT_*` families. Those are decoded from a file exported by
+`config/dictionaries/export_opencv_dictionary.py`. `DICT_5X5_1000` is shipped,
+for the LCTK calibration boards: the solid 600 mm board is one 480 mm marker,
+ID 24, so a course using it sets
+
+```yaml
+marker_size: 0.48
+dictionary: DICT_5X5_1000
+markers:
+  - {id: 24, x: ..., y: ..., yaw: ..., z: ...}   # z: the marker centre's height
+```
+
+Checked through the real node with `synthetic_camera/run.sh` on such a course:
+with the EKF pose 0.3 m off, the fixes land 2 cm and 0.3° from the true pose.
+A 480 mm marker is about twice the 250 mm sheet, so `distance_threshold` (5 m)
+could be raised for it. That has not been measured.
 
 ## The bench
 

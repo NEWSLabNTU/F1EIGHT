@@ -5,8 +5,9 @@
 #
 # Starts the course map loaders and Autoware's ar_tag_based_localizer with the
 # lab's parameters, renders what a forward camera at base_link (0.20, 0, 0.25)
-# would see from the car pose (X, Y, YAW) -- every marker of the course as an
-# ARUCO_MIP_36h12 image warped onto its surveyed corners -- and publishes it
+# would see from the car pose (X, Y, YAW) -- every marker of the course, in
+# the course's dictionary (ARUCO_MIP_36h12 for ALL_DICTS), warped onto its
+# surveyed corners -- and publishes it
 # with the EKF pose put EKF_DX metres off (default 0.3). Prints the
 # localizer's fixes: they should land on (X, Y, YAW), not on the EKF pose.
 #
@@ -27,7 +28,8 @@ mkdir -p tmp
 setsid play_launch launch --web-addr 127.0.0.1:${WEB_PORT:-8092} $here/loc.launch.xml \
     course_dir:=$course > tmp/synthetic_camera_launch.log 2>&1 < /dev/null &
 L=$!
-setsid python3 $here/fake_camera.py $course/lanelet2_map.osm DICT_ARUCO_MIP_36h12 "$@" \
+dict=$(python3 -c "import sys, yaml; d = (yaml.safe_load(open(sys.argv[1])) or {}).get('dictionary', 'ALL_DICTS'); print(d if d.startswith('DICT_') else 'DICT_ARUCO_MIP_36h12')" $course/course.yaml)
+setsid python3 $here/fake_camera.py $course/lanelet2_map.osm $dict "$@" \
     > tmp/synthetic_camera.log 2>&1 < /dev/null &
 P=$!
 trap 'kill -- -$P -$L 2>/dev/null; sleep 3; kill -9 -- -$P -$L 2>/dev/null' EXIT

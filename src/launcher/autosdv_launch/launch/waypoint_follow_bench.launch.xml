@@ -80,6 +80,7 @@
   <node pkg="autosdv_waypoint_lab" exec="virtual_marker_localizer" name="virtual_marker_localizer"
         namespace="localization/pose_estimator" output="screen">
     <param from="$(find-pkg-share autosdv_waypoint_lab)/config/ar_tag_based_localizer.param.yaml"/>
+    <param from="$(var course_dir)/ar_tag.param.yaml" allow_substs="true"/>
     <param from="$(var marker_noise_file)"/>
     <param name="map_file" value="$(var course_dir)/lanelet2_map.osm"/>
     <param name="seed" value="$(var seed)"/>

@@ -5,17 +5,18 @@ Renders the course's markers (corners from the course OSM, the map the
 localizer loads) as seen from a known car pose, with a pinhole camera at
 base_link (cam_x, 0, cam_z) looking forward, and publishes image +
 camera_info + the camera TF + an EKF pose (the true pose plus an offset).
-Usage: fake_camera.py OSM DICT X Y YAW [EKF_DX]
+Usage: fake_camera.py OSM DICT X Y YAW [EKF_DX]  (OSM in a course directory)
 """
 import math, os, sys
 import numpy as np, cv2
 import rclpy
+from rclpy.duration import Duration
 from rclpy.node import Node
 from sensor_msgs.msg import Image, CameraInfo
 from geometry_msgs.msg import PoseWithCovarianceStamped, TransformStamped
 from tf2_ros import StaticTransformBroadcaster
 sys.path.insert(0, os.path.join(os.path.dirname(os.path.abspath(__file__)), '../../../../src/lab/autosdv_waypoint_lab'))
-from autosdv_waypoint_lab.course import parse_osm_landmarks
+from autosdv_waypoint_lab.course import load_course, parse_osm_landmarks
 
 
 W, H, F = (960, 600, 403.0) if os.environ.get("HALF") else (1920, 1200, 806.0)
@@ -25,6 +26,9 @@ class Cam(Node):
     def __init__(self, osm, dname, x, y, yaw, dx):
         super().__init__('fake_camera')
         self.lms = parse_osm_landmarks(open(osm).read())
+        # the black square's half-side: the course's marker_size, which the
+        # localizer is told too (a mismatch reads as a wrong range)
+        self.half = load_course(os.path.dirname(os.path.abspath(osm))).marker_size / 2.0
         self.dict = cv2.aruco.getPredefinedDictionary(getattr(cv2.aruco, dname))
         self.pose = (x, y, yaw); self.dx = dx
         self.pub_img = self.create_publisher(Image, '/fake/image', 10)
@@ -59,7 +63,7 @@ class Cam(Node):
         for mid, lms in self.lms.items():
             for lm in lms:
                 # rebuild the 4 corners: bl, br, tr, tl from centre and axes (0.25 m)
-                h = 0.125
+                h = self.half
                 cs = [tuple(lm.position[k] + u * lm.x_axis[k] + w * lm.y_axis[k] for k in range(3))
                       for u, w in ((-h, -h), (h, -h), (h, h), (-h, h))]
                 px = [self.world_to_pixel(p) for p in cs]
@@ -86,15 +90,23 @@ class Cam(Node):
         self.get_logger().info(f'rendered {n} markers')
         return cv2.cvtColor(img, cv2.COLOR_GRAY2RGB)
 
-    def on_ekf(self):
-        m = PoseWithCovarianceStamped(); m.header.stamp = self.get_clock().now().to_msg(); m.header.frame_id = 'map'
+    def on_ekf(self, stamp=None):
+        m = PoseWithCovarianceStamped(); m.header.frame_id = 'map'
+        m.header.stamp = stamp or self.get_clock().now().to_msg()
         x, y, yaw = self.pose
         m.pose.pose.position.x = x + self.dx; m.pose.pose.position.y = y
         m.pose.pose.orientation.z = math.sin(yaw / 2); m.pose.pose.orientation.w = math.cos(yaw / 2)
         self.pub_ekf.publish(m)
 
     def on_frame(self):
-        stamp = self.get_clock().now().to_msg()
+        now = self.get_clock().now()
+        stamp = now.to_msg()
+        # Two EKF poses bracketing the frame. Publishing a full-size frame from
+        # Python takes most of a second on a Jetson, which starves the 50 Hz
+        # timer; the localizer then has no pose to interpolate at the frame's
+        # stamp and drops it before detecting anything.
+        for dt in (-0.01, 0.01):
+            self.on_ekf((now + Duration(seconds=dt)).to_msg())
         info = CameraInfo(); info.header.stamp = stamp; info.header.frame_id = 'fake_cam_optical'
         info.width, info.height = W, H
         info.k = [F, 0.0, W / 2, 0.0, F, H / 2, 0.0, 0.0, 1.0]

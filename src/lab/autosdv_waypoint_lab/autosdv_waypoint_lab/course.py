@@ -5,6 +5,7 @@ A course is a directory under config/courses/<name>/:
     course.yaml           the TA's description (below)
     path.csv              x, y[, v] waypoints in the hall frame
     lanelet2_map.osm      GENERATED from course.yaml by `make_course_map`
+    ar_tag.param.yaml     GENERATED likewise: the localizer's marker settings
     map_projector_info.yaml   projector_type: local (hall metres, no GNSS)
 
 course.yaml:
@@ -15,6 +16,7 @@ course.yaml:
     v_ref: 0.8            # [m/s] speed for rows without a v column
     start_pose: {x: 0.0, y: 0.0, yaw: 0.0}   # the taped start box, base_link
     marker_size: 0.25     # [m] black edge, what the detector is told
+    dictionary: ALL_DICTS # the printed markers' family (below)
     marker_height: 0.25   # [m] marker centre above the floor (default for all)
     markers:              # yaw: the direction the marker FACES (its normal)
       - {id: 0, x: 6.0, y: 0.0, yaw: 3.1416}
@@ -26,6 +28,12 @@ node asks the landmark manager for), corners counter-clockwise as seen from
 the front -- bottom-left, bottom-right, top-right, top-left -- so that the
 landmark manager's axes come out as the ArUco marker's: x to the viewer's
 right, y up, z out of the marker towards the viewer.
+
+`dictionary` is what the localizer decodes with. The aruco library's own
+families go by name: ALL_DICTS (the default; covers ARUCO_MIP_36h12) or one of
+them, e.g. ARUCO_MIP_36h12. An OpenCV family, e.g. DICT_5X5_1000 (the LCTK
+calibration boards), is not in that library; it is decoded from a file under
+config/dictionaries/, and only the families shipped there are accepted.
 """
 
 from dataclasses import dataclass, field
@@ -38,6 +46,14 @@ import yaml
 
 LANDMARK_TYPE = 'pose_marker'
 LANDMARK_SUBTYPE = 'apriltag_16h5'
+
+# The aruco library's predefined dictionaries (aruco/dictionary.h).
+ARUCO_DICTIONARIES = (
+    'ALL_DICTS', 'ARUCO_MIP_36h12', 'ARUCO', 'ARUCO_MIP_25h7', 'ARUCO_MIP_16h3',
+    'ARTAG', 'ARTOOLKITPLUS', 'ARTOOLKITPLUSBCH', 'TAG16h5', 'TAG25h7', 'TAG25h9',
+    'TAG36h11', 'TAG36h10', 'CHILITAGS')
+# OpenCV dictionaries exported to config/dictionaries/<name>.dict.
+SHIPPED_DICTIONARIES = ('DICT_5X5_1000',)
 
 
 @dataclass
@@ -75,10 +91,15 @@ class Course:
     start_pose: Pose2D
     marker_size: float
     markers: List[Marker] = field(default_factory=list)
+    dictionary: str = 'ALL_DICTS'
 
     @property
     def map_file(self) -> str:
         return os.path.join(self.directory, 'lanelet2_map.osm')
+
+    @property
+    def ar_tag_param_file(self) -> str:
+        return os.path.join(self.directory, 'ar_tag.param.yaml')
 
 
 def load_course(directory: str) -> Course:
@@ -94,6 +115,10 @@ def load_course(directory: str) -> Course:
         seen.add(mid)
         markers.append(Marker(mid, float(m['x']), float(m['y']),
                               float(m.get('z', height)), float(m['yaw'])))
+    dictionary = str(d.get('dictionary', 'ALL_DICTS'))
+    if dictionary not in ARUCO_DICTIONARIES + SHIPPED_DICTIONARIES:
+        raise ValueError(f'{directory}: unknown dictionary {dictionary!r}; one of '
+                         f'{", ".join(ARUCO_DICTIONARIES + SHIPPED_DICTIONARIES)}')
     sp = d.get('start_pose') or {}
     return Course(
         directory=directory,
@@ -104,7 +129,30 @@ def load_course(directory: str) -> Course:
         start_pose=Pose2D(float(sp.get('x', 0.0)), float(sp.get('y', 0.0)),
                           float(sp.get('yaw', 0.0))),
         marker_size=float(d.get('marker_size', 0.25)),
+        dictionary=dictionary,
         markers=markers)
+
+
+# ------------------------------------------------- the localizer's markers
+
+def make_ar_tag_params(course: Course) -> str:
+    """The marker settings ar_tag_based_localizer takes from the course.
+
+    Loaded after config/ar_tag_based_localizer.param.yaml with allow_substs,
+    which resolves the $(find-pkg-share) of a shipped dictionary file.
+    """
+    if course.dictionary in SHIPPED_DICTIONARIES:
+        dictionary = ('$(find-pkg-share autosdv_waypoint_lab)/config/dictionaries/'
+                      f'{course.dictionary}.dict')
+    else:
+        dictionary = course.dictionary
+    ids = ', '.join(f"'{m.id}'" for m in sorted(course.markers, key=lambda m: m.id))
+    return ('# GENERATED from course.yaml by make_course_map; edit that, not this.\n'
+            '/**:\n'
+            '  ros__parameters:\n'
+            f'    dictionary: "{dictionary}"\n'
+            f'    marker_size: {course.marker_size}\n'
+            f'    target_tag_ids: [{ids}]\n')
 
 
 # ---------------------------------------------------------------- the OSM map
@@ -220,32 +268,35 @@ def print_coverage(course: Course) -> None:
 
 
 def main(argv=None):
-    """make_course_map <course_dir> [...]: write lanelet2_map.osm from course.yaml."""
+    """make_course_map <course_dir> [...]: write lanelet2_map.osm and ar_tag.param.yaml from course.yaml."""
     import argparse
     ap = argparse.ArgumentParser(description=main.__doc__)
     ap.add_argument('course_dirs', nargs='+')
     ap.add_argument('--check', action='store_true',
-                    help='do not write; exit 1 if a map is missing or out of date')
+                    help='do not write; exit 1 if a generated file is missing or out of date')
     args = ap.parse_args(argv)
     stale = False
     for d in args.course_dirs:
         course = load_course(d)
-        text = make_osm(course)
-        old = None
-        if os.path.exists(course.map_file):
-            with open(course.map_file) as f:
-                old = f.read()
+        for path, text in ((course.map_file, make_osm(course)),
+                           (course.ar_tag_param_file, make_ar_tag_params(course))):
+            old = None
+            if os.path.exists(path):
+                with open(path) as f:
+                    old = f.read()
+            if args.check:
+                if old != text:
+                    print(f'{path}: out of date with course.yaml')
+                    stale = True
+            elif old != text:
+                with open(path, 'w') as f:
+                    f.write(text)
+                print(f'wrote {path}')
+            else:
+                print(f'{path}: up to date')
         if args.check:
-            if old != text:
-                print(f'{course.map_file}: out of date with course.yaml')
-                stale = True
             continue
-        if old != text:
-            with open(course.map_file, 'w') as f:
-                f.write(text)
-            print(f'wrote {course.map_file} ({len(course.markers)} markers)')
-        else:
-            print(f'{course.map_file}: up to date')
+        print(f'  {len(course.markers)} markers, {course.dictionary}, {course.marker_size} m')
         print_coverage(course)
         proj = os.path.join(d, 'map_projector_info.yaml')
         if not os.path.exists(proj):

@@ -1,7 +1,8 @@
 <?xml version="1.0"?>
 <!--
   Lab 2 (waypoint) localization: ArUco markers fused with odometry in
-  Autoware's EKF. Stock Autoware nodes, unmodified, wired here instead of
+  Autoware's EKF. Stock Autoware nodes (the AR-tag localizer is AutoSDV's
+  fork, which adds a `dictionary` parameter), wired here instead of
   through tier4_localization_launch, which brings NDT, pose_initializer and
   the full sensing chain with it.
 
@@ -23,7 +24,7 @@
   in this lab depends on.
 -->
 <launch>
-  <arg name="course_dir" description="config/courses/NAME: course.yaml, lanelet2_map.osm, map_projector_info.yaml"/>
+  <arg name="course_dir" description="config/courses/NAME: course.yaml, lanelet2_map.osm, ar_tag.param.yaml, map_projector_info.yaml"/>
   <arg name="use_ar_tag_localizer" default="true"
        description="false on the bench, where virtual_marker_localizer stands in for the camera and the localizer"/>
   <arg name="image_topic" default="/sensing/camera/zedxm/rgb/color/rect/image"/>
@@ -75,19 +76,23 @@
           <remap from="~/input/ekf_pose" to="/localization/pose_twist_fusion_filter/biased_pose_with_covariance"/>
           <remap from="~/output/pose_with_covariance" to="/localization/pose_estimator/pose_with_covariance"/>
           <param from="$(var ar_tag_param_file)"/>
+          <param from="$(var course_dir)/ar_tag.param.yaml" allow_substs="true"/>
           <extra_arg name="use_intra_process_comms" value="false"/>
         </composable_node>
       </load_composable_node>
-      <group if="$(eval &quot;'$(var use_ar_tag_localizer)' == 'true' and '$(var ar_tag_container)' == ''&quot;)">
-        <include file="$(find-pkg-share autoware_ar_tag_based_localizer)/launch/ar_tag_based_localizer.launch.xml">
-          <arg name="param_file" value="$(var ar_tag_param_file)"/>
-          <arg name="input_lanelet2_map" value="/map/vector_map"/>
-          <arg name="input_image" value="$(var image_topic)"/>
-          <arg name="input_camera_info" value="$(var camera_info_topic)"/>
-          <arg name="input_ekf_pose" value="/localization/pose_twist_fusion_filter/biased_pose_with_covariance"/>
-          <arg name="output_pose_with_covariance" value="/localization/pose_estimator/pose_with_covariance"/>
-        </include>
-      </group>
+      <!-- The stock launch file's node, spelled out: that file takes one
+           param file, and the course's marker settings are a second. -->
+      <node pkg="autoware_ar_tag_based_localizer" exec="autoware_ar_tag_based_localizer_node"
+            name="ar_tag_based_localizer" output="both"
+            if="$(eval &quot;'$(var use_ar_tag_localizer)' == 'true' and '$(var ar_tag_container)' == ''&quot;)">
+        <remap from="~/input/lanelet2_map" to="/map/vector_map"/>
+        <remap from="~/input/image" to="$(var image_topic)"/>
+        <remap from="~/input/camera_info" to="$(var camera_info_topic)"/>
+        <remap from="~/input/ekf_pose" to="/localization/pose_twist_fusion_filter/biased_pose_with_covariance"/>
+        <remap from="~/output/pose_with_covariance" to="/localization/pose_estimator/pose_with_covariance"/>
+        <param from="$(var ar_tag_param_file)"/>
+        <param from="$(var course_dir)/ar_tag.param.yaml" allow_substs="true"/>
+      </node>
     </group>
 
     <group>
