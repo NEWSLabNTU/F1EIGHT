@@ -109,6 +109,7 @@ class LocCheck(Node):
         course_dir = gp('course_dir')
         if not course_dir or not os.path.isdir(course_dir):
             raise RuntimeError(f'course_dir {course_dir!r} is not a directory')
+        self.course_dir = course_dir
         c = load_course(course_dir)
         self.path = None
         if os.path.exists(c.path_file):
@@ -261,14 +262,27 @@ class LocCheck(Node):
 
 
 def main(args=None):
-    rclpy.init(args=args)
+    # rclpy's own SIGINT handler shuts the context down underneath spin(), which then
+    # raises RCLError instead of returning, and the final summary was lost on the car.
+    # Take SIGINT as a plain KeyboardInterrupt and shut down ourselves, after the summary.
+    import signal
+    from rclpy.signals import SignalHandlerOptions
+    signal.signal(signal.SIGINT, signal.default_int_handler)   # even if inherited as ignored
+    signal.signal(signal.SIGTERM, signal.default_int_handler)  # a launch's second stage
+    rclpy.init(args=args, signal_handler_options=SignalHandlerOptions.NO)
     node = LocCheck()
     try:
         rclpy.spin(node)
     except (KeyboardInterrupt, ExternalShutdownException):
         pass
     finally:
-        print(f'loc_check: {node.summary()}', flush=True)
+        text = f'loc_check: {node.summary()}'
+        print(text, flush=True)
+        try:
+            with open(os.path.join(node.course_dir, 'loc_check_summary.txt'), 'a') as f:
+                f.write(text + '\n')
+        except OSError:
+            pass
         node.destroy_node()
         if rclpy.ok():
             rclpy.shutdown()
