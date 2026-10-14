@@ -58,8 +58,8 @@
   <arg name="tracker_class" default="autosdv_waypoint_lab.reference.path_tracker:PathTracker"/>
   <arg name="tracker_param_file" default="$(find-pkg-share autosdv_waypoint_lab)/config/path_tracker.param.yaml"/>
   <arg name="speed_controller_class"
-       default="autosdv_vehicle_interface.speed_controller:AckermannSpeedPID"
-       description="SpeedPID, package.module:ClassName"/>
+       default="autosdv_waypoint_lab.stub.speed_pid:SpeedPID"
+       description="your SpeedPID, package.module:ClassName (the stub keeps the motor in neutral)"/>
   <arg name="speed_controller_params" default=""
        description="its parameters, a YAML mapping string: {kp: 20.0, ki: 4.0}"/>
   <arg name="speed_controller_dt_source" default="loop"/>
