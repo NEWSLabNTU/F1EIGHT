@@ -5,6 +5,7 @@
 #   just lab2 bench tracker_class:=my_lab2.path_tracker:PathTracker
 #   just lab2 vehicle route:=hall_demo
 #   just lab2 gate submission:=~/lab2/B12345678_lab_2_1     a student's SpeedPID and calibration
+#   just lab2 vehicle route:=lab2_straight team:=~/lab2/team3   Part 2: the team's controller and lookahead
 #   just lab2 vehicle course_dir:=$PWD/courses/my_hall 'speed_controller_params:={kp: 15.0}'
 #
 # Each argument reaches play_launch as one word, so quote a value that
