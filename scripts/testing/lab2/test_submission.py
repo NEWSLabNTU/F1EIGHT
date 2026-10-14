@@ -79,7 +79,11 @@ def test_team_flat_lookahead_is_merged_into_the_package_file(tmp_path):
     doc = submission.yaml.safe_load(Path(tf[0].split(':=', 1)[1]).read_text())
     tr = doc['/**']['ros__parameters']['tracker']
     assert tr['k_lookahead'] == 0.4 and tr['lookahead_max'] == 1.5
-    assert tr['lookahead_min'] == 0.6 and 'a_lat_max' in tr   # the rest from the package
+    # the rest from the package file, whichever keys it holds (develop's has more than Lab2's)
+    base = submission.yaml.safe_load(submission.TRACKER_DEFAULT.read_text())
+    for k, v in base['/**']['ros__parameters']['tracker'].items():
+        if k not in ('k_lookahead', 'lookahead_max'):
+            assert tr[k] == v
     assert any('lookahead' in w for w in warnings)
 
 
