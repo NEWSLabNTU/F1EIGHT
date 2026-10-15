@@ -8,6 +8,6 @@ dictionary: DICT_5X5_1000     # printed family
 marker_size: 0.38             # [m] edge of the black square, measured
 mount: wall                   # default for every marker below
 markers:
-  - {id: 24, x: 0.000, y:  0.000, z: 0.250, facing_deg:   0.00000}
-  - {id: 20, x: 6.800, y: -1.000, z: 0.250, facing_deg:  30.00007}
-  - {id: 21, x: 6.800, y:  1.000, z: 0.250, facing_deg: -30.00007}
+  - {id: 24, x: 0.000, y:  0.000, z: 0.250, facing_deg:   0.0}
+  - {id: 20, x: 6.800, y: -1.000, z: 0.250, facing_deg:  30.0}
+  - {id: 21, x: 6.800, y:  1.000, z: 0.250, facing_deg: -30.0}
