@@ -11,8 +11,8 @@
       -> virtual_marker_localizer -> /localization/pose_estimator/pose_with_covariance
          (the camera and ar_tag_based_localizer, modelled: marker_sim.py)
 
-  Replaced: the ZED (launch_camera:=false), the AR-tag localizer
-  (use_ar_tag_localizer:=false), velocity_report and the PCA9685
+  Replaced: the ZED (launch_camera:=false), the marker localizer
+  (localizer:=none), velocity_report and the PCA9685
   (is_simulation:=true). The EKF, the student tracker and SpeedPID, the gate
   and the actuator's safety shell are the car's.
 -->
@@ -55,7 +55,7 @@
     <arg name="laps" value="$(var laps)"/>
     <arg name="is_simulation" value="true"/>
     <arg name="launch_camera" value="false"/>
-    <arg name="use_ar_tag_localizer" value="false"/>
+    <arg name="localizer" value="none"/>
     <arg name="launch_velocity_report" value="false"/>
     <arg name="tracker_class" value="$(var tracker_class)"/>
     <arg name="tracker_param_file" value="$(var tracker_param_file)"/>

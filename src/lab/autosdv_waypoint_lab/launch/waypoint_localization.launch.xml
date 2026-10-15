@@ -1,17 +1,21 @@
 <?xml version="1.0"?>
 <!--
   Lab 2 (waypoint) localization: ArUco markers fused with odometry in
-  Autoware's EKF. Stock Autoware nodes (the AR-tag localizer is AutoSDV's
-  fork, which adds a `dictionary` parameter), wired here instead of
-  through tier4_localization_launch, which brings NDT, pose_initializer and
-  the full sensing chain with it.
+  Autoware's EKF. The marker fixes come from marker_survey's marker_localizer
+  (marker_localizer.launch.xml), the rest are stock Autoware nodes, wired here
+  instead of through tier4_localization_launch, which brings NDT,
+  pose_initializer and the full sensing chain with it.
 
     /map/vector_map (lanelet2, marker polygons only)  <- lanelet2_map_loader
                                                          + map_projection_loader (local)
-    camera image + camera_info -> ar_tag_based_localizer
+    camera image + camera_info -> marker_localizer (COURSE_DIR/marker_map.yaml)
         -> /localization/pose_estimator/pose_with_covariance
-           (use_ar_tag_localizer:=false on the bench: virtual_marker_localizer
-            publishes this topic instead)
+           localizer:=ar_tag   the previous localizer instead, Autoware's
+                               ar_tag_based_localizer (AutoSDV's fork) on the
+                               lanelet2 map, until marker_localizer has run
+                               on the car
+           localizer:=none     nothing: on the bench virtual_marker_localizer
+                               publishes this topic
     /vehicle/status/velocity_status -> vehicle_velocity_converter
     /sensing/imu/imu_data + that twist -> gyro_odometer
         -> /localization/twist_estimator/twist_with_covariance
@@ -24,14 +28,14 @@
   in this lab depends on.
 -->
 <launch>
-  <arg name="course_dir" description="config/courses/NAME: course.yaml, lanelet2_map.osm, ar_tag.param.yaml, map_projector_info.yaml"/>
-  <arg name="use_ar_tag_localizer" default="true"
-       description="false on the bench, where virtual_marker_localizer stands in for the camera and the localizer"/>
+  <arg name="course_dir" description="config/courses/NAME: course.yaml, marker_map.yaml, lanelet2_map.osm, ar_tag.param.yaml, map_projector_info.yaml"/>
+  <arg name="localizer" default="marker"
+       description="marker (marker_survey's marker_localizer), ar_tag (the previous one), or none (the bench: virtual_marker_localizer stands in for the camera and the localizer)"/>
   <arg name="image_topic" default="/sensing/camera/zedxm/rgb/color/rect/image"/>
   <arg name="camera_info_topic" default="/sensing/camera/zedxm/rgb/color/rect/camera_info"/>
   <arg name="ar_tag_param_file" default="$(find-pkg-share autosdv_waypoint_lab)/config/ar_tag_based_localizer.param.yaml"/>
   <arg name="ar_tag_container" default=""
-       description="load the localizer into this container (the ZED's) instead of its own process; empty: its own process"/>
+       description="localizer:=ar_tag: load it into this container (the ZED's) instead of its own process; empty: its own process"/>
   <arg name="ekf_param_file" default="$(find-pkg-share autoware_launch)/config/localization/ekf_localizer.param.yaml"/>
   <arg name="use_sim_time" default="false"/>
 
@@ -59,7 +63,19 @@
 
     <group>
       <push-ros-namespace namespace="pose_estimator"/>
-      <!-- In the camera's container: a 1920x1200 RGB frame is 6.9 MB, and at
+      <!-- marker_localizer is a Python node, so it cannot join the ZED's
+           container (below) and the full-size frames reach it through DDS.
+           NOT YET MEASURED ON THE CAR: if frames go missing under load
+           ("images" in its 10 s status line well under 15 per second), see
+           the note on the container below. -->
+      <include file="$(find-pkg-share autosdv_waypoint_lab)/launch/marker_localizer.launch.xml"
+               if="$(eval &quot;'$(var localizer)' == 'marker'&quot;)">
+        <arg name="course_dir" value="$(var course_dir)"/>
+        <arg name="image_topic" value="$(var image_topic)"/>
+        <arg name="camera_info_topic" value="$(var camera_info_topic)"/>
+        <arg name="use_sim_time" value="$(var use_sim_time)"/>
+      </include>
+      <!-- localizer:=ar_tag. In the camera's container: a 1920x1200 RGB frame is 6.9 MB, and at
            15 Hz that is 100 MB/s through UDP to a separate process, which a
            best-effort subscription (the localizer's) loses fragments of under
            load. In the same process the nodes share one DDS participant and
@@ -67,7 +83,7 @@
            use_intra_process_comms: the localizer's map subscription is
            transient-local, which Humble's intra-process refuses. -->
       <load_composable_node target="$(var ar_tag_container)"
-                            if="$(eval &quot;'$(var use_ar_tag_localizer)' == 'true' and '$(var ar_tag_container)' != ''&quot;)">
+                            if="$(eval &quot;'$(var localizer)' == 'ar_tag' and '$(var ar_tag_container)' != ''&quot;)">
         <composable_node pkg="autoware_ar_tag_based_localizer" plugin="ArTagBasedLocalizer"
                          name="ar_tag_based_localizer" namespace="/localization/pose_estimator">
           <remap from="~/input/lanelet2_map" to="/map/vector_map"/>
@@ -84,7 +100,7 @@
            param file, and the course's marker settings are a second. -->
       <node pkg="autoware_ar_tag_based_localizer" exec="autoware_ar_tag_based_localizer_node"
             name="ar_tag_based_localizer" output="both"
-            if="$(eval &quot;'$(var use_ar_tag_localizer)' == 'true' and '$(var ar_tag_container)' == ''&quot;)">
+            if="$(eval &quot;'$(var localizer)' == 'ar_tag' and '$(var ar_tag_container)' == ''&quot;)">
         <remap from="~/input/lanelet2_map" to="/map/vector_map"/>
         <remap from="~/input/image" to="$(var image_topic)"/>
         <remap from="~/input/camera_info" to="$(var camera_info_topic)"/>

@@ -12,7 +12,9 @@ def on_img(m):
         cv2.imwrite(__import__('os').environ.get('DEBUG_PNG', 'tmp/synthetic_camera_debug.png'), cv2.cvtColor(a, cv2.COLOR_RGB2BGR)); st['saved'] = True
 def on_det(m): st['det'] += len(m.poses)
 def on_fix(m): st['fix'].append(m.pose.pose)
-n.create_subscription(Image, '/localization/pose_estimator/ar_tag_based_localizer/debug/image', on_img, qos_profile_sensor_data)
+loc = __import__('os').environ.get('LOCALIZER', 'marker')
+loc = 'marker_localizer' if loc == 'marker' else 'ar_tag_based_localizer'
+n.create_subscription(Image, f'/localization/pose_estimator/{loc}/debug/image', on_img, qos_profile_sensor_data)
 n.create_subscription(PoseArray, '/localization/pose_estimator/ar_tag_based_localizer/debug/detected_tag', on_det, qos_profile_sensor_data)
 n.create_subscription(PoseWithCovarianceStamped, '/localization/pose_estimator/pose_with_covariance', on_fix, qos_profile_sensor_data)
 t0 = time.time()

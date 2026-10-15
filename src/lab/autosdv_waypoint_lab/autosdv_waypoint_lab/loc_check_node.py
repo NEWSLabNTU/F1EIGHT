@@ -5,6 +5,8 @@ Publishes, for RViz (`just lab2 loc-check` opens it):
   /lab2/course_path   nav_msgs/Path, the whole course from path.csv (latched)
   /lab2/trail         nav_msgs/Path, where the localizer has put the car so far
   /lab2/fixes         geometry_msgs/PoseArray, the recent marker fixes
+  /lab2/markers       visualization_msgs/MarkerArray, the course's markers from
+                      marker_map.yaml, each with its id (latched)
 
 and logs a summary every 10 s and on exit:
 
@@ -34,9 +36,17 @@ from rclpy.executors import ExternalShutdownException
 from rclpy.node import Node
 from rclpy.qos import DurabilityPolicy, QoSProfile, ReliabilityPolicy, qos_profile_sensor_data
 from sensor_msgs.msg import Imu
+from visualization_msgs.msg import Marker as MarkerMsg, MarkerArray
+
+from marker_survey.core.se3 import matrix_to_quat
 
 from autosdv_waypoint_lab.course import load_course
 from autosdv_waypoint_lab.path import CoursePath, Path, load_csv
+
+
+def quaternion_from_axes(xa, ya, za):
+    """(x, y, z, w) of the rotation whose columns are the axes xa, ya, za."""
+    return tuple(float(v) for v in matrix_to_quat(np.column_stack([xa, ya, za])))
 
 
 def stamp_sec(s) -> float:
@@ -111,6 +121,7 @@ class LocCheck(Node):
             raise RuntimeError(f'course_dir {course_dir!r} is not a directory')
         self.course_dir = course_dir
         c = load_course(course_dir)
+        self.course = c
         self.path = None
         if os.path.exists(c.path_file):
             x, y, v = load_csv(c.path_file, c.v_ref)
@@ -127,6 +138,7 @@ class LocCheck(Node):
         latched = QoSProfile(depth=1, reliability=ReliabilityPolicy.RELIABLE,
                              durability=DurabilityPolicy.TRANSIENT_LOCAL)
         self.pub_path = self.create_publisher(PathMsg, '/lab2/course_path', latched)
+        self.pub_markers = self.create_publisher(MarkerArray, '/lab2/markers', latched)
         self.pub_trail = self.create_publisher(PathMsg, '/lab2/trail', 1)
         self.pub_fixes = self.create_publisher(PoseArray, '/lab2/fixes', 1)
         self.create_subscription(Odometry, '/localization/kinematic_state', self.on_odom, 10)
@@ -158,6 +170,34 @@ class LocCheck(Node):
         self.gap_t = (0.0, 0.0)         # longest gap: seconds, metres
         self.off_path = []
         self.publish_path()
+        self.publish_markers()
+
+    def publish_markers(self):
+        arr = MarkerArray()
+        stamp = self.get_clock().now().to_msg()
+        for i, m in enumerate(self.course.markers):
+            size = m.size or self.course.marker_size
+            board = MarkerMsg()
+            board.header.frame_id, board.header.stamp = 'map', stamp
+            board.ns, board.id, board.type = 'markers', 2 * i, MarkerMsg.CUBE
+            board.pose.position.x, board.pose.position.y, board.pose.position.z = m.x, m.y, m.z
+            q = quaternion_from_axes(*m.axes())
+            (board.pose.orientation.x, board.pose.orientation.y,
+             board.pose.orientation.z, board.pose.orientation.w) = q
+            board.scale.x, board.scale.y, board.scale.z = size, size, 0.01
+            board.color.r = board.color.g = board.color.b = 0.9
+            board.color.a = 1.0
+            label = MarkerMsg()
+            label.header = board.header
+            label.ns, label.id, label.type = 'markers', 2 * i + 1, MarkerMsg.TEXT_VIEW_FACING
+            label.pose.position.x, label.pose.position.y = m.x, m.y
+            label.pose.position.z = m.z + 0.5 * size + 0.15
+            label.pose.orientation.w = 1.0
+            label.scale.z = 0.2
+            label.color.r = label.color.g = label.color.b = label.color.a = 1.0
+            label.text = str(m.id)
+            arr.markers += [board, label]
+        self.pub_markers.publish(arr)
 
     def publish_path(self):
         if self.path is None:

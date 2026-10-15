@@ -1,4 +1,4 @@
-# Localization for the waypoint lab: Autoware's EKF fed by the AR-tag
+# Localization for the waypoint lab: Autoware's EKF fed by the marker
 # localizer and gyro_odometer. Three conditions, all required:
 #   - /localization/kinematic_state keeps arriving (vehicle_cmd_gate withholds
 #     output without it), and map -> base_link exists: rate checks from

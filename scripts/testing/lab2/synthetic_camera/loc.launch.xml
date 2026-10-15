@@ -1,5 +1,6 @@
 <launch>
   <arg name="course_dir"/>
+  <arg name="localizer" default="marker" description="marker (marker_localizer) or ar_tag"/>
   <group><push-ros-namespace namespace="map"/>
     <node pkg="autoware_map_projection_loader" exec="autoware_map_projection_loader_node" name="map_projection_loader">
       <param name="map_projector_info_path" value="$(var course_dir)/map_projector_info.yaml"/>
@@ -13,7 +14,15 @@
       <remap from="output/lanelet2_map" to="vector_map"/>
     </node>
   </group>
-  <group><push-ros-namespace namespace="localization/pose_estimator"/>
+  <!-- the stack's own localizer launch file, on the fake camera -->
+  <include file="$(find-pkg-share autosdv_waypoint_lab)/launch/marker_localizer.launch.xml"
+           if="$(eval &quot;'$(var localizer)' == 'marker'&quot;)">
+    <arg name="course_dir" value="$(var course_dir)"/>
+    <arg name="image_topic" value="/fake/image"/>
+    <arg name="camera_info_topic" value="/fake/camera_info"/>
+    <arg name="detect_scale" value="$(env DETECT_SCALE 0.5)"/>
+  </include>
+  <group if="$(eval &quot;'$(var localizer)' == 'ar_tag'&quot;)"><push-ros-namespace namespace="localization/pose_estimator"/>
     <node pkg="autoware_ar_tag_based_localizer" exec="autoware_ar_tag_based_localizer_node"
           name="ar_tag_based_localizer" output="both">
       <remap from="~/input/lanelet2_map" to="/map/vector_map"/>

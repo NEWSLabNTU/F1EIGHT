@@ -65,10 +65,12 @@ COMMON_NODES = [
     'trajectory_follower_control_cmd', 'transform_map_to_base_link',
     'vehicle_status_steering_status', 'vehicle_status_velocity_status')]
 MODE_NODES = {
-    'vehicle': ['/autosdv/velocity_report_node', '/sensing/camera/zedxm/zedxm',
-                '/localization/pose_estimator/ar_tag_based_localizer'],
+    'vehicle': ['/autosdv/velocity_report_node', '/sensing/camera/zedxm/zedxm'],
     'bench': ['/vehicle_bench_plant', '/localization/pose_estimator/virtual_marker_localizer'],
 }
+# on the vehicle one of these publishes the marker fixes (localizer:=marker or ar_tag)
+VEHICLE_LOCALIZERS = ['/localization/pose_estimator/marker_localizer',
+                      '/localization/pose_estimator/ar_tag_based_localizer']
 # nodes that must NOT run: they would be a second publisher of a lab topic
 FORBIDDEN = ['/control/trajectory_follower/controller_node_exe', '/dead_reckon_odometry',
              '/board_pursuit_planner', '/speed_step_planner']
@@ -154,6 +156,10 @@ def main():
 
     want = COMMON_NODES + MODE_NODES[mode]
     missing = [w for w in want if w not in names]
+    if mode == 'vehicle':
+        want = want + [VEHICLE_LOCALIZERS[0]]
+        if not any(n in names for n in VEHICLE_LOCALIZERS):
+            missing.append(' or '.join(VEHICLE_LOCALIZERS))
     out(FAIL if missing else PASS, 'nodes',
         f'{len(want) - len(missing)}/{len(want)} required nodes alive'
         + (f'; missing {missing}' if missing else ''))

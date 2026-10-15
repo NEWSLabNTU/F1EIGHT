@@ -1,0 +1,46 @@
+<?xml version="1.0"?>
+<!--
+  Lab 2 marker fixes: marker_survey's marker_localizer (3d mode, wall boards)
+  on the course's marker_map.yaml, wired into Autoware's EKF the way the
+  ar_tag localizer was:
+
+    camera image + camera_info -> marker_localizer
+        -> /localization/pose_estimator/pose_with_covariance  (ekf_localizer's pose input)
+    /localization/pose_twist_fusion_filter/biased_pose_with_covariance -> its gate
+
+  Included by waypoint_localization.launch.xml; on its own it localizes a bag
+  or a synthetic recording (use_sim_time:=true process_all:=true and the
+  recording's topics). Layout as marker_survey's examples/wall_course, with
+  the node started directly so that config/marker_localizer.param.yaml can
+  set the parameters the stock launch file has no argument for.
+
+    /localization/pose_estimator/marker_localizer/debug/image   what it saw and used
+    ros2 param set /localization/pose_estimator/marker_localizer enabled false
+-->
+<launch>
+  <arg name="course_dir" description="the course: its marker_map.yaml is the map"/>
+  <arg name="image_topic" default="/sensing/camera/zedxm/rgb/color/rect/image"/>
+  <arg name="camera_info_topic" default="/sensing/camera/zedxm/rgb/color/rect/camera_info"/>
+  <arg name="prior_topic" default="/localization/pose_twist_fusion_filter/biased_pose_with_covariance"
+       description="the EKF's pose (PoseWithCovarianceStamped), for the gate"/>
+  <arg name="pose_topic" default="/localization/pose_estimator/pose_with_covariance"/>
+  <arg name="param_file" default="$(find-pkg-share autosdv_waypoint_lab)/config/marker_localizer.param.yaml"/>
+  <!-- the ZED's 1920 x 1200 image: find the markers in a half-size copy, refine
+       their corners on the full one (about a fifth of the detection time) -->
+  <arg name="detect_scale" default="0.5" description="1.0 for a camera smaller than 1920 x 1200"/>
+  <arg name="use_sim_time" default="false"/>
+  <arg name="process_all" default="false" description="true for a recording: every frame, in order"/>
+
+  <node pkg="marker_localizer" exec="marker_localizer" name="marker_localizer"
+        namespace="/localization/pose_estimator" output="screen">
+    <param from="$(var param_file)"/>
+    <param name="marker_map" value="$(var course_dir)/marker_map.yaml"/>
+    <param name="image_topic" value="$(var image_topic)"/>
+    <param name="camera_info_topic" value="$(var camera_info_topic)"/>
+    <param name="prior_topic" value="$(var prior_topic)"/>
+    <param name="pose_topic" value="$(var pose_topic)"/>
+    <param name="detect_scale" value="$(var detect_scale)"/>
+    <param name="process_all" value="$(var process_all)"/>
+    <param name="use_sim_time" value="$(var use_sim_time)"/>
+  </node>
+</launch>

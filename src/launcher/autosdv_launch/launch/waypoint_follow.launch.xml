@@ -3,7 +3,7 @@
   Lab 2: ArUco localization and waypoint following on the vehicle.
   `just lab2 vehicle`.
 
-    ZED left image -> ar_tag_based_localizer -> pose fix ┐
+    ZED left image -> marker_localizer -> pose fix ┐
     velocity_report + ZED IMU -> gyro_odometer -> twist ─┴> ekf_localizer
                                                   -> /localization/kinematic_state
     course path.csv -> waypoint_path_publisher -> /planning/trajectory
@@ -16,7 +16,7 @@
   place:
 
     zed_aruco.launch.xml                     the ZED: rectified image + IMU only
-    waypoint_localization.launch.xml         marker map, AR-tag localizer, EKF,
+    waypoint_localization.launch.xml         marker map, marker localizer, EKF,
                                              gyro odometer, start_pose_init
     autosdv_pursuit_control_component        the gate, the operation mode
                                              manager, the selector; NOT
@@ -68,8 +68,8 @@
   <!-- Hardware switches, for the vehicle bench (waypoint_follow_bench.launch.xml).
        All default to the car. -->
   <arg name="launch_camera" default="true" description="false: no ZED driver"/>
-  <arg name="use_ar_tag_localizer" default="true"
-       description="false: something else publishes the marker fixes (the bench's virtual_marker_localizer)"/>
+  <arg name="localizer" default="marker"
+       description="marker: marker_survey's marker_localizer; ar_tag: the previous AR-tag localizer; none: something else publishes the marker fixes (the bench's virtual_marker_localizer)"/>
   <arg name="launch_velocity_report" default="true"/>
 
   <arg name="diagnostic_graph_aggregator_graph_path"
@@ -133,13 +133,13 @@
     <arg name="actuator_param_overrides" value="$(var actuator_param_overrides)"/>
   </include>
 
-  <!-- with the camera, the localizer runs in its container, so the images
+  <!-- with the camera, localizer:=ar_tag runs in its container, so the images
        never go through the network stack -->
   <let name="ar_tag_container" value="/sensing/camera/zedxm/zed_container" if="$(var launch_camera)"/>
   <let name="ar_tag_container" value="" unless="$(var launch_camera)"/>
   <include file="$(find-pkg-share autosdv_waypoint_lab)/launch/waypoint_localization.launch.xml">
     <arg name="course_dir" value="$(var course_dir)"/>
-    <arg name="use_ar_tag_localizer" value="$(var use_ar_tag_localizer)"/>
+    <arg name="localizer" value="$(var localizer)"/>
     <arg name="ar_tag_container" value="$(var ar_tag_container)"/>
   </include>
 

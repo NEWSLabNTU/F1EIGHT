@@ -5,19 +5,24 @@
 Run on the car, stack up, NOT engaged, car still. Collects for `--duration`
 seconds and reports:
 
-  fixes      the AR-tag localizer's accepted fixes: rate, and their mean and
+  fixes      the marker localizer's accepted fixes: rate, and their mean and
              spread against the start box pose in course.yaml. A mean far from
              the box means the box or the markers are surveyed wrong; a large
              spread means the markers are too far or too oblique for the camera.
 
-  markers    every detection the localizer drew (its debug/detected_tag, each
-             detection placed on the map with the current EKF pose), matched
-             to the nearest surveyed marker. A marker whose detections sit
-             consistently away from its surveyed position, while the others
-             agree, is surveyed wrong: re-measure it.
+  markers    with localizer:=ar_tag only: every detection the localizer drew
+             (its debug/detected_tag, each detection placed on the map with
+             the current EKF pose), matched to the nearest surveyed marker. A
+             marker whose detections sit consistently away from its surveyed
+             position, while the others agree, is surveyed wrong: re-measure
+             it. marker_localizer publishes no per-marker detections: it fits
+             all markers in view together and leaves out one that disagrees,
+             which its debug image shows in orange and its log names
+             ("outlier"); watch /localization/pose_estimator/marker_localizer/
+             debug/image instead.
 
-The localizer only publishes debug/detected_tag while something subscribes,
-which this tool does. Nothing here changes the stack.
+The ar_tag localizer only publishes debug/detected_tag while something
+subscribes, which this tool does. Nothing here changes the stack.
 """
 
 import argparse
@@ -90,7 +95,9 @@ def report(course, landmarks, fixes, detections, duration):
     for x, y, z in detections:
         mid, lm = min(flat, key=lambda e: math.hypot(e[1].position[0] - x, e[1].position[1] - y))
         per.setdefault(mid, []).append((x - lm.position[0], y - lm.position[1], z - lm.position[2]))
-    lines.append(f'{len(detections)} marker detections')
+    lines.append(f'{len(detections)} marker detections' + (
+        '' if detections else ' (none with marker_localizer: watch its debug image for '
+        'orange, left-out markers)'))
     for mid in sorted(per, key=lambda k: int(k) if k.isdigit() else k):
         d = per[mid]
         dx, sx = mean_std([e[0] for e in d])

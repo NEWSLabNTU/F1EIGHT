@@ -50,7 +50,7 @@ Visualization Manager:
         Durability Policy: Transient Local
         History Policy: Keep Last
         Reliability Policy: Reliable
-        Value: /localization/pose_estimator/ar_tag_based_localizer/debug/mapped_tag
+        Value: /lab2/markers
     - Class: rviz_default_plugins/PoseArray
       Name: Marker fixes
       Enabled: true
@@ -90,7 +90,7 @@ Visualization Manager:
         Durability Policy: Volatile
         History Policy: Keep Last
         Reliability Policy: Best Effort
-        Value: /localization/pose_estimator/ar_tag_based_localizer/debug/image
+        Value: /localization/pose_estimator/marker_localizer/debug/image
   Enabled: true
   Global Options:
     Background Color: 30; 30; 34

@@ -1,0 +1,44 @@
+# Lab 2 (waypoint): marker_survey's marker_localizer with the lab's
+# parameters (marker_survey docs/integration.md lists them all). The map, its
+# dictionary and marker sizes come from the course's marker_map.yaml; the
+# topics from launch/marker_localizer.launch.xml.
+/**:
+  ros__parameters:
+    # Wall boards seen by a forward camera: the full 6-DoF fix.
+    mode: 3d
+    base_frame: base_link
+
+    # The gate, against the EKF's biased pose (PoseWithCovarianceStamped).
+    # A fix more than gate_distance or gate_angle_deg from it is dropped: a
+    # misread id, a marker surveyed in the wrong place, a far marker whose
+    # orientation is badly estimated. 1 m is the ar_tag localizer's
+    # ekf_position_tolerance the lab ran with; it also bounds how far from the
+    # taped start box the car may be placed (start_pose_init seeds the EKF
+    # there). require_prior: no fix at all before the EKF has a pose, as with
+    # the ar_tag localizer, so an unseeded EKF is never handed an ungated fix.
+    prior_type: pose
+    require_prior: true
+    prior_tolerance: 0.5        # [s]
+    gate_distance: 1.0          # [m]
+    gate_angle_deg: 15.0
+
+    # No range limit (the ar_tag localizer ignored markers beyond 5 m): the
+    # fit weighs every marker by its corners, a far marker adds to a near
+    # one's fix, and a fix that is still uncertain is dropped by
+    # max_position_sd below. On marker_survey's rendered wall course through
+    # launch/marker_localizer.launch.xml, a 5 m limit gave 295 fixes of 426
+    # frames, mean 1.4 cm, max 16.7 cm; no limit 391 fixes, 0.9 cm, 7.8 cm.
+    max_distance: 0.0
+
+    # Covariance floors. The fit's own covariance is a few cm and a fraction
+    # of a degree; the EKF and the bench (virtual_marker_localizer) were
+    # tuned with the ar_tag localizer's constant 0.05 m^2 and 0.01 rad^2,
+    # looser than a single fix's error at 3 m, so that the EKF averages over
+    # a few frames instead of jumping to each one. These floors keep those
+    # weights: 0.22^2 = 0.048 m^2, (5.7 deg)^2 = 0.0099 rad^2. Lower them once
+    # the EKF is retuned on the car.
+    min_sd: 0.22                # [m]
+    min_sd_deg: 5.7
+    # a fix whose fit alone is worse than about 0.25 m (the default limit)
+    # is not published; with the floor above that is sqrt(0.22^2 + 0.25^2)
+    max_position_sd: 0.33       # [m]
