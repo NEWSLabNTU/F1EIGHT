@@ -23,17 +23,56 @@ def test_osm_round_trip_gives_the_marker_pose_back(yaw):
     assert lm.x_axis == pytest.approx(viewer_right, abs=1e-3)
 
 
+MAP_HEAD = 'version: 1\nframe_id: map\ndictionary: DICT_5X5_1000\nmarker_size: 0.38\nmount: wall\n'
+
+
+def test_markers_in_course_yaml_are_refused_with_the_import_command(tmp_path):
+    (tmp_path / 'course.yaml').write_text('markers:\n  - {id: 1, x: 0, y: 0, yaw: 0}\n')
+    with pytest.raises(ValueError, match='marker_map_import'):
+        load_course(str(tmp_path))
+
+
 def test_duplicate_ids_are_refused(tmp_path):
-    (tmp_path / 'course.yaml').write_text(
-        'markers:\n  - {id: 1, x: 0, y: 0, yaw: 0}\n  - {id: 1, x: 1, y: 0, yaw: 0}\n')
+    (tmp_path / 'course.yaml').write_text('laps: 1\n')
+    (tmp_path / 'marker_map.yaml').write_text(
+        MAP_HEAD + 'markers:\n  - {id: 1, x: 0, y: 0, z: 0.25}\n  - {id: 1, x: 1, y: 0, z: 0.25}\n')
     with pytest.raises(ValueError):
         load_course(str(tmp_path))
 
 
 def test_unknown_dictionary_is_refused(tmp_path):
-    (tmp_path / 'course.yaml').write_text('dictionary: DICT_4X4_50\nmarkers: []\n')
+    (tmp_path / 'course.yaml').write_text('laps: 1\n')
+    (tmp_path / 'marker_map.yaml').write_text(
+        MAP_HEAD.replace('DICT_5X5_1000', 'nonsense_family') + 'markers: []\n')
     with pytest.raises(ValueError):
         load_course(str(tmp_path))
+
+
+def test_a_course_without_a_marker_map_has_no_markers(tmp_path):
+    (tmp_path / 'course.yaml').write_text('laps: 1\n')
+    assert load_course(str(tmp_path)).markers == []
+
+
+def test_markers_come_from_the_marker_map_with_their_tilt(tmp_path):
+    (tmp_path / 'course.yaml').write_text('laps: 1\n')
+    (tmp_path / 'marker_map.yaml').write_text(
+        MAP_HEAD + 'markers:\n'
+        '  - {id: 3, x: 1.0, y: 2.0, z: 0.3, facing_deg: 30.0, lean_deg: 4.0, turn_deg: -2.0}\n'
+        '  - {id: 4, x: 2.0, y: 0.0, z: 0.3, facing_deg: 90.0, size: 0.25}\n')
+    c = load_course(str(tmp_path))
+    assert (c.marker_size, c.dictionary) == (0.38, 'DICT_5X5_1000')
+    m3, m4 = c.markers
+    assert (m3.yaw, m3.pitch, m3.roll) == pytest.approx(
+        (math.radians(30.0), math.radians(4.0), math.radians(-2.0)))
+    assert (m3.size, m4.size) == (0.0, 0.25)
+    # the corners are the map file's own
+    from marker_survey.core import marker_map as mm
+    mmap = mm.load(str(tmp_path / 'marker_map.yaml'))
+    for m in (m3, m4):
+        got = m.corners(c.marker_size)          # bl, br, tr, tl
+        want = mmap.corners_of(m.id)            # OpenCV: tl, tr, br, bl
+        for g, w in zip(got, (want[3], want[2], want[1], want[0])):
+            assert g == pytest.approx(tuple(w), abs=1e-9)
 
 
 def test_ar_tag_params_name_a_shipped_dictionary_file():
@@ -47,9 +86,17 @@ def test_ar_tag_params_name_a_shipped_dictionary_file():
     assert p['target_tag_ids'] == ['24']
 
 
-def test_ar_tag_params_pass_an_aruco_name_through():
+def test_ar_tag_params_translate_an_aruco_family():
     c = course([Marker(1, 0, 0, 0, 0)])
-    assert 'dictionary: "ALL_DICTS"' in make_ar_tag_params(c)
+    c.dictionary = 'DICT_ARUCO_MIP_36h12'
+    assert 'dictionary: "ARUCO_MIP_36h12"' in make_ar_tag_params(c)
+
+
+def test_ar_tag_params_refuse_a_family_the_fallback_cannot_decode():
+    c = course([Marker(1, 0, 0, 0, 0)])
+    c.dictionary = 'DICT_4X4_50'
+    with pytest.raises(ValueError):
+        make_ar_tag_params(c)
 
 
 def test_shipped_dictionary_files_exist():

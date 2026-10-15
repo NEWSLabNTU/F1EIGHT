@@ -8,15 +8,16 @@ without a ROS environment.
 the bag's metadata.yaml (rosbag2 on Humble has no custom-data field). Readers
 take the topic first and fall back to the file.
 
-Course hashes. A surveyed course.yaml differs from the template in its
-markers (the survey measures them), so a hash of the whole file cannot tell a
-surveyed course from a doctored one. Two hashes are stored:
+Course hashes. A surveyed course differs from the template in its markers
+(the survey measures them and writes marker_map.yaml), so a hash of the whole
+directory cannot tell a surveyed course from a doctored one. Two hashes are
+stored:
 
     route_hash    path.csv bytes + the fields that define the ROUTE (closed,
                   laps, v_ref, start_pose, path name). A survey leaves these
                   alone; editing the path, the speed or the lap count changes
                   it. This is what the checker compares.
-    course_hash   course.yaml bytes + path.csv bytes, for the record.
+    course_hash   course.yaml + path.csv + marker_map.yaml bytes, for the record.
 """
 
 import hashlib
@@ -80,6 +81,8 @@ def course_hashes(course_dir: str) -> Dict[str, str]:
     d = yaml.safe_load(yaml_bytes) or {}
     path_name = str(d.get('path', 'path.csv'))
     path_bytes = _read(os.path.join(course_dir, path_name))
+    map_file = os.path.join(course_dir, 'marker_map.yaml')
+    map_bytes = _read(map_file) if os.path.exists(map_file) else b''
     sp = d.get('start_pose') or {}
     route = {
         'path': path_name,
@@ -93,7 +96,7 @@ def course_hashes(course_dir: str) -> Dict[str, str]:
     h.update(json.dumps(route, sort_keys=True).encode())
     return {
         'route_hash': h.hexdigest(),
-        'course_hash': hashlib.sha256(yaml_bytes + path_bytes).hexdigest(),
+        'course_hash': hashlib.sha256(yaml_bytes + path_bytes + map_bytes).hexdigest(),
         'route': route,
     }
 

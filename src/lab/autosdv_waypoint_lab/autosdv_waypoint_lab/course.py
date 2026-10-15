@@ -2,10 +2,13 @@
 
 A course is a directory under config/courses/<name>/:
 
-    course.yaml           the TA's description (below)
+    course.yaml           the TA's description of the route (below)
     path.csv              x, y[, v] waypoints in the hall frame
-    lanelet2_map.osm      GENERATED from course.yaml by `make_course_map`
-    ar_tag.param.yaml     GENERATED likewise: the localizer's marker settings
+    marker_map.yaml       the markers: marker_survey's map file, written by
+                          `just lab2 survey`, read as it is by marker_localizer
+    lanelet2_map.osm      GENERATED from marker_map.yaml by `make_course_map`
+    ar_tag.param.yaml     GENERATED likewise: the marker settings of the
+                          fallback localizer (localizer:=ar_tag)
     map_projector_info.yaml   projector_type: local (hall metres, no GNSS)
 
 course.yaml:
@@ -15,33 +18,42 @@ course.yaml:
     laps: 3
     v_ref: 0.8            # [m/s] speed for rows without a v column
     start_pose: {x: 0.0, y: 0.0, yaw: 0.0}   # the taped start box, base_link
-    marker_size: 0.25     # [m] black edge, what the detector is told
-    dictionary: ALL_DICTS # the printed markers' family (below)
-    marker_height: 0.25   # [m] marker centre above the floor (default for all)
-    markers:              # yaw: the direction the marker FACES (its normal)
-      - {id: 0, x: 6.0, y: 0.0, yaw: 3.1416}
-      - {id: 1, x: 3.0, y: 2.5, yaw: -1.5708, z: 0.30}
-      - {id: 2, x: 0.0, y: 4.0, yaw: 0.0, pitch: 0.05, roll: -0.02}
 
-`pitch` and `roll` (radians, default 0) describe a board that does not stand
-exactly upright, as `just lab2 survey` measures it: pitch is its top leaning
-back, away from the viewer; roll is the board turned in its own plane,
-counter-clockwise as seen from the front. The localizer reads a marker's full
-orientation from its corners, so a map that leaves a measured tilt out puts
-every fix from that marker off by about range x tilt (mostly in height).
+marker_map.yaml (marker_survey's README, "The marker map file"):
 
-The map is what Autoware's ar_tag_based_localizer reads: one lanelet2
+    version: 1
+    frame_id: map
+    dictionary: DICT_5X5_1000   # the printed family
+    marker_size: 0.38           # [m] edge of the black square, measured
+    mount: wall
+    markers:                    # facing_deg: the direction the board FACES
+      - {id: 24, x: 0.000, y: 0.000, z: 0.250, facing_deg: 0.0}
+      - {id: 20, x: 6.800, y: -1.000, z: 0.250, facing_deg: 30.0, lean_deg: 2.1}
+
+Here a marker is kept as `Marker` (yaw, pitch, roll in radians): yaw is the
+direction it faces, pitch its top leaning back, away from the viewer, roll
+the board turned in its own plane, counter-clockwise as seen from the front;
+for a wall board these are the map file's facing_deg, lean_deg and turn_deg.
+The localizer reads a marker's full orientation from its corners, so a map
+that leaves a measured tilt out puts every fix from that marker off by about
+range x tilt (mostly in height).
+
+A course directory from before marker_map.yaml, with its markers in
+course.yaml, converts once with
+`ros2 run marker_survey marker_map_import course course.yaml marker_map.yaml`.
+
+The OSM is what Autoware's ar_tag_based_localizer reads: one lanelet2
 `pose_marker` polygon per marker (subtype apriltag_16h5, the subtype the stock
 node asks the landmark manager for), corners counter-clockwise as seen from
 the front -- bottom-left, bottom-right, top-right, top-left -- so that the
 landmark manager's axes come out as the ArUco marker's: x to the viewer's
 right, y up, z out of the marker towards the viewer.
 
-`dictionary` is what the localizer decodes with. The aruco library's own
-families go by name: ALL_DICTS (the default; covers ARUCO_MIP_36h12) or one of
-them, e.g. ARUCO_MIP_36h12. An OpenCV family, e.g. DICT_5X5_1000 (the LCTK
-calibration boards), is not in that library; it is decoded from a file under
-config/dictionaries/, and only the families shipped there are accepted.
+The fallback localizer decodes with the aruco library, whose own families go
+by name (ARUCO_MIP_36h12, TAG36h11, ...); the map's dictionary is translated
+to one of them. An OpenCV family, e.g. DICT_5X5_1000 (the lab's boards), is
+not in that library; it is decoded from a file under config/dictionaries/,
+and only the families shipped there work with the fallback.
 """
 
 from dataclasses import dataclass, field
@@ -52,6 +64,9 @@ import xml.etree.ElementTree as ET
 
 import yaml
 
+from marker_survey.core import marker_map as mm
+
+MARKER_MAP_FILE = 'marker_map.yaml'
 LANDMARK_TYPE = 'pose_marker'
 LANDMARK_SUBTYPE = 'apriltag_16h5'
 
@@ -62,6 +77,15 @@ ARUCO_DICTIONARIES = (
     'TAG36h11', 'TAG36h10', 'CHILITAGS')
 # OpenCV dictionaries exported to config/dictionaries/<name>.dict.
 SHIPPED_DICTIONARIES = ('DICT_5X5_1000',)
+# A marker map's OpenCV dictionary as the aruco library names it.
+ARUCO_NAMES = {
+    'DICT_ARUCO_MIP_36h12': 'ARUCO_MIP_36h12',
+    'DICT_ARUCO_ORIGINAL': 'ARUCO',
+    'DICT_APRILTAG_16h5': 'TAG16h5',
+    'DICT_APRILTAG_25h9': 'TAG25h9',
+    'DICT_APRILTAG_36h10': 'TAG36h10',
+    'DICT_APRILTAG_36h11': 'TAG36h11',
+}
 
 
 @dataclass
@@ -73,6 +97,23 @@ class Marker:
     yaw: float          # facing direction
     pitch: float = 0.0  # top leaning back, away from the viewer
     roll: float = 0.0   # turned in its own plane, counter-clockwise from the front
+    size: float = 0.0   # [m] black square, if not the course's marker_size
+
+    @classmethod
+    def from_map(cls, m: 'mm.MapMarker', size: float = 0.0) -> 'Marker':
+        """A marker of marker_map.yaml, its rotation read back as yaw, pitch and roll
+        (exact for any board that is not lying flat)."""
+        R = m.rotation()
+        z = R[:, 2]
+        pitch = math.asin(max(-1.0, min(1.0, float(z[2]))))
+        yaw = math.atan2(float(z[1]), float(z[0]))
+        cy, sy, cp, sp = math.cos(yaw), math.sin(yaw), math.cos(pitch), math.sin(pitch)
+        right = (-sy, cy, 0.0)
+        y1 = (-sp * cy, -sp * sy, cp)          # the upright board's up, leaned back
+        x = R[:, 0]
+        roll = math.atan2(float(sum(a * b for a, b in zip(x, y1))),
+                          float(sum(a * b for a, b in zip(x, right))))
+        return cls(m.id, m.x, m.y, m.z, yaw, pitch, roll, size)
 
     def axes(self):
         """The marker's x (viewer's right), y (up) and z (facing) axes in the course frame:
@@ -91,7 +132,7 @@ class Marker:
 
     def corners(self, size: float) -> List[Tuple[float, float, float]]:
         """bottom-left, bottom-right, top-right, top-left, seen from the front."""
-        h = size / 2.0
+        h = (self.size or size) / 2.0
         xa, ya, _ = self.axes()
         out = []
         for u, w in ((-h, -h), (h, -h), (h, h), (-h, h)):
@@ -116,7 +157,11 @@ class Course:
     start_pose: Pose2D
     marker_size: float
     markers: List[Marker] = field(default_factory=list)
-    dictionary: str = 'ALL_DICTS'
+    dictionary: str = 'DICT_5X5_1000'
+
+    @property
+    def marker_map_file(self) -> str:
+        return os.path.join(self.directory, MARKER_MAP_FILE)
 
     @property
     def map_file(self) -> str:
@@ -127,24 +172,31 @@ class Course:
         return os.path.join(self.directory, 'ar_tag.param.yaml')
 
 
+def load_markers(directory: str):
+    """(markers, marker_size, dictionary) of a course's marker_map.yaml; no markers if
+    the course has none yet. The dictionary is OpenCV's name (DICT_*)."""
+    path = os.path.join(directory, MARKER_MAP_FILE)
+    if not os.path.exists(path):
+        return [], 0.25, 'DICT_5X5_1000'
+    m = mm.load(path)     # MarkerMapError (a ValueError) names the line and field
+    if m.frame_id != 'map':
+        raise ValueError(f'{path}: frame_id {m.frame_id!r}; the lab localizes in map')
+    size = float(m.marker_size)
+    markers = [Marker.from_map(k, m.size_of(k.id) if k.size is not None else 0.0)
+               for k in m.markers]
+    return markers, size, mm.opencv_dictionary_name(m.dictionary)
+
+
 def load_course(directory: str) -> Course:
     with open(os.path.join(directory, 'course.yaml')) as f:
         d = yaml.safe_load(f) or {}
-    height = float(d.get('marker_height', 0.25))
-    markers = []
-    seen = set()
-    for m in d.get('markers', []) or []:
-        mid = int(m['id'])
-        if mid in seen:
-            raise ValueError(f'{directory}: marker id {mid} appears twice; ids must be unique')
-        seen.add(mid)
-        markers.append(Marker(mid, float(m['x']), float(m['y']),
-                              float(m.get('z', height)), float(m['yaw']),
-                              float(m.get('pitch', 0.0)), float(m.get('roll', 0.0))))
-    dictionary = str(d.get('dictionary', 'ALL_DICTS'))
-    if dictionary not in ARUCO_DICTIONARIES + SHIPPED_DICTIONARIES:
-        raise ValueError(f'{directory}: unknown dictionary {dictionary!r}; one of '
-                         f'{", ".join(ARUCO_DICTIONARIES + SHIPPED_DICTIONARIES)}')
+    if 'markers' in d:
+        raise ValueError(
+            f'{directory}/course.yaml lists markers: they now live in {MARKER_MAP_FILE}. '
+            f'Convert them once with `ros2 run marker_survey marker_map_import course '
+            f'{directory}/course.yaml {directory}/{MARKER_MAP_FILE} [--dictionary DICT_5X5_1000]`, '
+            f'then delete marker_size, dictionary, marker_height and markers from course.yaml')
+    markers, marker_size, dictionary = load_markers(directory)
     sp = d.get('start_pose') or {}
     return Course(
         directory=directory,
@@ -154,26 +206,35 @@ def load_course(directory: str) -> Course:
         v_ref=float(d.get('v_ref', 0.8)),
         start_pose=Pose2D(float(sp.get('x', 0.0)), float(sp.get('y', 0.0)),
                           float(sp.get('yaw', 0.0))),
-        marker_size=float(d.get('marker_size', 0.25)),
+        marker_size=marker_size,
         dictionary=dictionary,
         markers=markers)
 
 
 # ------------------------------------------------- the localizer's markers
 
+def ar_tag_dictionary(dictionary: str) -> str:
+    """The fallback localizer's `dictionary` for an OpenCV dictionary name."""
+    if dictionary in SHIPPED_DICTIONARIES:
+        return ('$(find-pkg-share autosdv_waypoint_lab)/config/dictionaries/'
+                f'{dictionary}.dict')
+    if dictionary in ARUCO_NAMES:
+        return ARUCO_NAMES[dictionary]
+    if dictionary in ARUCO_DICTIONARIES:
+        return dictionary
+    raise ValueError(f'{dictionary}: the ar_tag fallback cannot decode it (it knows '
+                     f'{", ".join(SHIPPED_DICTIONARIES + tuple(ARUCO_NAMES))})')
+
+
 def make_ar_tag_params(course: Course) -> str:
-    """The marker settings ar_tag_based_localizer takes from the course.
+    """The marker settings of the fallback localizer, ar_tag_based_localizer.
 
     Loaded after config/ar_tag_based_localizer.param.yaml with allow_substs,
     which resolves the $(find-pkg-share) of a shipped dictionary file.
     """
-    if course.dictionary in SHIPPED_DICTIONARIES:
-        dictionary = ('$(find-pkg-share autosdv_waypoint_lab)/config/dictionaries/'
-                      f'{course.dictionary}.dict')
-    else:
-        dictionary = course.dictionary
+    dictionary = ar_tag_dictionary(course.dictionary)
     ids = ', '.join(f"'{m.id}'" for m in sorted(course.markers, key=lambda m: m.id))
-    return ('# GENERATED from course.yaml by make_course_map; edit that, not this.\n'
+    return ('# GENERATED from marker_map.yaml by make_course_map; edit that, not this.\n'
             '/**:\n'
             '  ros__parameters:\n'
             f'    dictionary: "{dictionary}"\n'
@@ -294,7 +355,7 @@ def print_coverage(course: Course) -> None:
 
 
 def main(argv=None):
-    """make_course_map <course_dir> [...]: write lanelet2_map.osm and ar_tag.param.yaml from course.yaml."""
+    """make_course_map <course_dir> [...]: write lanelet2_map.osm and ar_tag.param.yaml from marker_map.yaml."""
     import argparse
     ap = argparse.ArgumentParser(description=main.__doc__)
     ap.add_argument('course_dirs', nargs='+')
@@ -312,7 +373,7 @@ def main(argv=None):
                     old = f.read()
             if args.check:
                 if old != text:
-                    print(f'{path}: out of date with course.yaml')
+                    print(f'{path}: out of date with {MARKER_MAP_FILE}')
                     stale = True
             elif old != text:
                 with open(path, 'w') as f:

@@ -1,0 +1,27 @@
+# Markers of the demo course (a stand-in until a real hall is surveyed): the course frame of course.yaml beside this file.
+# Imported once from course.yaml (marker_survey's marker_map_import);
+# `just lab2 survey` replaces the list with the measured boards. The
+# layout, its reasons and the tape marks are in course.yaml.
+version: 1
+frame_id: map                 # the frame the robot's map uses
+dictionary: DICT_5X5_1000     # printed family
+marker_size: 0.25             # [m] edge of the black square, measured
+mount: wall                   # default for every marker below
+markers:
+  # end walls, seen in the turns
+  - {id: 0,  x: 10.000, y:  0.500, z: 0.250, facing_deg: 180.000421}
+  - {id: 1,  x: 10.000, y:  3.500, z: 0.250, facing_deg: 180.000421}
+  - {id: 2,  x: -4.000, y:  3.500, z: 0.250, facing_deg:   0.000000}
+  - {id: 3,  x: -4.000, y:  0.500, z: 0.250, facing_deg:   0.000000}
+  # the y = -2 wall, angled towards a car driving +x
+  - {id: 4,  x:  2.000, y: -2.000, z: 0.250, facing_deg: 135.000316}
+  - {id: 5,  x:  5.000, y: -2.000, z: 0.250, facing_deg: 135.000316}
+  - {id: 6,  x:  8.000, y: -2.000, z: 0.250, facing_deg: 120.000281}
+  # the start box's own: with it, a car placed within 0.3 m and 10 deg of the
+  # box always has a marker in view (engage needs a fix; so does a parked
+  # car at the finish, or the 5 s limit stops it there)
+  - {id: 10, x:  4.000, y: -2.000, z: 0.250, facing_deg: 135.000316}
+  # the y = 6 wall, angled towards a car driving -x
+  - {id: 7,  x:  4.000, y:  6.000, z: 0.250, facing_deg: -45.000105}
+  - {id: 8,  x:  1.000, y:  6.000, z: 0.250, facing_deg: -45.000105}
+  - {id: 9,  x: -2.000, y:  6.000, z: 0.250, facing_deg: -60.000140}

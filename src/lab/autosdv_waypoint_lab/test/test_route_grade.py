@@ -260,8 +260,8 @@ def test_survey_may_change_markers_but_not_the_route(tmp_path):
     src = rg.template_dir('straight')
     d = tmp_path / 'surveyed'
     shutil.copytree(src, d)
-    text = (d / 'course.yaml').read_text()
-    (d / 'course.yaml').write_text(text.replace('id: 24', 'id: 99'))
+    text = (d / 'marker_map.yaml').read_text()
+    (d / 'marker_map.yaml').write_text(text.replace('id: 24', 'id: 99'))
     assert bm.course_hashes(str(d))['route_hash'] == bm.course_hashes(src)['route_hash']
     assert bm.course_hashes(str(d))['course_hash'] != bm.course_hashes(src)['course_hash']
     # a doctored path or speed is a different route

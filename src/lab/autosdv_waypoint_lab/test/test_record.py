@@ -14,7 +14,7 @@ def test_keep_slot_thins_a_15hz_stream_to_10hz():
 
 
 def test_a_survey_only_course_has_no_path_file(tmp_path):
-    (tmp_path / 'course.yaml').write_text('markers: []\n')
+    (tmp_path / 'course.yaml').write_text('laps: 1\n')
     assert missing_path_file(str(tmp_path)) == 'path.csv'
     (tmp_path / 'path.csv').write_text('0,0\n')
     assert missing_path_file(str(tmp_path)) is None

@@ -1,0 +1,13 @@
+# Markers of the Lab 2 straight: the course frame of course.yaml beside this file.
+# Imported once from course.yaml (marker_survey's marker_map_import);
+# `just lab2 survey` replaces the list with the measured boards. The
+# layout, its reasons and the tape marks are in course.yaml.
+version: 1
+frame_id: map                 # the frame the robot's map uses
+dictionary: DICT_5X5_1000     # printed family
+marker_size: 0.38             # [m] edge of the black square, measured
+mount: wall                   # default for every marker below
+markers:
+  - {id: 24, x: 0.000, y:  0.000, z: 0.250, facing_deg:   0.00000}
+  - {id: 20, x: 6.800, y: -1.000, z: 0.250, facing_deg:  30.00007}
+  - {id: 21, x: 6.800, y:  1.000, z: 0.250, facing_deg: -30.00007}

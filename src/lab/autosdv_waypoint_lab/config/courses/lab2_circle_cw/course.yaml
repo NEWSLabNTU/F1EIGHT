@@ -5,7 +5,8 @@
 #
 # Floor: about 8 m x 8 m, clear. The two circles (R 1.5 m clockwise, R 2.5 m
 # counter-clockwise; the other is lab2_circle_ccw) are concentric and share
-# the one ring of boards below, so one layout and one survey serve both bags.
+# the one ring of boards in marker_map.yaml, so one layout and one survey
+# serve both bags.
 #
 # Frame: the course frame `just lab2 survey` writes -- origin on the floor
 # below the ORIGIN BOARD's marker centre, x the way that board faces, y to
@@ -30,27 +31,15 @@
 #
 # Setting up: place the ring as above, survey with the origin board as the
 # origin (`just lab2 survey <copy of this dir> <origin board id>`), and keep
-# path.csv and start_pose: the survey replaces only `markers`,
-# `marker_size`, `dictionary` and `survey`, so a ring laid out as this
-# file says stays consistent with the measured boards. One recording serves
-# both circles: solve it again into the other directory with
-#   ros2 run autosdv_marker_survey lab2_marker_survey_solve \
-#       <this dir>/survey_data.npz --course <the other dir>
-# The ids below are placeholders (24 is a real board id); the survey
-# writes the ids the boards actually carry.
+# path.csv and start_pose: the survey writes marker_map.yaml and leaves this
+# file alone, so a ring laid out as this file says stays consistent with the
+# measured boards. One recording serves both circles: solve it again into the
+# other directory with
+#   just lab2 survey-solve <this dir> --output-dir <the other dir>
+# The ids in marker_map.yaml are placeholders (24 is a real board id); the
+# survey writes the ids the boards actually carry.
 path: path.csv
 closed: true
 laps: 3
 v_ref: 0.8
 start_pose: {x: 3.500, y: -1.500, yaw: 3.1416}
-marker_size: 0.38
-dictionary: DICT_5X5_1000
-# 500 mm plate standing on the floor, the 0.38 m black square centred on it
-marker_height: 0.25
-markers:
-  - {id: 24, x: 0.000, y: 0.000, yaw: 0.0000}
-  - {id: 25, x: 1.750, y: -3.031, yaw: 1.0472}
-  - {id: 26, x: 5.250, y: -3.031, yaw: 2.0944}
-  - {id: 27, x: 7.000, y: 0.000, yaw: 3.1416}
-  - {id: 28, x: 5.250, y: 3.031, yaw: -2.0944}
-  - {id: 29, x: 1.750, y: 3.031, yaw: -1.0472}
