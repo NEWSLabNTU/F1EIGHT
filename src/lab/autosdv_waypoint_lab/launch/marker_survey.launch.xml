@@ -1,0 +1,90 @@
+<?xml version="1.0"?>
+<!--
+  Marker survey: drive the car around the room, get the course's marker map.
+  `just lab2 survey COURSE_DIR ORIGIN_ID`.
+
+    ZED X Mini (rectified image + positional tracking, config/zed_survey.yaml)
+      -> marker_survey (marker_survey's survey node, origin_marker frame mode,
+         the ZED odometry as its pose source): detects every marker, places it
+         live (/marker_survey/markers in RViz), and on Ctrl-C or
+         `just lab2 survey-save` bundle-adjusts the recording
+      -> COURSE_DIR/marker_map.yaml (markers in the frame of marker ORIGIN_ID),
+         survey_report.yaml, survey_data.npz
+      -> /marker_survey/debug/image: the frames with the detections drawn
+         (viewer:=true opens rqt_image_view on it)
+  `just lab2 survey` then runs lab2_course_from_survey, which adds
+  course.yaml (a new course), lanelet2_map.osm and ar_tag.param.yaml.
+
+  With launch_camera:=false it runs the survey node alone, for a recorded bag
+  (ros2 bag play ... with the image, camera_info, the ZED odometry and
+  /tf_static) and use_sim_time:=true process_all:=true.
+
+  The car's own stack is not needed: only its URDF (base_link to the camera,
+  which is where the floor is) and the camera. Push it, or drive it with the
+  transmitter. Layout as marker_survey's examples/wall_course.
+-->
+<launch>
+  <arg name="origin_id" description="the marker that defines the course frame"/>
+  <arg name="course_dir" description="where to write marker_map.yaml (created if new; a survey keeps the comments of an existing one)"/>
+  <arg name="dictionary" default="DICT_5X5_1000" description="the printed markers' family: DICT_5X5_1000 (the lab's boards), aruco_mip_36h12 (OpenCV 4.7 or newer), tag36h11, ..."/>
+  <arg name="marker_size" default="0.38"
+       description="[m] edge of the BLACK SQUARE (not the board): measure it. the lab's 0.50 m plate with a 0.38 m square: 0.38 (default); an LCTK 600 mm board: 0.48"/>
+  <arg name="floor_offset" default="0.0"
+       description="[m] how far the floor lies below base_link: 0 on the floor, the stand height if the car's wheels are off the floor"/>
+  <arg name="launch_camera" default="true" description="false: survey a bag instead"/>
+  <arg name="image_topic" default="/sensing/camera/zedxm/rgb/color/rect/image"/>
+  <arg name="camera_info_topic" default="/sensing/camera/zedxm/rgb/color/rect/camera_info"/>
+  <arg name="odom_topic" default="/sensing/camera/zedxm/odom" description="the ZED's visual-inertial odometry"/>
+  <arg name="use_sim_time" default="false"/>
+  <arg name="process_all" default="false" description="true for a bag: every frame, in order"/>
+  <arg name="compressed" default="false" description="subscribe to the compressed image (a bag recorded that way)"/>
+  <arg name="viewer" default="false"
+       description="true: open rqt_image_view on the detections (needs a display); `just lab2 survey` sets it when DISPLAY is set"/>
+  <arg name="vehicle_model" default="autosdv_vehicle"/>
+  <arg name="sensor_model" default="autosdv_sensor_kit"/>
+  <arg name="vehicle_id" default="$(env VEHICLE_ID default)"/>
+
+  <group if="$(var launch_camera)">
+    <!-- base_link -> sensor kit -> zedxm_camera_link, from the vehicle URDF -->
+    <include file="$(find-pkg-share tier4_vehicle_launch)/launch/vehicle.launch.xml">
+      <arg name="vehicle_model" value="$(var vehicle_model)"/>
+      <arg name="sensor_model" value="$(var sensor_model)"/>
+      <arg name="vehicle_id" value="$(var vehicle_id)"/>
+      <arg name="launch_vehicle_interface" value="false"/>
+      <arg name="config_dir" value="$(find-pkg-share individual_params)/config/$(var vehicle_id)/$(var sensor_model)"/>
+    </include>
+    <!-- zedxm_camera_link -> the lens and optical frames, from the ZED URDF -->
+    <include file="$(find-pkg-share autosdv_sensor_kit_launch)/launch/zed_tf_only.launch.xml">
+      <arg name="camera_name" value="zedxm"/>
+      <arg name="camera_model" value="zedxm"/>
+    </include>
+    <include file="$(find-pkg-share autosdv_waypoint_lab)/launch/zed_aruco.launch.xml">
+      <arg name="config" value="$(find-pkg-share autosdv_waypoint_lab)/config/zed_survey.yaml"/>
+    </include>
+  </group>
+
+  <!-- The ZED publishes its odometry BEST_EFFORT; the survey node subscribes
+       the same way. Its TF is off (zed_survey.yaml): the URDF places the camera. -->
+  <include file="$(find-pkg-share marker_survey)/launch/survey.launch.xml">
+    <arg name="output_dir" value="$(var course_dir)"/>
+    <arg name="dictionary" value="$(var dictionary)"/>
+    <arg name="marker_size" value="$(var marker_size)"/>
+    <arg name="frame_mode" value="origin_marker"/>
+    <arg name="origin_marker" value="$(var origin_id)"/>
+    <arg name="frame_id" value="map"/>
+    <arg name="pose_source" value="odometry"/>
+    <arg name="odom_topic" value="$(var odom_topic)"/>
+    <arg name="base_frame" value="base_link"/>
+    <arg name="image_topic" value="$(var image_topic)"/>
+    <arg name="camera_info_topic" value="$(var camera_info_topic)"/>
+    <arg name="compressed" value="$(var compressed)"/>
+    <arg name="floor_offset" value="$(var floor_offset)"/>
+    <arg name="use_sim_time" value="$(var use_sim_time)"/>
+    <arg name="process_all" value="$(var process_all)"/>
+  </include>
+
+  <!-- the processed frames with the detections drawn: green known, yellow new,
+       red not used -->
+  <node pkg="rqt_image_view" exec="rqt_image_view" name="survey_viewer"
+        args="/marker_survey/debug/image" if="$(var viewer)"/>
+</launch>

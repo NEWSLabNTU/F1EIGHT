@@ -393,5 +393,67 @@ def main(argv=None):
     return 1 if stale else 0
 
 
+# ------------------------------------------------------ after a marker survey
+
+NEW_COURSE = """\
+# A course made by `just lab2 survey` from a survey with no course.yaml yet.
+# The markers are in marker_map.yaml, written by the survey; the start box
+# is where the recording started. Add path.csv (x, y[, v] in this frame) and
+# set laps and v_ref before driving it.
+"""
+
+
+def course_from_survey(directory: str, log=print) -> List[str]:
+    """Make a surveyed directory a course: course.yaml if there is none (the
+    recording's start as start_pose, from survey_report.yaml), the lanelet2 map
+    and ar_tag.param.yaml from marker_map.yaml, map_projector_info.yaml."""
+    written = []
+    path = os.path.join(directory, 'course.yaml')
+    if not os.path.exists(path):
+        report = os.path.join(directory, 'survey_report.yaml')
+        start = {'x': 0.0, 'y': 0.0, 'yaw_deg': 0.0}
+        if os.path.exists(report):
+            with open(report) as f:
+                start = (yaml.safe_load(f) or {}).get('recording_start_pose') or start
+        yaw = round(math.radians(float(start.get('yaw_deg', 0.0))), 4)
+        with open(path, 'w') as f:
+            f.write(NEW_COURSE)
+            f.write('path: path.csv\nclosed: true\nlaps: 1\nv_ref: 0.8\n'
+                    f'start_pose: {{x: {float(start["x"]):.3f}, y: {float(start["y"]):.3f}, '
+                    f'yaw: {yaw}}}\n')
+        written.append(path)
+    course = load_course(directory)
+    for p, text in ((course.map_file, make_osm(course)),
+                    (course.ar_tag_param_file, make_ar_tag_params(course))):
+        with open(p, 'w') as f:
+            f.write(text)
+        written.append(p)
+    proj = os.path.join(directory, 'map_projector_info.yaml')
+    if not os.path.exists(proj):
+        with open(proj, 'w') as f:
+            f.write('projector_type: local\n')
+        written.append(proj)
+    for w in written:
+        log(f'wrote {w}')
+    return written
+
+
+def main_from_survey(argv=None):
+    """lab2_course_from_survey <dir>: make a surveyed directory (marker_map.yaml) a course."""
+    import argparse
+    ap = argparse.ArgumentParser(description=main_from_survey.__doc__)
+    ap.add_argument('directory')
+    args = ap.parse_args(argv)
+    if not os.path.exists(os.path.join(args.directory, MARKER_MAP_FILE)):
+        print(f'{args.directory}: no {MARKER_MAP_FILE}: the survey did not save')
+        return 1
+    try:
+        course_from_survey(args.directory)
+    except ValueError as e:
+        print(f'ERROR: {e}')
+        return 1
+    return 0
+
+
 if __name__ == '__main__':
     raise SystemExit(main())

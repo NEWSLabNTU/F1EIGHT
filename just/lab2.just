@@ -140,7 +140,7 @@ grade *ARGS:
     source scripts/env.sh
     exec ros2 run autosdv_waypoint_lab lab2_grade_run "$@"
 
-# Regenerate a course's lanelet2_map.osm from its course.yaml; prints marker coverage
+# Regenerate a course's lanelet2_map.osm from its marker_map.yaml; prints marker coverage
 [positional-arguments]
 course-map *DIRS:
     #!/usr/bin/env bash
@@ -219,7 +219,9 @@ steer-fit *PAIRS:
 #   just lab2 survey courses/my_hall 3 dictionary:=ARUCO_MIP_36h12 marker_size:=0.25
 # surveys/latest points at the directory of the most recent survey, named or dated, and
 # survey-solve and loc-check use it when no directory is given.
-# Writes COURSE_DIR (default surveys/<date>_<time>)/course.yaml, the map, and a report.
+# Writes COURSE_DIR (default surveys/<date>_<time>)/marker_map.yaml and a report with
+# marker_survey's survey node, then makes the directory a course (lab2_course_from_survey:
+# course.yaml if new, the lanelet2 map).
 [positional-arguments]
 survey *ARGS:
     #!/usr/bin/env bash
@@ -256,20 +258,30 @@ survey *ARGS:
         fi
     fi
     viewer=false; [ -n "${DISPLAY:-}" ] && viewer=true      # the detection video, given a display
-    cmd=(play_launch launch --web-addr '{{ web_addr }}' autosdv_marker_survey marker_survey.launch.xml
+    cmd=(play_launch launch --web-addr '{{ web_addr }}' autosdv_waypoint_lab marker_survey.launch.xml
          "course_dir:=$dir" "origin_id:=$origin" "viewer:=$viewer" "$@")
     printf '\033[2m%s\033[0m\n' "${cmd[*]}"
     source scripts/env.sh
-    exec "${cmd[@]}"
+    # Ctrl-C ends the launch; the survey node solves and writes on its way out
+    trap ':' INT       # caught, not ignored: the launch still gets the default SIGINT
+    "${cmd[@]}"
+    trap - INT
+    if [ -f "$dir/marker_map.yaml" ]; then
+        ros2 run autosdv_waypoint_lab lab2_course_from_survey "$dir"
+    else
+        echo "no $dir/marker_map.yaml: the survey was not saved" >&2; exit 1
+    fi
 
-# Solve and write the survey now, without stopping it
+# Solve and write the survey now, without stopping it (into surveys/latest)
 survey-save:
     #!/usr/bin/env bash
     source scripts/env.sh
-    ros2 service call /marker_survey/save std_srvs/srv/Trigger {}
+    ros2 service call /marker_survey/save std_srvs/srv/Trigger {} || exit 1
+    [ -d surveys/latest ] && ros2 run autosdv_waypoint_lab lab2_course_from_survey surveys/latest
 
 #   just lab2 survey-solve                       surveys/latest
-#   just lab2 survey-solve courses/my_hall --origin 3
+#   just lab2 survey-solve courses/my_hall --origin-marker 3
+#   just lab2 survey-solve courses/ring --output-dir courses/ring_ccw   the same boards, another course
 # Solve a saved survey again (COURSE_DIR/survey_data.npz, default surveys/latest)
 [positional-arguments]
 survey-solve *ARGS:
@@ -279,8 +291,16 @@ survey-solve *ARGS:
     if [ ! -d "$dir" ]; then
         echo "error: no survey directory '$dir': run \`just lab2 survey ORIGIN_ID\` first, or name one" >&2; exit 1
     fi
+    out=$dir; prev=
+    for a in "$@"; do
+        [ "$prev" = --output-dir ] && out=$a
+        case "$a" in --output-dir=*) out=${a#--output-dir=} ;; esac
+        prev=$a
+    done
+    [ "$out" = "$dir" ] && set -- --output-dir "$dir" "$@"
     source scripts/env.sh
-    exec ros2 run autosdv_marker_survey lab2_marker_survey_solve "$dir/survey_data.npz" --course "$dir" "$@"
+    ros2 run marker_survey marker_survey_solve "$dir/survey_data.npz" "$@" || exit 1
+    exec ros2 run autosdv_waypoint_lab lab2_course_from_survey "$out"
 
 #   just lab2 plot rosbags/lab2_straight_1
 # PlotJuggler asks which topics to load: select all (Ctrl+A), then OK.

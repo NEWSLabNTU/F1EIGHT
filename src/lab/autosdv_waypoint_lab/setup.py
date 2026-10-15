@@ -43,6 +43,7 @@ setup(
             'localization_monitor = autosdv_waypoint_lab.localization_monitor_node:main',
             'virtual_marker_localizer = autosdv_waypoint_lab.virtual_marker_localizer_node:main',
             'make_course_map = autosdv_waypoint_lab.course:main',
+            'lab2_course_from_survey = autosdv_waypoint_lab.course:main_from_survey',
             'lab2_grade_run = autosdv_waypoint_lab.grading:main',
             'lab2_camera_check = autosdv_waypoint_lab.camera_check:main',
             'loc_check = autosdv_waypoint_lab.loc_check_node:main',
