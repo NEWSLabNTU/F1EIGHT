@@ -37,7 +37,7 @@ localization_monitor ─► /diagnostics ─► autosdv-waypoint-main.yaml ─�
 Everything from Autoware is the installed 1.5.0, unmodified. The marker
 survey and the marker localizer are the `marker_survey` and
 `marker_localizer` packages of the marker_survey repository, a submodule at
-`src/lab/external/marker_survey` pinned to a release tag (0.1.0); their
+`src/lab/external/marker_survey` pinned to a release tag (0.2.0); their
 README and `docs/integration.md` describe both nodes and every parameter.
 The lab's own nodes and launch files are in `src/lab/autosdv_waypoint_lab`.
 
@@ -187,13 +187,15 @@ the origin go to the launch file (`dictionary:=`, `marker_size:=`,
 `just lab2 survey-solve [DIR] [--origin-marker ID] [--output-dir OTHER]`
 solves the recording again.
 
-Accuracy, marker_survey's rendered recordings through this launch file: the
-wall course of 0.38 m boards, median 0.89 cm, max 1.45 cm; `hall_demo`'s
-0.25 m markers, median 1.25 cm, max 2.18 cm. Not yet measured on a real
-hall. The report's per-marker verdicts were pessimistic on these runs: on
-`hall_demo` every marker came out `bad` (1σ 14 to 21 cm) while the largest
-real error was 2.2 cm. Compare a few markers with a tape measure before
-driving past them again.
+Accuracy, marker_survey's rendered recordings through this launch file
+(marker_survey 0.2.0): the wall course of 0.38 m boards, median 0.89 cm,
+max 1.45 cm (0.99 cm and 1.45 cm with 3 % of the odometry messages lost);
+`hall_demo`'s 0.25 m markers, median 1.21 cm, max 1.66 cm. Not yet measured
+on a real hall. The report's per-marker verdicts now follow the real errors
+(0.1.0 put every `hall_demo` marker at `bad`, 1σ 14 to 21 cm, for real
+errors of at most 2.2 cm): on these runs every marker is `good`, 1σ 0.25 to
+1.0 cm. Still compare a few markers with a tape measure before driving past
+them again.
 
 ## The grading routes (`lab2_straight`, `lab2_circle_cw`, `lab2_circle_ccw`)
 
