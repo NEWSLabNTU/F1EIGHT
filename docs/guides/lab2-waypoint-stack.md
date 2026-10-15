@@ -61,6 +61,11 @@ AR-tag localizer's.
 - The gate (1 m, 15°) also rejects a far marker whose orientation was
   misjudged, and a fix whose own uncertainty is over 0.33 m is not
   published (a lone oblique marker at 4.3 m, for one).
+- The gate widens to 3 sd of the EKF's own covariance where that is wider
+  (`gate_sigmas`), so an EKF that has lost the car still takes a fix. With
+  the lab's EKF that never happens to the 1 m (0.6 m from the start box,
+  under 0.7 m after 30 s without a fix); the angle gate is 17° from
+  `start_pose_init` to the first fix, whose roll and pitch sd is 5.7°.
 - The covariance comes from the fit (a few cm), plus floors of 0.22 m and
   5.7° that keep the weights the EKF and the bench were tuned with, the
   AR-tag localizer's constant 0.05 m² and 0.01 rad².

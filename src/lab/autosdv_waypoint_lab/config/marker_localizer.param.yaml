@@ -18,6 +18,16 @@
     prior_tolerance: 0.5        # [s]
     gate_distance: 1.0          # [m]
     gate_angle_deg: 15.0
+    # The gate widens to gate_sigmas times the EKF's own sd where that is
+    # wider (0: the fixed gate above). With the lab's EKF it stays at 1 m:
+    # the start box's 0.2 m gives 0.6 m, and 30 s without a fix at 0.5 m/s
+    # still under 0.7 m (the stock EKF fed a twist of sd 0.2 m/s and 0.02
+    # rad/s and fixes floored as below). The angle gate is 17.2 deg from
+    # start_pose_init to the first fix (its roll and pitch variance, 0.01
+    # rad^2, is a 5.7 deg sd), 15 deg once the EKF has fixes. An EKF that
+    # has lost the car for long takes a fix farther off, which its own
+    # gate (pose_gate_dist, Mahalanobis) still checks.
+    gate_sigmas: 3.0
 
     # No range limit (the ar_tag localizer ignored markers beyond 5 m): the
     # fit weighs every marker by its corners, a far marker adds to a near
