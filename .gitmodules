@@ -77,3 +77,7 @@
 	path = src/localization/external/autoware_ar_tag_based_localizer
 	url = https://github.com/NEWSLabNTU/autoware_ar_tag_based_localizer.git
 	branch = autosdv-1.5.0
+[submodule "src/lab/external/marker_survey"]
+	path = src/lab/external/marker_survey
+	url = https://github.com/NEWSLabNTU/marker_survey.git
+	branch = main
