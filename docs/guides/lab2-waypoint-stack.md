@@ -52,7 +52,9 @@ that pose to the EKF once, then triggers it. `just lab2 reinit` repeats it.
 
 **The marker localizer** (`launch/marker_localizer.launch.xml`,
 `config/marker_localizer.param.yaml`). marker_survey's `marker_localizer` in
-`3d` mode: it fits the full 6-DoF pose to the corners of every marker in
+`3d` mode, started through its stock `localizer.launch.xml` with the lab's
+topics as arguments and the parameter file as its `param_file` (read last, so
+the file's values win): it fits the full 6-DoF pose to the corners of every marker in
 view together, with a robust loss, and leaves out a marker that disagrees
 with the others. Its output goes to the EKF's pose input in place of the
 AR-tag localizer's.
@@ -67,6 +69,11 @@ AR-tag localizer's.
   frames and doubled the worst error.
 - It finds markers in a half-size copy of the 1920×1200 image and refines
   the corners on the full one (`detect_scale` 0.5).
+- Per marker in view, `~/markers` (`diagnostic_msgs/DiagnosticArray`,
+  published only while subscribed) gives its state, its reprojection
+  residual and how far the image alone puts it from its surveyed pose: the
+  first place to look when one board seems wrong.
+  `ros2 topic echo /localization/pose_estimator/marker_localizer/markers`.
 
 **The previous localizer, `localizer:=ar_tag`.** Autoware's
 `ar_tag_based_localizer`, AutoSDV's fork

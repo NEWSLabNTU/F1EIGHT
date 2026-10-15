@@ -1,13 +1,11 @@
 # Lab 2 (waypoint): marker_survey's marker_localizer with the lab's
-# parameters (marker_survey docs/integration.md lists them all). The map, its
-# dictionary and marker sizes come from the course's marker_map.yaml; the
-# topics from launch/marker_localizer.launch.xml.
+# parameters (marker_survey docs/integration.md lists them all), the
+# param_file of its stock localizer.launch.xml, which reads it after its
+# arguments, so these values win. The map, its dictionary and marker sizes
+# come from the course's marker_map.yaml; the topics, mode (3d) and frames
+# from launch/marker_localizer.launch.xml.
 /**:
   ros__parameters:
-    # Wall boards seen by a forward camera: the full 6-DoF fix.
-    mode: 3d
-    base_frame: base_link
-
     # The gate, against the EKF's biased pose (PoseWithCovarianceStamped).
     # A fix more than gate_distance or gate_angle_deg from it is dropped: a
     # misread id, a marker surveyed in the wrong place, a far marker whose
@@ -16,7 +14,6 @@
     # taped start box the car may be placed (start_pose_init seeds the EKF
     # there). require_prior: no fix at all before the EKF has a pose, as with
     # the ar_tag localizer, so an unseeded EKF is never handed an ungated fix.
-    prior_type: pose
     require_prior: true
     prior_tolerance: 0.5        # [s]
     gate_distance: 1.0          # [m]

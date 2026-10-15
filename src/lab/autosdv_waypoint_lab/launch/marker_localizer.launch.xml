@@ -10,9 +10,10 @@
 
   Included by waypoint_localization.launch.xml; on its own it localizes a bag
   or a synthetic recording (use_sim_time:=true process_all:=true and the
-  recording's topics). Layout as marker_survey's examples/wall_course, with
-  the node started directly so that config/marker_localizer.param.yaml can
-  set the parameters the stock launch file has no argument for.
+  recording's topics). Layout as marker_survey's examples/wall_course: the
+  stock launch file, with the lab's parameters (gate, require_prior, range,
+  covariance floors) from config/marker_localizer.param.yaml as its
+  param_file, which it reads after its arguments.
 
     /localization/pose_estimator/marker_localizer/debug/image   what it saw and used
     ros2 param set /localization/pose_estimator/marker_localizer enabled false
@@ -31,16 +32,22 @@
   <arg name="use_sim_time" default="false"/>
   <arg name="process_all" default="false" description="true for a recording: every frame, in order"/>
 
-  <node pkg="marker_localizer" exec="marker_localizer" name="marker_localizer"
-        namespace="/localization/pose_estimator" output="screen">
-    <param from="$(var param_file)"/>
-    <param name="marker_map" value="$(var course_dir)/marker_map.yaml"/>
-    <param name="image_topic" value="$(var image_topic)"/>
-    <param name="camera_info_topic" value="$(var camera_info_topic)"/>
-    <param name="prior_topic" value="$(var prior_topic)"/>
-    <param name="pose_topic" value="$(var pose_topic)"/>
-    <param name="detect_scale" value="$(var detect_scale)"/>
-    <param name="process_all" value="$(var process_all)"/>
-    <param name="use_sim_time" value="$(var use_sim_time)"/>
-  </node>
+  <group>
+    <push-ros-namespace namespace="/localization/pose_estimator"/>
+    <include file="$(find-pkg-share marker_localizer)/launch/localizer.launch.xml">
+      <arg name="marker_map" value="$(var course_dir)/marker_map.yaml"/>
+      <!-- wall boards seen by a forward camera: the full 6-DoF fix -->
+      <arg name="mode" value="3d"/>
+      <arg name="base_frame" value="base_link"/>
+      <arg name="prior_type" value="pose"/>
+      <arg name="image_topic" value="$(var image_topic)"/>
+      <arg name="camera_info_topic" value="$(var camera_info_topic)"/>
+      <arg name="prior_topic" value="$(var prior_topic)"/>
+      <arg name="pose_topic" value="$(var pose_topic)"/>
+      <arg name="detect_scale" value="$(var detect_scale)"/>
+      <arg name="process_all" value="$(var process_all)"/>
+      <arg name="use_sim_time" value="$(var use_sim_time)"/>
+      <arg name="param_file" value="$(var param_file)"/>
+    </include>
+  </group>
 </launch>
