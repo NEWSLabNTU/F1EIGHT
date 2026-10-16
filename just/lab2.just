@@ -150,6 +150,7 @@ course-map *DIRS:
 
 #   just lab2 make-uturn 1.5                    summary, the spec's paste block, a diff
 #   just lab2 make-uturn 2.0 --leg 8 --write    a new radius and legs: path, boards, map, header
+#   ... --tex <course repo>/2026/labs/Lab2/spec/uturn_geometry.tex   the spec's numbers and map
 # The boards come from the coverage search; a layout that misses a goal is not written.
 # Regenerate the graded course lab2_uturn from its U-turn radius and leg length (dry run without --write)
 [positional-arguments]

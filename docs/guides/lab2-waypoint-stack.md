@@ -183,6 +183,15 @@ just lab2 make-uturn 2.0 --leg 8 --write    # a new geometry: path, start/stop, 
 python3 scripts/testing/lab2/make_uturn.py --radius 1.5 --leg 10 --write   # the same, no just
 ```
 
+The Lab 2 spec (course repository, `2026/labs/Lab2/spec/`) draws its map and
+prints the route's numbers from `uturn_geometry.tex`, which the generator writes
+with `--tex`. After a new geometry, regenerate that file too and rebuild the PDF:
+
+```bash
+just lab2 make-uturn 2.0 --leg 8 --write --tex ~/repos/ntu-sdv-course/2026/labs/Lab2/spec/uturn_geometry.tex
+make -C ~/repos/ntu-sdv-course/2026/labs/Lab2/spec
+```
+
 It writes `path.csv`, `course.yaml` (start pose, boards, `uturn: {radius, leg}`
 and a header whose numbers it computes), `lanelet2_map.osm`,
 `ar_tag.param.yaml` and `map_projector_info.yaml`. The boards come from a

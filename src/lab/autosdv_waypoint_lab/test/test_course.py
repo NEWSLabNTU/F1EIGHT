@@ -186,6 +186,23 @@ def test_lab2_uturn_shipped_files_are_what_make_uturn_writes():
 
 
 # other radii and leg lengths: the generator must meet the goals there too
+def test_spec_tex_states_the_shipped_geometry():
+    # the spec's \\input: one macro per number it prints, and every board for its map
+    import re
+    from autosdv_waypoint_lab import uturn
+    radius, leg = _uturn_spec()
+    lay = _layout(radius, leg)
+    tex = uturn.spec_tex(lay)
+    macros = dict(re.findall(r'\\def\\(uturn\w+)\{([^}]*)\}', tex))
+    assert float(macros['uturnR']) == radius and float(macros['uturnLeg']) == leg
+    assert float(macros['uturnStartX']) == pytest.approx(lay.start[0], abs=0.01)
+    assert (float(macros['uturnStopX']), float(macros['uturnStopY'])) == pytest.approx(lay.stop, abs=0.01)
+    boards = [b.split('/') for b in macros['uturnBoards'].split(', ')]
+    assert len(boards) == int(macros['uturnBoardCount']) == len(lay.boards)
+    assert [int(b[3]) for b in boards] == [b.id for b in lay.boards]
+    assert sum(int(b[4]) for b in boards) == 1
+
+
 @pytest.mark.parametrize('radius,leg', [(1.0, 6.0), (2.5, 14.0)])
 def test_make_uturn_meets_the_goals_at_other_sizes(radius, leg, tmp_path):
     from autosdv_waypoint_lab import bag_meta as bm
