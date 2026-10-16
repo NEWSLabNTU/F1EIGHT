@@ -1,0 +1,13 @@
+# Built-in defaults for the `just lab2` recipes (scripts/testing/lab2/lab2_config.py).
+#
+# Precedence, highest first: key:=value on the command line, the user's file
+# (~/lab2/lab2.yaml, or config:=FILE), then this file. `just lab2 config` shows
+# what each recipe would use and where every value came from.
+#
+# car, team, team_dir and submission have no default: they name a car, a team
+# and directories only the user knows. A recipe that needs one and finds none
+# says which key to add, and to which file.
+
+route: lab2_uturn                   # the course `vehicle` drives; also names the bags (uturn_1, ...)
+reference: ~/lab2/reference/uturn   # the car's TA reference bag that `grade` scores against
+bag_dir: rosbags                    # where `record` writes and `grade`/`check-bags`/`plot` look

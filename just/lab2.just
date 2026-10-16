@@ -1,5 +1,22 @@
 # Lab 2, ArUco localization and waypoint following: the vehicle bench and the
-# vehicle. Arguments after the recipe name go to the launch file, e.g.
+# vehicle.
+#
+# Settings live in ~/lab2/lab2.yaml (`just lab2 init` writes it; config:=FILE picks
+# another): car, team, team_dir, submission, route, reference, bag_dir. Precedence,
+# highest first: key:=value on the command line, that file, the built-in defaults
+# (src/lab/autosdv_waypoint_lab/config/lab2_defaults.yaml). `just lab2 config` shows the
+# result. With the file filled in, the student sequence is:
+#
+#   just lab2 gate                 workstation: the submission's SpeedPID on the graded route
+#   just lab2 vehicle              car: route + team_dir
+#   just lab2 preflight            car, second terminal
+#   just lab2 record               rosbags/lab2_uturn_1, _2, ...
+#   just lab2 engage               (third terminal), then Ctrl-C the recording
+#   just lab2 check-bags           the latest bag
+#   just lab2 grade                the latest bag against the reference
+#   just lab2 plot                 the latest bag in PlotJuggler
+#
+# Other arguments go to the launch file or the tool, e.g.
 #
 #   just lab2 bench
 #   just lab2 bench tracker_class:=my_lab2.path_tracker:PathTracker
@@ -28,13 +45,30 @@ web_addr := env_var_or_default('LAB2_WEB_ADDR', '0.0.0.0:8081')
 default:
     @just --list lab2
 
-# Vehicle bench: the real vehicle stack on this PC, a plant model for the car
+#   just lab2 config                         ~/lab2/lab2.yaml over the defaults
+#   just lab2 config config:=FILE car:=B     another file, a command-line override
+# Show the Lab 2 settings every recipe would use, and where each value came from
+[positional-arguments]
+config *ARGS:
+    #!/usr/bin/env bash
+    exec python3 scripts/testing/lab2/lab2_config.py config "$@"
+
+#   just lab2 init                           ~/lab2/lab2.yaml
+#   just lab2 init car:=A team:=3            fill those in, leave the rest commented
+#   just lab2 init config:=FILE              another file
+# Write a commented settings template (never overwrites an existing file)
+[positional-arguments]
+init *ARGS:
+    #!/usr/bin/env bash
+    exec python3 scripts/testing/lab2/lab2_config.py init "$@"
+
 #   just lab2 bench                                  hall_demo, reference laws
 #   just lab2 bench dropout:=0.4 gyro_bias_error_z:=0.01
 #   just lab2 bench tracker_class:=my_lab2.path_tracker:PathTracker
 # The actuator (dry run) and its SpeedPID, the EKF, the tracker and the MRM
 # path all run; the ZED, the AR-tag localizer, velocity_report and the PCA9685
 # are replaced (vehicle_bench_plant, virtual_marker_localizer).
+# Vehicle bench: the real vehicle stack on this PC, a plant model for the car
 [positional-arguments]
 bench *ARGS:
     #!/usr/bin/env bash
@@ -46,30 +80,38 @@ bench *ARGS:
     printf '\033[2m%s\033[0m\n' "${cmd[*]}"
     exec "${cmd[@]}"
 
+#   just lab2 vehicle                       route and team_dir from the config
+#   just lab2 vehicle route:=hall_demo team:=~/lab2/team3
+# team:= / submission:= / speed_controller_class:= on the command line replace team_dir.
 # On the vehicle: ZED + AR-tag localizer + EKF, the course, the student laws
 [positional-arguments]
 vehicle *ARGS:
     #!/usr/bin/env bash
     source scripts/env.sh
     source scripts/testing/lab2/submission.sh
-    lab2_apply_submission "$@" || exit 2
+    source scripts/testing/lab2/lab2_config.sh
+    lab2_config vehicle "$@" || exit 2
+    lab2_apply_submission "${LAB2_ARGS[@]}" || exit 2
     cmd=(play_launch launch --web-addr '{{ web_addr }}'
          autosdv_launch waypoint_follow.launch.xml "${LAB2_ARGS[@]}")
     printf '\033[2m%s\033[0m\n' "${cmd[*]}"
     exec "${cmd[@]}"
 
-# Gate before car time: your SpeedPID on the graded route (lab2_uturn), full stack; PASS/FAIL
+#   just lab2 gate                     the config's submission
 #   just lab2 gate submission:=DIR     DIR = your <student_id>_lab_2_1 (or lab2_waypoint) directory:
 #       its speed_pid.py, config/speed_pid.yaml and config/calibration.yaml are loaded for you
 #       (same for `bench` and `vehicle`; scripts/testing/lab2/submission.py shows what is passed)
 #   just lab2 gate speed_controller_class:=lab2_waypoint.speed_pid:SpeedPID "speed_controller_params:={kp: 15.0}"
 #   just lab2 gate --only hall_demo ...        another course instead of lab2_uturn
+# Gate before car time: your SpeedPID on the graded route (lab2_uturn), full stack; PASS/FAIL
 [positional-arguments]
 gate *ARGS:
     #!/usr/bin/env bash
     source scripts/env.sh
     source scripts/testing/lab2/submission.sh
-    lab2_apply_submission "$@" || exit 2
+    source scripts/testing/lab2/lab2_config.sh
+    lab2_config gate "$@" || exit 2
+    lab2_apply_submission "${LAB2_ARGS[@]}" || exit 2
     exec python3 scripts/testing/lab2/bench_gate.py "${LAB2_ARGS[@]}"
 
 # Bench checks on fresh benches (follow, marker loss, path publisher loss, faults); PASS/FAIL lines
@@ -113,32 +155,41 @@ reinit:
     ros2 service call /localization/pose_twist_fusion_filter/start_pose_init/reinit \
         std_srvs/srv/Trigger {}
 
-# Record the submission bag: the fixed topic list, the compressed camera, course hash, car and team
+#   just lab2 record                         car and team from the config, rosbags/lab2_uturn_<next>
 #   just lab2 record --car A --team 3 [--name uturn_1]
 # Start it after `just lab2 vehicle`, before `just lab2 engage`; Ctrl-C ends it. The course is read
 # from the running stack. Writes rosbags/lab2_<name>; check it with `just lab2 check-bags`.
+# Record the submission bag: the fixed topic list, the compressed camera, course hash, car and team
 [positional-arguments]
 record *ARGS:
     #!/usr/bin/env bash
     source scripts/env.sh
-    exec ros2 run autosdv_waypoint_lab lab2_record "$@"
+    source scripts/testing/lab2/lab2_config.sh
+    lab2_config record "$@" || exit 2
+    exec ros2 run autosdv_waypoint_lab lab2_record "${LAB2_ARGS[@]}"
 
-# Would the grader accept these bags? Missing topic, modified course, wrong speed, laps, MRM, off the path
+#   just lab2 check-bags                                   the latest bag, car and team from the config
 #   just lab2 check-bags rosbags/lab2_uturn_1 --car A --team 3
+# Would the grader accept these bags? Missing topic, modified course, wrong speed, laps, MRM, off the path
 [positional-arguments]
 check-bags *ARGS:
     #!/usr/bin/env bash
     source scripts/env.sh
-    exec ros2 run autosdv_waypoint_lab lab2_check_bags "$@"
+    source scripts/testing/lab2/lab2_config.sh
+    lab2_config check-bags "$@" || exit 2
+    exec ros2 run autosdv_waypoint_lab lab2_check_bags "${LAB2_ARGS[@]}"
 
-# Run metrics of recorded runs: laps, cross-track, speed tracking, MRM
+#   just lab2 grade                                               score the latest bag against `reference`
 #   just lab2 grade BAG...                                        the engineering metrics
-#   just lab2 grade --score BAG --reference REFBAG                TA scoring of the lab2_uturn bag
+#   just lab2 grade --score BAG [--reference REFBAG]              TA scoring of the lab2_uturn bag
+# Score the latest run against the reference, or run metrics of named bags
 [positional-arguments]
 grade *ARGS:
     #!/usr/bin/env bash
     source scripts/env.sh
-    exec ros2 run autosdv_waypoint_lab lab2_grade_run "$@"
+    source scripts/testing/lab2/lab2_config.sh
+    lab2_config grade "$@" || exit 2
+    exec ros2 run autosdv_waypoint_lab lab2_grade_run "${LAB2_ARGS[@]}"
 
 # Regenerate a course's lanelet2_map.osm from its course.yaml; prints marker coverage
 [positional-arguments]
@@ -293,14 +344,25 @@ survey-solve *ARGS:
     source scripts/env.sh
     exec ros2 run autosdv_marker_survey lab2_marker_survey_solve "$dir/survey_data.npz" --course "$dir" "$@"
 
+#   just lab2 plot                           the latest bag
 #   just lab2 plot rosbags/lab2_uturn_1
+#   just lab2 plot --dry-run                 print the command, open nothing
 # PlotJuggler asks which topics to load: select all (Ctrl+A), then OK.
 # Open a bag in PlotJuggler: target vs measured speed, motor PWM, EKF path vs marker fixes
-plot BAG:
+[positional-arguments]
+plot *ARGS:
     #!/usr/bin/env bash
-    source scripts/env.sh
-    bag=$(realpath "{{ BAG }}")
+    dry=0; args=()
+    for a in "$@"; do if [ "$a" = --dry-run ]; then dry=1; else args+=("$a"); fi; done
+    source scripts/testing/lab2/lab2_config.sh
+    lab2_config plot "${args[@]}" || exit 2
+    [ "${#LAB2_ARGS[@]}" = 1 ] || { echo "usage: just lab2 plot [BAG] [config:=FILE] [--dry-run]" >&2; exit 2; }
+    bag=$(realpath "${LAB2_ARGS[0]}")
     [ -f "$bag/metadata.yaml" ] || { echo "error: '$bag' is not a bag directory (no metadata.yaml)" >&2; exit 1; }
     # --disable_opengl: under a remote desktop without GL the plots otherwise draw black
-    exec ros2 run plotjuggler plotjuggler --nosplash --disable_opengl \
-        -d "$bag/metadata.yaml" -l src/lab/autosdv_waypoint_lab/config/plotjuggler/lab2_run.xml
+    cmd=(ros2 run plotjuggler plotjuggler --nosplash --disable_opengl
+         -d "$bag/metadata.yaml" -l src/lab/autosdv_waypoint_lab/config/plotjuggler/lab2_run.xml)
+    printf '\033[2m%s\033[0m\n' "${cmd[*]}"
+    [ "$dry" = 1 ] && exit 0
+    source scripts/env.sh
+    exec "${cmd[@]}"
