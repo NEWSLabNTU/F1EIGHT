@@ -133,6 +133,18 @@ preflight *ARGS:
     source scripts/env.sh
     exec python3 scripts/testing/lab2/waypoint_preflight.py "$@"
 
+#   just lab2 health                         beside `just lab2 run` / loc-check, in a second tmux window; Ctrl-C ends it
+#   just lab2 health --duration 120          two minutes
+#   just lab2 health --with-run              file it under <bag_dir>/run_logs/<the run's bag>/
+#   just lab2 health --kernel                also one kernel_cpu_report.sh snapshot at the end
+# Writes rosbags/health/<date>_<time>/summary.txt + summary.json (and gpu.csv, tegrastats.log on the car).
+# Car-day health: topic rates and gaps, CPU per core, memory, GPU, temperatures, throttling; OK/WARN/FAIL
+[positional-arguments]
+health *ARGS:
+    #!/usr/bin/env bash
+    source scripts/env.sh
+    exec python3 scripts/testing/lab2/health.py "$@"
+
 #   just lab2 run                               the car: route, team_dir, car, team from the config
 #   just lab2 run car:=B team_dir:=~/lab2/team3 (team:= here is the team NUMBER, as in record)
 #   just lab2 run --bench [--camera mock]       the same flow on the vehicle bench

@@ -15,6 +15,7 @@ localized pose and the path) and the `SpeedPID` (the actuator's inner loop).
 | `just lab2 make-uturn R [--leg L]` | (no ROS) | regenerate the graded course from its radius and leg length |
 | `just lab2 run` | (starts the stack) | ONE graded run: stack, preflight, record, engage (asks), stop, audit |
 | `just lab2 audit` | (no stack) | the latest bag: VALID/INVALID, every metric, the violations, `audit.png` |
+| `just lab2 health` | (reads the running stack) | beside a run: topic rates and gaps, CPU, memory, GPU, temperatures, throttling; OK/WARN/FAIL |
 | `just lab2 integration-test` | (starts a bench) | TA: the whole Part 2 pipeline on the bench, rendered boards, PASS/FAIL |
 | `just lab2 fuzz BAG` | (no stack) | TA: mutated copies of a valid bag through check-bags, grade and audit |
 | `just lab2 record` | (reads the running stack) | the submission bag, `rosbags/lab2_uturn_<next>` |
@@ -494,6 +495,124 @@ On the bench (`loc_check.launch.xml` beside `just lab2 bench`, hall_demo,
 the reference tracker driving): 12 fixes/s, longest gap 1.2 s / 0.9 m, fix vs
 odometry median 10 cm / p95 24 cm with the bench's default detection noise
 (1.4 cm / 2.9 cm with that noise set to zero), off path median 1 cm, max 6 cm.
+
+## Car day: the checklist and `just lab2 health`
+
+The order on the car, each step in the same tmux session (a window each), each
+one cheap enough to repeat after any change to the car:
+
+1. `just lab2 preflight` with the stack up and the car in the start box
+   (`just lab2 run` also runs it itself before engaging);
+2. `just lab2 camera-check COURSE`: fix quality and the per-marker survey check;
+3. `just lab2 loc-check COURSE`: drive the course by hand, watch the trail;
+4. `just lab2 run` in one window, `just lab2 health --with-run` beside it in
+   another, started once the run says it is recording; Ctrl-C the health
+   monitor when the run has finished;
+5. `just lab2 audit`: the bag's verdict, metrics and `audit.png`.
+
+### `just lab2 health`
+
+```bash
+just lab2 health                      # until Ctrl-C
+just lab2 health --duration 120       # two minutes
+just lab2 health --with-run           # file the result with the run's bag
+just lab2 health --kernel             # also one kernel_cpu_report.sh snapshot at the end (~10 s, no root)
+```
+
+It samples, together, until Ctrl-C (or `--duration`), then writes
+`summary.txt` and `summary.json` to `rosbags/health/<date>_<time>/`. With
+`--with-run` the directory moves to `<bag_dir>/run_logs/<bag>/health_<time>/`
+beside the run's own logs, `<bag>` being the newest `lab2_*` bag started after
+the monitor (`bag_dir` from `~/lab2/lab2.yaml`, or `--with-run DIR`); with no
+such bag it stays where it was and says so.
+
+- **Topics**: receive times, so rates and gaps, of the camera (its
+  `camera_info`, published with every image: subscribing to the raw image from
+  outside the ZED container would make the camera serialise every frame for the
+  monitor alone), `/sensing/imu/imu_data`, `/vehicle/status/velocity_status`,
+  the marker fixes, `/localization/kinematic_state`,
+  `/control/command/control_cmd` and the actuator's
+  `/autosdv/actuator_node/debug/pwm_values`. It subscribes as soon as a
+  publisher appears, so it can start before the stack. Per topic: median, p5
+  and minimum rate over 1 s bins, the longest gap (including from the last
+  message to the stop, so a stream that died shows) and the age at the stop.
+- **CPU and memory** from `/proc` (no psutil needed): per-core busy, load
+  average, memory and swap, and the ten ROS processes using the most CPU, by
+  node name.
+- **GPU, power, temperatures**: `scripts/profiling/jetson_gpu_sampler.py` to
+  `gpu.csv` on the Jetson; `nvidia-smi` on a workstation. Thermal zones against
+  their passive trip points, and on the Orin the INA3221 over-current event
+  counters.
+- **tegrastats**, if installed, to `tegrastats.log`, summarised with
+  `scripts/testing/localization/tegrastats_summary.py`, plus the temperature
+  maxima and per-core clock range it prints. A core at 90 % or more running
+  below 90 % of its clock cap (`scaling_max_freq`, the nvpmodel mode's) counts
+  as throttling, as do a zone at its passive trip and an over-current event.
+
+The thresholds are the stack's own: the rates are `waypoint_preflight.RATES`
+(camera 8/12 Hz, IMU 20/30 Hz, velocity_status 10/18 Hz, kinematic_state 20/40
+Hz fail/warn); a gap longer than topic_state_monitor's 1 s timeout
+(`config/system/component_state_monitor/topics-waypoint.yaml`) is a FAIL,
+because engaged it is an MRM; `control_cmd` and the PWM have no preflight rate
+and use that monitor's 1/5 Hz; the marker fixes WARN under preflight's 2/s and
+FAIL on a gap past localization_monitor's `error_age` (5 s; WARN past half of
+it). The system lines WARN on a core busy 90 % of the time or more (median), memory
+over 90 %, swap that grows during the window (swap already in use before is not
+counted), or any throttling. The camera is not expected on the bench without
+`--camera mock`; the mode is detected from the node list as in the preflight.
+Exit status 1 if any line is FAIL.
+
+On a workstation the Jetson parts are skipped with a note. On the bench
+(`just lab2 run --bench --yes car:=SIM team:=0 submission:=tmp/sub_ref`, health
+for 40 s beside it, 2026-10-16, a 32-core amd64 workstation that was also busy
+with other jobs, load average ~40):
+
+```
+verdict
+  OK    rate: IMU: median 100.0 Hz, p5 100.0, min 99.0, max gap 0.02 s
+  OK    rate: velocity_status: median 20.0 Hz, p5 19.0, min 19.0, max gap 0.05 s
+  OK    rate: marker fixes: median 14.0 Hz, p5 2.7, min 0.0, max gap 1.60 s
+  OK    rate: kinematic_state: median 50.0 Hz, p5 50.0, min 50.0, max gap 0.03 s
+  OK    rate: control_cmd (vehicle_cmd_gate): median 30.0 Hz, p5 29.0, min 29.0, max gap 0.04 s
+  OK    rate: actuator PWM: median 100.0 Hz, p5 99.0, min 98.0, max gap 0.02 s
+  WARN  cpu: total median 65 %, peak 77 % -- ['cpu16'] busy >= 90 % half the time
+  WARN  memory: peak 16279 / 61879 MB (26 %), swap grew 459 MB -- memory pressure: something is being swapped out
+  OK    throttling: none seen
+  OK    gpu: load median 0 %, max 0 %
+```
+
+The two WARNs are the other jobs, not the stack (the stack's processes are
+listed in summary.txt: ~10-20 % of a core each). If every topic goes silent
+together before the monitor stops (the run finished and stopped its stack),
+that is one `stack` WARN and the rates are taken up to that moment, not a
+gap FAIL per topic.
+
+The fixes' 1.6 s gap is `lab2_uturn`'s design gap (1.6 s by its board layout,
+see `audit.py`), under half of `error_age`.
+
+### The car-fix checks (once per car, after a vehicle-interface update)
+
+Two fixes in the vehicle interface (`b7ae5e6`) change what the car does at a
+stop; check both on the car before the first graded run:
+
+- **The velocity report drops to 0 within about 0.5 s after the wheels stop.**
+  Car on a stand, `just lab2 vehicle` (or `just control basic`) up, in one
+  window `ros2 topic echo /vehicle/status/velocity_status --field
+  longitudinal_velocity`; spin a rear wheel by hand and stop it dead. The
+  reading must fall to 0 within ~0.5 s and decay on the way, not hold the last
+  speed for half a second and then jump: the old node held its last edge-timing
+  estimate until the 0.5 s timeout, which the EKF integrated into a ~0.2 m
+  overshoot at every stop.
+- **COAST: lowering the target from 0.3 to 0 m/s never commands PWM above
+  neutral.** Car on a stand (wheels free), the coach stack without its planner
+  (`just coach vehicle launch_planner:=false`), `just coach record-cal`, then
+  `just coach speed-steps 0,0.3,0 4 5` and `just coach engage`. In the bag
+  (`just lab2 plot`, or echo `/autosdv/actuator_node/debug/pwm_values`), once
+  the target is 0 the motor PWM (the first value) must stay at or below
+  `init_pwm` (370, neutral) all the way down: neutral while coasting between 0.2
+  and 0.1 m/s, `brake_pwm` above that, never a forward pulse. Before COAST the
+  speed PID's integral drove the car forward through that band (1.3 m overrun on
+  the bench).
 
 ## Running a student's submission (gate, bench, car)
 
