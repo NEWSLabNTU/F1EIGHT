@@ -1,6 +1,6 @@
 """lab2_check_bags: is this a bag the grader should accept?
 
-    lab2_check_bags BAG [BAG ...] [--course DIR ...] [--car A] [--team 3]
+    lab2_check_bags BAG [BAG ...] [--course DIR ...] [--car A] [--team 3] [--bench]
 
 Each bag is rejected, with the reasons printed, if it has:
 
@@ -16,8 +16,15 @@ Each bag is rejected, with the reasons printed, if it has:
   - a route other than the graded one (lab2_uturn),
   - other than 1 lap, or a run that did not finish,
   - an MRM or a disengage before the finish,
-  - the localized pose more than route_grade.PATH_DEV_MAX from the path,
-  - no AUTONOMOUS period at all.
+  - the localized pose more than route_grade.PATH_DEV_MAX from the path, or
+    jumping (route_grade.LOC_JUMP_MAX), or a non-finite pose or speed report,
+  - a bag that ends less than route_grade.SETTLE[1] s after the car came to
+    rest (the stop pose is the median over that settle window),
+  - no AUTONOMOUS period at all,
+  - a bench bag (`lab2_record --bench`: simulated car, rendered or synthetic camera;
+    metadata `"bench": true`) -- unless --bench is given, which is the TA
+    integration test's mode (`just lab2 integration-test`). A bench bag is
+    never a submission.
 
 With several bags it also checks that no route is submitted twice and that
 they come from one car and one team. Exit status 1 if any bag is rejected.
@@ -90,7 +97,8 @@ def camera_size(raw: bytes):
 
 def check_messages(name: str, topics: Dict[str, list], msgs: Dict[str, list], meta: Optional[dict],
                    course_dirs=(), cam_size=None,
-                   expect_car: Optional[str] = None, expect_team: Optional[str] = None) -> Verdict:
+                   expect_car: Optional[str] = None, expect_team: Optional[str] = None,
+                   bench_ok: bool = False) -> Verdict:
     v = Verdict(name)
     # topics
     for t in bm.REQUIRED_TOPICS:
@@ -113,6 +121,13 @@ def check_messages(name: str, topics: Dict[str, list], msgs: Dict[str, list], me
             v.reasons.append(f'car {v.car!r}, expected {expect_car!r}')
         if expect_team and v.team != expect_team:
             v.reasons.append(f'team {v.team!r}, expected {expect_team!r}')
+        if meta.get('bench'):
+            if bench_ok:
+                v.warnings.append('bench bag (simulated car, rendered or synthetic camera): accepted '
+                                  'for the integration test only, never as a submission')
+            else:
+                v.reasons.append('bench bag (simulated car, rendered or synthetic camera), not a run '
+                                 'on the car; only --bench (the TA integration test) accepts it')
         if meta.get('git_dirty'):
             v.warnings.append('recorded from a modified git tree')
         if route is None:
@@ -162,12 +177,22 @@ def check_messages(name: str, topics: Dict[str, list], msgs: Dict[str, list], me
             td = (course_dirs[0] if len(course_dirs) == 1 else None) or rg.template_dir(route)
             geo = rg.geometry_from_course(td, route) if td else None
             rm = rg.route_metrics(name, msgs, route, geo)
+            v.reasons += rg.nonfinite_failures(rm)
             if geo and not math.isnan(rm.path_dev_max):
                 if rm.path_dev_max > rg.PATH_DEV_MAX:
                     v.reasons.append(f'off the path: localized pose {rm.path_dev_max:.3f} m from it, '
                                      f'{rg.PATH_DEV_MAX} m allowed')
+                if rm.loc_jump > rg.LOC_JUMP_MAX:
+                    v.reasons.append(rg.jump_text(rm))
             elif geo:
                 v.reasons.append('path deviation not measurable (no steady window)')
+            bag_end = max([r[2] for r in topics.values() if r[2] is not None] + t_all)
+            if not math.isnan(rm.t_rest):
+                after = bag_end - rm.t_rest
+                if after < rg.SETTLE[1]:
+                    v.reasons.append(f'the bag ends {after:.1f} s after the car came to rest; record '
+                                     f'at least {rg.SETTLE[1]:g} s past the stop (the stop pose is '
+                                     'the median over that time)')
         # commanded plateau
         t0 = eng.spans[0][0]
         cmd = sorted(c.longitudinal.velocity for t, c in msgs.get(g.CONTROL, []) if eng.contains(t))
@@ -196,7 +221,8 @@ def check_messages(name: str, topics: Dict[str, list], msgs: Dict[str, list], me
 
 
 
-def check_bag(path: str, course_dirs=(), expect_car=None, expect_team=None) -> Verdict:
+def check_bag(path: str, course_dirs=(), expect_car=None, expect_team=None,
+              bench_ok: bool = False) -> Verdict:
     from autosdv_coach_lab.calibration.bagio import read_bag
     name = os.path.basename(os.path.normpath(path))
     try:
@@ -206,7 +232,7 @@ def check_bag(path: str, course_dirs=(), expect_car=None, expect_team=None) -> V
     msgs = read_bag(path, [g.PROGRESS, g.CONTROL, g.MRM, g.MODE, g.VELOCITY, g.KINEMATIC, bm.META_TOPIC])
     meta = bm.meta_from_messages(msgs, path)
     return check_messages(name, topics, msgs, meta, course_dirs,
-                          camera_size(cam) if cam else None, expect_car, expect_team)
+                          camera_size(cam) if cam else None, expect_car, expect_team, bench_ok)
 
 
 def check_set(verdicts: List[Verdict]) -> List[str]:
@@ -231,8 +257,10 @@ def main(argv=None):
                          '(repeatable); default: the packaged template')
     ap.add_argument('--car', default=None, help='the car ID the bags must carry')
     ap.add_argument('--team', default=None, help='the team ID the bags must carry')
+    ap.add_argument('--bench', action='store_true',
+                    help='TA integration test: accept bench bags (simulated car); never for grading')
     args = ap.parse_args(argv)
-    verdicts = [check_bag(b, args.course, args.car, args.team) for b in args.bags]
+    verdicts = [check_bag(b, args.course, args.car, args.team, args.bench) for b in args.bags]
     for v in verdicts:
         print(f'{"ACCEPT" if v.ok else "REJECT"}  {v.bag}  route={v.route}  car={v.car}  team={v.team}')
         for r in v.reasons:

@@ -10,6 +10,8 @@ the start box, before the first engage:
 One line per check, PASS / WARN / FAIL, and exit status 1 if any FAIL:
 
   nodes        the nodes the waypoint stack needs are alive, per mode
+  localizer    ar_tag_based_localizer is AutoSDV's fork (the stock one cannot
+               decode the boards' DICT_5X5_1000 and finds nothing, silently)
   rates        camera image and IMU (vehicle), velocity_status, IMU, the
                gyro_odometer twist, kinematic_state, the trajectory and path_tracker's command
   imu qos      the ZED IMU's publisher and imu_corrector's subscription can
@@ -28,8 +30,9 @@ One line per check, PASS / WARN / FAIL, and exit status 1 if any FAIL:
   graph        the diagnostic graph: autonomous available, or the units that
                block it
 
-The mode is detected from the node list: vehicle_bench_plant -> bench,
-otherwise vehicle. The availability, MRM, mode and graph checks are the coach
+The mode is detected from the node list: vehicle_bench_plant -> bench (and
+mock_aruco_camera -> mock: the bench with rendered boards and the real
+localizer), otherwise vehicle. The availability, MRM, mode and graph checks are the coach
 preflight's (preflight.py), shared.
 """
 
@@ -68,6 +71,9 @@ MODE_NODES = {
     'vehicle': ['/autosdv/velocity_report_node', '/sensing/camera/zedxm/zedxm',
                 '/localization/pose_estimator/ar_tag_based_localizer'],
     'bench': ['/vehicle_bench_plant', '/localization/pose_estimator/virtual_marker_localizer'],
+    # the bench with camera:=mock: rendered boards into the real localizer
+    'mock': ['/vehicle_bench_plant', '/mock_aruco_camera',
+             '/localization/pose_estimator/ar_tag_based_localizer'],
 }
 # nodes that must NOT run: they would be a second publisher of a lab topic
 FORBIDDEN = ['/control/trajectory_follower/controller_node_exe', '/dead_reckon_odometry',
@@ -79,18 +85,18 @@ IMU_RAW = '/sensing/camera/zedxm/imu/data'
 IMU_OUT = '/sensing/imu/imu_data'
 TWIST = '/localization/twist_estimator/twist_with_covariance'
 RATES = [
-    (IMAGE, 'camera image', 8.0, 12.0, ('vehicle',)),
+    (IMAGE, 'camera image', 8.0, 12.0, ('vehicle', 'mock')),
     # imu_corrector (depth-1 subscription) keeps only the last of each ~3-message
     # burst the ZED delivers every ~33 ms: 33-37 Hz on car B (2026-10-14) from a
     # 100 Hz source. gyro_odometer emits at the 20 Hz velocity rate, so that is enough.
-    ('/sensing/imu/imu_data', 'IMU', 20.0, 30.0, ('vehicle', 'bench')),
+    ('/sensing/imu/imu_data', 'IMU', 20.0, 30.0, ('vehicle', 'bench', 'mock')),
     (TWIST, 'gyro_odometer twist (the EKF\'s only prediction input)', 5.0, 10.0,
-     ('vehicle', 'bench')),
-    ('/vehicle/status/velocity_status', 'velocity_status', 10.0, 18.0, ('vehicle', 'bench')),
-    ('/localization/kinematic_state', 'kinematic_state', 20.0, 40.0, ('vehicle', 'bench')),
-    ('/planning/trajectory', 'trajectory', 5.0, 8.0, ('vehicle', 'bench')),
+     ('vehicle', 'bench', 'mock')),
+    ('/vehicle/status/velocity_status', 'velocity_status', 10.0, 18.0, ('vehicle', 'bench', 'mock')),
+    ('/localization/kinematic_state', 'kinematic_state', 20.0, 40.0, ('vehicle', 'bench', 'mock')),
+    ('/planning/trajectory', 'trajectory', 5.0, 8.0, ('vehicle', 'bench', 'mock')),
     ('/control/trajectory_follower/control_cmd', 'path_tracker command', 15.0, 25.0,
-     ('vehicle', 'bench')),
+     ('vehicle', 'bench', 'mock')),
 ]
 FIX = '/localization/pose_estimator/pose_with_covariance'
 PROGRESS = '/planning/waypoint_path_publisher/progress'
@@ -104,6 +110,23 @@ def qos_mismatch(pub_reliability, sub_reliability):
             if p == 'BEST_EFFORT' and s == 'RELIABLE']
 
 
+def localizer_is_fork(node, name, timeout=3.0):
+    """True if the node declares `dictionary` (the fork), False if not, None if it does
+    not answer."""
+    from rcl_interfaces.srv import ListParameters
+    cli = node.create_client(ListParameters, name + '/list_parameters')
+    try:
+        if not cli.wait_for_service(timeout_sec=timeout):
+            return None
+        fut = cli.call_async(ListParameters.Request())
+        rclpy.spin_until_future_complete(node, fut, timeout_sec=timeout)
+        if fut.result() is None:
+            return None
+        return 'dictionary' in fut.result().result.names
+    finally:
+        node.destroy_client(cli)
+
+
 def reliability_names(infos):
     return [i.qos_profile.reliability.name for i in infos]
 
@@ -111,7 +134,7 @@ def reliability_names(infos):
 def main():
     ap = argparse.ArgumentParser(description=__doc__.split('\n\n')[0],
                                  formatter_class=argparse.RawDescriptionHelpFormatter)
-    ap.add_argument('--mode', choices=['auto', 'vehicle', 'bench'], default='auto')
+    ap.add_argument('--mode', choices=['auto', 'vehicle', 'bench', 'mock'], default='auto')
     ap.add_argument('--window', type=float, default=3.0, help='rate sampling window [s]')
     args = ap.parse_args()
 
@@ -145,6 +168,8 @@ def main():
     names = pf.node_names(node)
     mode = ('bench' if '/vehicle_bench_plant' in names else 'vehicle') \
         if args.mode == 'auto' else args.mode
+    if mode == 'bench' and '/mock_aruco_camera' in names:
+        mode = 'mock'
     print(f'Lab 2 (waypoint) preflight, mode {mode}'
           f'{" (detected)" if args.mode == "auto" else ""}, {len(names)} nodes', flush=True)
     if len(names) <= 1:
@@ -161,6 +186,19 @@ def main():
     if extra:
         out(FAIL, 'nodes', f'{extra} running: a second publisher of a lab topic '
             '(a coach-lab launch still up?)')
+
+    # the localizer must be AutoSDV's fork: the stock node in /opt/autoware has no
+    # `dictionary` parameter, decodes only the aruco library's families, and so sees
+    # no DICT_5X5_1000 board at all (silently: no error, no fix)
+    loc = '/localization/pose_estimator/ar_tag_based_localizer'
+    if loc in names:
+        fork = localizer_is_fork(node, loc)
+        if fork is False:
+            out(FAIL, 'localizer', 'ar_tag_based_localizer is the stock one (no `dictionary` parameter): '
+                'build the fork: git submodule update --init '
+                'src/localization/external/autoware_ar_tag_based_localizer && just build')
+        elif fork is True:
+            out(PASS, 'localizer', "ar_tag_based_localizer is AutoSDV's fork (has `dictionary`)")
 
     types = dict(node.get_topic_names_and_types())
     from rosidl_runtime_py.utilities import get_message
@@ -223,7 +261,7 @@ def main():
 
     # ---- TF
     pairs = [('map', 'base_link')]
-    if mode == 'vehicle':
+    if mode in ('vehicle', 'mock'):
         if cam_frame:
             pairs.append(('base_link', cam_frame))
         else:

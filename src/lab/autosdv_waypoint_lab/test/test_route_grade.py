@@ -369,3 +369,61 @@ def test_meta_from_topic_then_sidecar(tmp_path):
     assert bm.meta_from_messages({bm.META_TOPIC: [(0, NS(data=json.dumps(meta)))]}) == meta
     (tmp_path / bm.SIDECAR).write_text(json.dumps({'car_id': 'B'}))
     assert bm.meta_from_messages({}, str(tmp_path)) == {'car_id': 'B'}
+
+
+# ----------------------------------------------------------- non-finite data, jumps, a cut bag
+
+def test_nan_pose_is_invalid_and_rejected_not_a_crash():
+    msgs = msgs_for()
+    t, k = msgs[g.KINEMATIC][100]
+    msgs[g.KINEMATIC][100] = (t, kin(math.nan, math.nan))
+    m = rg.route_metrics('b', msgs, 'uturn', UTURN)
+    assert m.bad_poses == 1
+    s = rg.score_route(m)
+    assert s.invalid and any('non-finite localized pose' in f for f in s.gate_failures)
+    assert any('non-finite localized pose' in r for r in check(msgs).reasons)
+    with pytest.raises(ValueError):
+        UTURN.path.project(math.nan, 0.0)
+
+
+def test_nan_speed_is_named():
+    msgs = msgs_for()
+    for i in (50, 51, 52):
+        t, _ = msgs[g.VELOCITY][i]
+        msgs[g.VELOCITY][i] = (t, NS(longitudinal_velocity=math.nan))
+    m = rg.route_metrics('b', msgs, 'uturn', UTURN)
+    assert m.bad_speeds == 3
+    assert any('3 non-finite speed report' in f for f in rg.score_route(m).gate_failures)
+    assert any('non-finite speed report' in r for r in check(msgs).reasons)
+
+
+def test_clean_run_has_no_localization_jump():
+    m = rg.route_metrics('b', msgs_for(), 'uturn', UTURN)
+    assert m.loc_jump < 0.05
+    assert not rg.score_route(m).invalid
+
+
+def test_a_jump_along_the_path_is_caught():
+    msgs = msgs_for()
+    kin_ = []
+    for t, k in msgs[g.KINEMATIC]:
+        if 10.0 <= t <= 11.0:              # 1 m ahead along the out leg (driving -x) for 1 s
+            p = k.pose.pose.position
+            k = kin(p.x - 1.0, p.y)
+        kin_.append((t, k))
+    msgs[g.KINEMATIC] = kin_
+    m = rg.route_metrics('b', msgs, 'uturn', UTURN)
+    assert m.path_dev_max < rg.PATH_DEV_MAX            # across the path it looks fine
+    assert m.loc_jump > 0.9
+    assert any('localization jump' in f for f in rg.score_route(m).gate_failures)
+    assert any('localization jump' in r for r in check(msgs).reasons)
+
+
+def test_bag_cut_right_after_the_stop_is_rejected():
+    msgs = msgs_for()
+    t_rest = rg.route_metrics('b', msgs, 'uturn', UTURN).t_rest
+    cut = {k: [(t, x) for t, x in v if t <= t_rest + 0.3] for k, v in msgs.items()}
+    t = topics_all(dur=t_rest + 0.3)
+    v = check(cut, topics=t)
+    assert any('ends 0.3 s after the car came to rest' in r for r in v.reasons)
+    assert check().ok

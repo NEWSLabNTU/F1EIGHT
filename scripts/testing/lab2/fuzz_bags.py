@@ -673,7 +673,7 @@ def catalogue(out: Path) -> List[Case]:
                                    1.0 * c.w2_tangent[1]),
         Expect(R, I, note='a teleport along the path: the pose jumps 1 m ahead of what '
                           'the wheel speed allows'), composable=False)
-    add('loc:nan_pose_1_sample', lambda b, c, r: nan_pose(b, c), Expect(None, I))
+    add('loc:nan_pose_1_sample', lambda b, c, r: nan_pose(b, c), Expect(R, I))
 
     # timestamps
     add('time:whole_bag_reversed', lambda b, c, r: time_reverse(b), Expect(R, I), composable=False)
@@ -685,7 +685,7 @@ def catalogue(out: Path) -> List[Case]:
         Expect(A, V, metric=m_unchanged(0.01)), composable=False)
 
     # speed
-    add('speed:nan_3_samples', lambda b, c, r: nan_vel(b, c), Expect(None, I))
+    add('speed:nan_3_samples', lambda b, c, r: nan_vel(b, c), Expect(R, I))
 
     def x13(b, c, r):
         scale_vel(b, 1.3)
@@ -723,7 +723,10 @@ def catalogue(out: Path) -> List[Case]:
     add('mode:never_engaged', lambda b, c, r: never_engaged(b), Expect(R, I))
     add('truncate:before_stop', lambda b, c, r: truncate(b, c.t_ramp - 2.0), Expect(R, I))
     add('truncate:just_after_finish',
-        lambda b, c, r: truncate(b, max(c.t_finish, c.t_rest) + 0.3), Expect(None, V), composable=False)
+        lambda b, c, r: truncate(b, max(c.t_finish, c.t_rest) + 0.3),
+        Expect(R, V, audit_want=I, note='check_bags rejects a bag cut before the stop has settled '
+                                        '(route_grade.SETTLE); the grade alone stays valid'),
+        composable=False)
     for t in (KIN, PWM, CAMERA):
         add(f'empty:{t}', (lambda t: lambda b, c, r: b.drop(t, keep_topic=True))(t),
             Expect(R, I if t == KIN else None))
@@ -741,7 +744,11 @@ def evaluate(path: str, ctx: Ctx) -> dict:
     out = {'check_ok': False, 'check_reasons': [], 'grade_valid': None, 'gate_failures': [],
            'metrics': {k: math.nan for k in METRICS}, 'total': 0.0, 'audit': None, 'errors': []}
     try:
-        v = cb.check_bag(path, [], ctx.car or None, ctx.team or None, bench_ok=ctx.bench)
+        # A bench base is checked in bench mode (--bench), as the integration test does.
+        # On such a base meta:bench_flag changes nothing, so that case asks the
+        # submission question instead: would a student's check-bags accept it?
+        bench_ok = ctx.bench and 'bench_flag' not in os.path.basename(os.path.normpath(path))
+        v = cb.check_bag(path, [], ctx.car or None, ctx.team or None, bench_ok=bench_ok)
         out['check_ok'], out['check_reasons'] = v.ok, list(v.reasons)
     except Exception as e:      # a crash is a rejection, and worth reporting
         out['check_reasons'] = [f'check_bags raised {type(e).__name__}: {e}']

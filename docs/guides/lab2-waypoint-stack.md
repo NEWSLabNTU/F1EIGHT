@@ -13,6 +13,10 @@ localized pose and the path) and the `SpeedPID` (the actuator's inner loop).
 | `just lab2 preflight` | (reads the running stack) | before engaging: nodes, rates, marker fixes, start box, TF, availability, MRM, graph |
 | `just lab2 gate` | (starts a bench) | a team's SpeedPID drives `lab2_uturn`, PASS/FAIL before car time |
 | `just lab2 make-uturn R [--leg L]` | (no ROS) | regenerate the graded course from its radius and leg length |
+| `just lab2 run` | (starts the stack) | ONE graded run: stack, preflight, record, engage (asks), stop, audit |
+| `just lab2 audit` | (no stack) | the latest bag: VALID/INVALID, every metric, the violations, `audit.png` |
+| `just lab2 integration-test` | (starts a bench) | TA: the whole Part 2 pipeline on the bench, rendered boards, PASS/FAIL |
+| `just lab2 fuzz BAG` | (no stack) | TA: mutated copies of a valid bag through check-bags, grade and audit |
 | `just lab2 record` | (reads the running stack) | the submission bag, `rosbags/lab2_uturn_<next>` |
 | `just lab2 check-bags` | (no stack) | would the grader accept the latest bag? |
 | `just lab2 grade` | (no stack) | score the latest bag against the car's reference bag |
@@ -66,6 +70,189 @@ The design and the decisions behind it are in the course repository,
 `2026/labs/Lab2/lab2-system-design.md`. The coach-board lab this replaced is
 `just coach` ([lab2-stack.md](lab2-stack.md)); its system, API and control
 components are shared with this one.
+
+## A graded run from one terminal (`just lab2 run`, `just lab2 audit`)
+
+On the car there is no monitor: students work over ssh, in tmux so a dropped
+connection does not end the run. One command does the run, a second looks at
+it:
+
+```bash
+ssh car-a
+tmux new -s lab2                  # or `tmux attach -t lab2`
+just lab2 run                     # settings from ~/lab2/lab2.yaml
+just lab2 audit                   # the latest bag again, any time later
+just lab2 audit --show            # also open audit.png: `export DISPLAY=:1` first, view over RDP
+```
+
+`just lab2 run`, in one terminal, with one status line at a time:
+
+1. starts the stack exactly as `just lab2 vehicle` would (`route`, `team_dir`)
+   in a session of its own; its output goes to
+   `<bag_dir>/run_logs/lab2_uturn_N/stack.log`, not the terminal;
+2. waits until autonomous mode has been available for 3 s, then runs the
+   preflight; any FAIL stops the stack and ends the run (WARN lines are shown
+   and allowed);
+3. starts recording `<bag_dir>/lab2_uturn_N` (the next free N; car and team
+   from the settings);
+4. asks: *Ready. Engage only when the TA holds the transmitter. Press Enter to
+   engage, or q then Enter to abort.* It refuses to engage, with the reason,
+   while the localization is not usable (below) or autonomous mode is not
+   available, and asks again;
+5. prints `t, v, s along the route, mode, MRM` once a second until the car has
+   stopped at the end of the route; an MRM, a disengage (the transmitter
+   included), a localization loss, the timeout (3 x the route's driving time,
+   93 s for `lab2_uturn`) or Ctrl-C end it early, and anything but a finish
+   disengages at once;
+6. records 3 s more (check-bags wants 3 s past the stop), disengages if still
+   engaged (before the bag closes: the car is not left in autonomous mode while
+   the recorder shuts down; a disengage after the finish does not count),
+   stops the recording, and stops the stack: SIGINT, then SIGTERM after
+   20 s, then SIGKILL, to every process group of its session (play_launch gives
+   its nodes groups of their own);
+7. audits the new bag and prints the verdict and the plot's path.
+
+Ctrl-C at any stage (or the terminal going away) disengages first if engaged,
+then closes the bag, then stops the stack; a second Ctrl-C during that only
+prints "please wait". `team:=` here is the team NUMBER, as in `record`; the
+controller directory is `team_dir:=`.
+
+```
+config ~/lab2/lab2.yaml: route lab2_uturn, team_dir ~/lab2/team3
+[1/7] stack: vehicle (car), log rosbags/run_logs/lab2_uturn_4/stack.log
+[2/7] waiting for the stack (autonomous available 3 s, up to 180 s)
+      up after 41 s
+      preflight 16 passed, 0 warnings, 0 failed (all lines: .../preflight.log)
+[3/7] recording rosbags/lab2_uturn_4
+[4/7] Ready. Engage only when the TA holds the transmitter. Press Enter to engage, or q then Enter to abort.
+      engaged
+[5/7] driving; ends at the stop, on an MRM, a disengage, a localization loss, or after 93 s
+  t  12.0 s  v 0.80 m/s  s  9.6/24.7 m  AUTONOMOUS  MRM NORMAL
+END   stopped at the end of the route
+[6/7] stopping the recording
+...
+[7/7] audit
+```
+
+**Localization loss stops the car.** While engaged, `run` disengages (Autoware's
+stop mode brakes the car) and prints the reason as soon as any of these holds,
+without waiting for the MRM the stack raises itself:
+
+| Condition | Threshold | From |
+| --- | --- | --- |
+| no accepted marker fix | `error_age` 5 s | `localization_monitor: marker_fix` ERROR |
+| off the path | `error_distance` 0.8 m | `localization_monitor: path_deviation` ERROR |
+| no course progress | `progress_timeout` 1 s | `localization_monitor: path_deviation` ERROR |
+| the monitor silent | 2 s | `run` |
+| no `/localization/kinematic_state` | 0.5 s | `run` |
+| EKF position sigma `sqrt(var_x + var_y)` | 0.5 m (`--max-pose-std`) | `run`; the bench runs at 0.06-0.10 m |
+
+The first three are `localization_monitor`'s
+(`config/localization_monitor.param.yaml`) and, in the diagnostic graph, also
+make autonomous mode unavailable, so an engage with no fix is refused by the
+stack itself (`just lab2 bench-checks --only no_markers`); `run` additionally
+refuses before asking the stack, and the preflight fails with no fixes. The
+monitor has no covariance check; the 0.5 m sigma limit is `run`'s, five times
+what the bench's EKF reaches and above the 0.3 m validity line, so it only
+catches an EKF that has lost its pose.
+
+**`just lab2 audit [BAG]`** (default: the latest bag) runs the bag checker and
+the grade (against `reference` when it is a bag, else the fixed lines, as
+`grade` does) and prints the verdict, each metric against its full-marks and
+zero lines with its points, and the violations: every check-bags rejection,
+every validity gate, every metric below full marks, every stretch more than
+0.3 m off the path (with its time after engage), every MRM and early
+disengage. It writes `BAG/audit.png` and `BAG/audit.json`:
+
+- speed vs time since engage: measured and commanded speed, the target, the
+  scored steady window shaded, a strip naming the straight and U-turn
+  segments (from where the localized car was on `path.csv`'s turn interval,
+  as the grade splits them), the start overshoot peak, the engage, the stop
+  ramp start, MRM and disengage moments as red lines, the samples whose speed
+  error is over their segment's full-marks line in red, and the stop error;
+- the run on the floor: the route path (U-turn section highlighted), the
+  localized trajectory, the raw marker fixes, the true pose on the bench, the
+  boards with their facing arrows, the start and stop lines, and in red every
+  stretch more than 0.3 m off the path;
+- the distance from the path vs time, the 0.3 m line, red where exceeded, and
+  grey outside the judged interval (engage to rest);
+- the title: bag, car, team, VALID/INVALID with the first violation, points.
+
+A bench bag also gets its localization measured against the plant's true pose
+(fix count and rate, fix and EKF error median/p95, the longest gap without a
+fix).
+
+## Bench bags and the TA integration test (`just lab2 integration-test`)
+
+`just lab2 run --bench` is the same flow on the vehicle bench, and
+`just lab2 integration-test` runs it as a TA test of the whole Part 2
+pipeline without a car: stack -> record -> engage -> finish -> bag ->
+check-bags -> grade -> audit, with the reference controller by default:
+
+```bash
+just lab2 integration-test                          # the reference SpeedPID, rendered boards
+just lab2 integration-test submission:=~/lab2/B12345678_lab_2_1
+just lab2 integration-test team_dir:=~/lab2/team3   # Part 2: a team's tracker and lookahead
+just lab2 integration-test --camera virtual         # the modelled localizer (faster)
+```
+
+It exits 0 only if all of these pass, and prints one line each:
+
+- the run finished (stopped at the end of the route, no MRM, no disengage);
+- `check-bags --bench` ACCEPTs the bag;
+- the grade is valid;
+- `audit.png` was written;
+- the localization against the plant's true pose is within `audit.LOC_LIMITS`:
+  at least 2 accepted fixes/s, fix error p95 <= 0.50 m, EKF error p95 <=
+  0.20 m, no gap without a fix over 3 s. The scale is the grade's: the
+  validity line is 0.3 m from the path, so a pose 0.2 m off at p95 leaves no
+  margin. A single fix is noisier than the EKF that averages it: the localizer
+  declares a 0.22 m sigma per axis, whose 2-D p95 is 0.54 m. The gap stays
+  well inside `error_age` (`lab2_uturn`'s design gap is 1.6 s).
+
+Bags go to `tmp/lab2_integration/bags` as car `SIM`, team `0` (override with
+`bag_dir:=`, `car:=`, `team:=`); `ROS_DOMAIN_ID` defaults to 73 and 0 is refused.
+
+**Rendered boards (`camera:=mock`).** The integration test runs the bench with
+`camera:=mock`: `mock_aruco_camera` renders the course's boards (cv2.aruco, the
+course's dictionary, each marker on a white plate at its surveyed pose) from
+the plant's TRUE pose at 15 Hz, 960 x 600, a 403 px pinhole (the ZED X Mini's
+~100 deg field of view at half resolution), and publishes them on the ZED's
+image and camera_info topics. The real `ar_tag_based_localizer` then detects
+them and feeds the EKF, exactly as on the car; `virtual_marker_localizer` is
+not started. A board behind the camera, facing away or beyond 12 m is not
+drawn; the localizer's own range limit and EKF gate do the rest. The camera's
+pose is the stack's TF to the ZED optical frame when it exists (it does not on
+the bench, whose kit has no ZED frames), else the prototype's mount, 0.20 m
+forward and 0.25 m up, published as `mock_camera_optical`. The image is mono8:
+a 1.7 MB colour frame is larger than the host's socket receive buffer
+(`net.core.rmem_max` 1 MB) and the localizer's best-effort subscription lost
+all but 21 of 650; the 576 kB mono frame arrives whole. The frames also fill
+the recorder's camera topic, so the bag passes the camera checks.
+
+Cost, measured on the shared workstation (play_launch's per-node metrics,
+median over a run): `mock_aruco_camera` 10 % of one core (2.5 ms a frame),
+the real `ar_tag_based_localizer` 13 %, against 6.5 % for
+`virtual_marker_localizer`. Localization on `lab2_uturn` with the reference
+laws: 450 fixes (12.7/s), fix error median 0.05 m / p95 0.35 m, EKF error
+median 0.025 m / p95 0.08 m, longest gap 1.6 s (virtual: fix p95 0.23 m, EKF
+p95 0.08 m). The localizer must be AutoSDV's fork (the submodule
+`src/localization/external/autoware_ar_tag_based_localizer`, built): the stock
+node in `/opt/autoware` has no `dictionary` parameter, cannot decode the
+boards' DICT_5X5_1000, and finds nothing without saying so. The preflight now
+fails on the stock node (`localizer` line).
+
+The student gate (`just lab2 gate`) keeps `camera:=virtual`: it is
+deterministic per seed, cheaper, and gates the SpeedPID, which the camera
+path does not affect. `just lab2 run --bench` uses `virtual` too unless
+`--camera mock`.
+
+**A bench bag is never a submission.** `lab2_record --bench` writes
+`"bench": true` into the bag's metadata (and, without the mock camera, fills
+the camera topic with a labelled synthetic card, "BENCH - simulated car - not
+a camera"). `lab2_check_bags` rejects such a bag ("bench bag (simulated car,
+rendered or synthetic camera), not a run on the car") unless it is given `--bench`, which
+only the integration test and `audit` of a bench bag pass.
 
 ## The chain
 
@@ -276,8 +463,9 @@ car gate; `known-config-defects.md` §8).
 
 Grading (`route_grade.py`, `lab2-submission-bags.md`): speed RMSE on the legs
 (15) and in the turn (10), overshoot (5), stop error (15), each against the
-car's reference bag; a bag off the path by more than 0.3 m, unfinished, with an
-MRM or a disengage is invalid and scores 0.
+car's reference bag; a bag off the path by more than 0.3 m, with a localization
+jump (pose vs integrated wheel speed over 1 s, 0.3 m), a non-finite pose or
+speed, unfinished, with an MRM or a disengage is invalid and scores 0.
 
 ## Checking localization by hand (`just lab2 loc-check`)
 
@@ -342,7 +530,8 @@ follows the stock node rather than an ideal detector:
 `scripts/testing/lab2/synthetic_camera/run.sh` covers the image path the bench
 skips. It runs the real localizer against rendered images of a course, which
 tests the map's corner order, the marker axes, the dictionary and the camera
-frame end to end.
+frame end to end. `camera:=mock` (above) is the same idea as a node that
+follows the plant, so a whole run goes through the real localizer.
 
 ## Measured on the bench (2026-10-13, hall_demo, reference laws)
 
@@ -369,3 +558,82 @@ The car stops within 5 cm of the start. `just lab2 bench-checks`: 5/5:
 - The steering ratio and sign.
 - The IMU's mounting in TF: `gyro_odometer` uses the TF rotation, where the
   coach lab's dead reckoning had a manual sign.
+
+## Fuzzing the Part 2 gates (`scripts/testing/lab2/fuzz_bags.py`)
+
+A TA-side test that the bag gates catch bad runs. It takes one bag of the
+graded route that passes both gates, writes mutated copies under
+`tmp/fuzz2/bags/`, and runs `check_bags`, the route grade
+(`route_grade.read_route_bag` + `score_route`) and, when present, the audit on
+each:
+
+```bash
+python3 scripts/testing/lab2/fuzz_bags.py tmp/lab2_cfg/bags/lab2_uturn_2 \
+    --reference tmp/uturn_bags/lab2_ref [--seed 1] [--n 30] [--out tmp/fuzz2]
+python3 scripts/testing/lab2/fuzz_bags.py --list      # the catalogue and its expectations
+python3 scripts/testing/lab2/fuzz_bags.py BAG --gate  # plus the bench gate on mutant SpeedPIDs
+```
+
+The source bag is never modified. A bench bag recorded before the synthetic
+camera has an empty camera topic, which `check_bags` rejects on its own, so the
+script first writes a copy with a synthetic 960 x 600, 10 Hz camera to
+`tmp/fuzz2/base/` and checks that copy passes both gates.
+
+The catalogue (about 65 cases plus `--n` seeded random combinations):
+
+| Group | Mutations | Expected |
+| --- | --- | --- |
+| topics | each required topic dropped; kinematic state, PWM, camera declared but empty | REJECT (INVALID too when the grade needs the topic) |
+| metadata | route_hash, route_kind, v_ref, car, team altered or missing; no metadata at all; route swapped for hall_demo or for a modified U-turn; bench flag | REJECT |
+| run | MRM for 0.1 s mid-run; disengage mid-run; never engaged; truncated before the stop; time-reversed bag; laps changed in the progress | REJECT + INVALID |
+| localization | 0.35 m lateral offset for 1 s; 0.6 m lateral jump for 2 s; one NaN pose; a 1 m jump along the path | REJECT + INVALID |
+| speed | all speeds x1.3; commanded plateau 0.90 m/s; NaN speed samples | REJECT, or INVALID |
+| benign | MRM or disengage after the finish; 0.25 m lateral offset; duplicated timestamps; reversed header stamps; adjacent samples swapped; commanded 0.83 m/s; course_hash altered (by design: markers are free) | VALID, metrics unchanged |
+| metrics | measured speed x(1+e) in the steady window, e = 0.01..0.10; speed noise sigma 0.005..0.04 | VALID, speed RMSE rises monotonically |
+| | +0.15 m/s spike after t90 | VALID, overshoot captures it |
+| | final pose +0.2 m past / -0.2 m short of the stop line | VALID, stop_error counted double / single |
+
+Each case prints CAUGHT (a bad bag was caught), OK (a good bag stayed good and
+its metrics moved as expected), MISSED (a bad bag passed), FALSE (a good bag was
+rejected), METRIC (a metric did not move as expected) or CRASH (a gate raised
+instead of giving a verdict). Exit status 1 on any MISSED, FALSE, METRIC or
+CRASH; `tmp/fuzz2/results.json` has every verdict and metric. Failing mutants
+are kept for inspection, passing ones deleted unless `--keep`. The verdict
+logic is unit-tested without ROS: `python3 -m pytest scripts/testing/lab2/test_fuzz_bags.py`.
+
+### Results (2026-10-16, base `lab2_uturn_2`, reference `lab2_ref`, seed 1)
+
+95 cases in 94 s with 4 jobs: 72 CAUGHT, 21 OK, 1 MISSED, 1 CRASH. Every bad
+metadata, topic, MRM, disengage, truncation, speed and camera mutant was
+caught, and so was every random combination. The 0.35 m offset is invalid at
+0.357 m and the 0.25 m one stays valid at 0.257 m. Speed RMSE rises
+monotonically with both the scale (0.006 -> 0.082 m/s at x1.10) and the noise.
+A 0.15 m/s spike reads as 0.162 m/s of overshoot. Stopping 0.2 m past the line
+gives stop_error 0.315 m (counted double) and 0.2 m short gives 0.243 m.
+
+Findings of the first fuzz run, all fixed since (the fuzz now exits 0 on a
+bench base with `--reference`; 75 CAUGHT, 20 OK):
+
+- **was MISSED, `loc:jump_along_1.0m_1s`**: the pose jumping 1 m ahead along the
+  path for 1 s passed, because the path deviation is measured across the path.
+  Now a validity gate in `route_grade` (and a check-bags reason): over every
+  1 s from engage to rest the pose's displacement and the integrated wheel
+  speed must agree within `LOC_JUMP_MAX` = 0.30 m ("localization jump"). Clean
+  bench runs (virtual and rendered camera, the TA reference) reach 0.05-0.07 m.
+  Not yet calibrated on a car bag: a marker fix after a gap moves the EKF
+  legitimately, so check the first car bags' `localization jump` line.
+- **was CRASH, `loc:nan_pose_1_sample`**: one non-finite pose crashed
+  check-bags, the grade and the audit (`Path.project` returned None). Now
+  non-finite poses are dropped before measuring and named: "N non-finite
+  localized pose(s)" (INVALID, REJECT); `Path.project` raises ValueError for a
+  non-finite point instead of returning None.
+- **NaN speed reports** are named likewise, "N non-finite speed report(s)",
+  in both gates (it used to read "no steady window").
+- **A bag cut 0.3 s after the stop** was accepted, and the stop pose came from
+  one sample instead of the settle median. check-bags now rejects a bag that
+  ends less than `SETTLE[1]` (3 s) after the car came to rest; `just lab2 run`
+  records 3 s past the end plus the 1 s it waits to see the car at rest.
+
+Bench gate (`--gate`, 4 mutants, 6 min): sign flip, always neutral, max PWM and
+NaN every 50th call were all FAIL, for the reasons "did not finish / median
+0.27 m/s", "did not move", "MRM + peak 2.85 m/s" and "SpeedPID fault".

@@ -33,7 +33,9 @@ received (vehicle_cmd_gate's output):
                 engage to rest, m (a validity gate, not scored).
 
 Validity: engaged, no MRM, no disengage before the finish, the run finished
-(reached the stop), path_dev_max <= PATH_DEV_MAX, and a steady window. A bag
+(reached the stop), path_dev_max <= PATH_DEV_MAX, no localization jump (the
+pose's displacement against the integrated wheel speed, LOC_JUMP_MAX over
+JUMP_WINDOW), no non-finite pose or speed report, and a steady window. A bag
 that fails any of these is INVALID and scores 0, with the reasons printed.
 
 Points. The pass line is the car's own reference bag (--reference, a TA run on
@@ -66,6 +68,15 @@ STOPPED_SPEED = 0.02        # m/s, "at rest"
 SETTLE = (0.5, 3.0)         # s after coming to rest: the window the stop pose is the median of
 LAPS_REQUIRED = 1
 PATH_DEV_MAX = 0.30         # m, validity: localized distance from the path, worst sample
+# Validity: the localized pose may not jump. Over every JUMP_WINDOW s from engage to rest,
+# the pose's displacement and the distance the wheel-speed report integrates to must
+# agree within LOC_JUMP_MAX. The path deviation sees a jump ACROSS the path; this one
+# sees a jump ALONG it. Calibrated on bench bags (virtual and mock camera, the TA
+# reference): a clean run reaches 0.05-0.07 m (the EKF pulled by marker fixes, the
+# speed report's low-speed quantization at the stop), so 0.30 m leaves room for a car
+# whose fixes nudge harder and still catches a 0.5 m jump.
+JUMP_WINDOW = 1.0           # s
+LOC_JUMP_MAX = 0.30         # m
 
 POINTS = {
     'uturn': {'speed_rmse_straight': 15.0, 'speed_rmse_turn': 10.0,
@@ -112,8 +123,47 @@ class RouteMetrics:
     finished: bool = False
     mrm: int = 0
     disengages: int = 0
+    loc_jump: float = math.nan          # m, worst |displacement - integrated speed| over JUMP_WINDOW
+    loc_jump_t: float = math.nan        # bag time where that window starts
+    bad_poses: int = 0                  # non-finite localized poses (dropped before measuring)
+    bad_speeds: int = 0                 # non-finite speed reports (dropped likewise)
     gate_failures: List[str] = field(default_factory=list)
     notes: List[str] = field(default_factory=list)
+
+
+def finite(*xs) -> bool:
+    return all(isinstance(x, (int, float)) and math.isfinite(x) for x in xs)
+
+
+def loc_jump(kt, kp, vt, vv, t0, t1, window=JUMP_WINDOW):
+    """(worst |pose displacement - integral of |speed||, start time) over `window`-second
+    spans of [t0, t1]; (nan, nan) if there is nothing to compare."""
+    import bisect
+    if len(vt) < 2 or len(kt) < 2:
+        return math.nan, math.nan
+    cum = [0.0]                                    # trapezoid integral of |v| at each vt
+    for i in range(1, len(vt)):
+        cum.append(cum[-1] + 0.5 * (abs(vv[i]) + abs(vv[i - 1])) * (vt[i] - vt[i - 1]))
+
+    def dist_at(t):
+        i = bisect.bisect_right(vt, t) - 1
+        if i < 0:
+            return 0.0
+        if i >= len(vt) - 1:
+            return cum[-1]
+        return cum[i] + abs(vv[i]) * (t - vt[i])
+
+    worst, at = math.nan, math.nan
+    idx = [i for i, t in enumerate(kt) if t0 <= t <= t1]
+    for a in idx:
+        j = bisect.bisect_left(kt, kt[a] + window)
+        if j >= len(kt) or kt[j] > t1 + 1e-9:
+            break
+        disp = math.hypot(kp[j][0] - kp[a][0], kp[j][1] - kp[a][1])
+        d = abs(disp - (dist_at(kt[j]) - dist_at(kt[a])))
+        if not d <= worst:
+            worst, at = d, kt[a]
+    return worst, at
 
 
 @dataclass
@@ -200,6 +250,9 @@ def route_metrics(name: str, msgs: Dict[str, list], route: str, geo: Optional[Ge
     m.t_engage = eng.spans[0][0]
 
     vt, vv = _series(msgs, g.VELOCITY, lambda x: float(x.longitudinal_velocity))
+    keep = [i for i, v in enumerate(vv) if finite(v)]
+    m.bad_speeds = len(vv) - len(keep)
+    vt, vv = [vt[i] for i in keep], [vv[i] for i in keep]
     if not vt:
         m.notes.append('no velocity reports')
         return m
@@ -235,6 +288,9 @@ def route_metrics(name: str, msgs: Dict[str, list], route: str, geo: Optional[Ge
 
     kt, kp = _series(msgs, g.KINEMATIC,
                      lambda x: (x.pose.pose.position.x, x.pose.pose.position.y))
+    keep = [i for i, p in enumerate(kp) if finite(*p)]
+    m.bad_poses = len(kp) - len(keep)
+    kt, kp = [kt[i] for i in keep], [kp[i] for i in keep]
     if geo is None or not kt:
         m.notes.append('no localized pose or route geometry: segments, stop and path '
                        'deviation not measured')
@@ -270,6 +326,7 @@ def route_metrics(name: str, msgs: Dict[str, list], route: str, geo: Optional[Ge
     # validity: on the path throughout, engage to rest
     dev = [geo.locate(*q)[1] for t, q in zip(kt, kp) if m.t_engage <= t <= t_rest]
     m.path_dev_max, m.path_dev_rms = g.max_abs(dev), g.rms(dev)
+    m.loc_jump, m.loc_jump_t = loc_jump(kt, kp, vt, vv, m.t_engage, t_rest)
 
     if m.mrm:
         m.gate_failures.append(f'{m.mrm} MRM activation(s)')
@@ -277,16 +334,36 @@ def route_metrics(name: str, msgs: Dict[str, list], route: str, geo: Optional[Ge
         m.gate_failures.append('left autonomous mode before the finish')
     if not m.finished:
         m.gate_failures.append('the run did not finish')
+    if m.loc_jump > LOC_JUMP_MAX:
+        m.gate_failures.append(jump_text(m))
     if not (m.path_dev_max <= PATH_DEV_MAX):
         m.gate_failures.append(f'off the path: localized pose {m.path_dev_max:.3f} m from it, '
                                f'{PATH_DEV_MAX} m allowed')
     return m
 
 
-def read_route_bag(path: str, route: Optional[str] = None, course_dir: Optional[str] = None):
-    """(RouteMetrics, meta) of a bag; the route comes from its metadata unless given."""
-    from autosdv_coach_lab.calibration.bagio import read_bag
-    msgs = read_bag(path, ROUTE_TOPICS)
+def jump_text(m: 'RouteMetrics') -> str:
+    return (f'localization jump: the pose moved {m.loc_jump:.2f} m more or less than the wheel '
+            f'speed says within {JUMP_WINDOW:g} s, {m.loc_jump_t - m.t_engage:.1f} s after engage '
+            f'({LOC_JUMP_MAX} m allowed)')
+
+
+def nonfinite_failures(m: 'RouteMetrics') -> List[str]:
+    out = []
+    if m.bad_poses:
+        out.append(f'{m.bad_poses} non-finite localized pose(s)')
+    if m.bad_speeds:
+        out.append(f'{m.bad_speeds} non-finite speed report(s)')
+    return out
+
+
+def read_route_bag(path: str, route: Optional[str] = None, course_dir: Optional[str] = None,
+                   msgs: Optional[Dict[str, list]] = None):
+    """(RouteMetrics, meta) of a bag; the route comes from its metadata unless given.
+    `msgs`: the bag's messages already read (at least ROUTE_TOPICS), to skip reading it."""
+    if msgs is None:
+        from autosdv_coach_lab.calibration.bagio import read_bag
+        msgs = read_bag(path, ROUTE_TOPICS)
     meta = bm.meta_from_messages(msgs, path)
     route = route or bm.route_from_meta(meta)
     name = os.path.basename(os.path.normpath(path))
@@ -352,7 +429,7 @@ def score_route(m: RouteMetrics, ref: Optional[RouteMetrics] = None) -> RouteSco
             r = max(refv, FLOORS[metric])
             lines[metric] = (FULL_AT * r, ZERO_AT * r)
         pts[metric] = mx * fraction(getattr(m, metric), refv, metric)
-    fails = list(m.gate_failures)
+    fails = nonfinite_failures(m) + list(m.gate_failures)
     if not m.engaged:
         fails.append('never engaged')
     if math.isnan(m.speed_rmse):
@@ -382,6 +459,8 @@ def format_route(m: RouteMetrics, s: RouteScore) -> str:
             ('stop error', f'{f(m.stop_error, " m")}  (signed {f(m.stop_signed, " m")}, + = past the stop point)'),
             ('path deviation max', f'{f(m.path_dev_max, " m")}  (valid <= {PATH_DEV_MAX:.2f} m; '
                                    f'RMS {f(m.path_dev_rms, " m")})'),
+            ('localization jump', f'{f(m.loc_jump, " m")}  (valid <= {LOC_JUMP_MAX:.2f} m in '
+                                  f'{JUMP_WINDOW:g} s)'),
             ('laps', f'{m.laps} / {m.laps_planned}'),
             ('finished', str(m.finished)), ('MRM', str(m.mrm))]
     w = max(len(k) for k, _ in rows)

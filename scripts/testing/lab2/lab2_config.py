@@ -29,6 +29,7 @@ Recipes:
     grade       no bag: --score LATEST --reference REFERENCE
     check-bags  no bag: LATEST; --car --team when set
     plot        no bag: LATEST
+    audit       no bag: LATEST; --car --team when set; --reference REFERENCE if it is a bag
     config      print every value and where it came from
     init        write a commented template to the user's file (never overwrites)
 
@@ -176,7 +177,7 @@ def split_args(recipe, argv):
     it = iter(argv)
     launch = recipe in LAUNCH_RECIPES
     own_flags = {'--car': 'car', '--team': 'team', '--out-dir': 'bag_dir'} \
-        if recipe in ('record', 'check-bags') else {}
+        if recipe in ('record', 'check-bags', 'audit') else {}
     if launch:
         own_flags = {'--team': 'team_dir', '--submission': 'submission'}
     for a in it:
@@ -297,6 +298,22 @@ def plan(recipe, argv, cwd=REPO):
             bag = latest_bag(c.require('bag_dir'))
             out.append(str(bag))
             use('bag', bag)
+    elif recipe == 'audit':
+        out = []
+        for k in ('car', 'team'):
+            if c.get(k):
+                out += [f'--{k}', c.get(k)]
+                use(k)
+        out += rest
+        if not _positionals(rest, ('--car', '--team', '--reference', '--course', '--out')):
+            bag = latest_bag(c.require('bag_dir'))
+            out.append(str(bag))
+            use('bag', bag)
+        if not _has(rest, '--reference'):
+            ref = c.get('reference')
+            if ref and Path(ref, 'metadata.yaml').is_file():
+                out += ['--reference', ref]
+                use('reference')
     elif recipe == 'plot':
         out = list(rest)
         if not _positionals(rest, ()):

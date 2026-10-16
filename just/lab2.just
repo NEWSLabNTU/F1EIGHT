@@ -5,7 +5,12 @@
 # another): car, team, team_dir, submission, route, reference, bag_dir. Precedence,
 # highest first: key:=value on the command line, that file, the built-in defaults
 # (src/lab/autosdv_waypoint_lab/config/lab2_defaults.yaml). `just lab2 config` shows the
-# result. With the file filled in, the student sequence is:
+# result. With the file filled in, a graded run is ONE command on the car (in tmux):
+#
+#   just lab2 run                  stack, preflight, record, engage (asks), stop, audit
+#   just lab2 audit                the latest bag: verdict, metrics, violations, audit.png
+#
+# or, step by step in separate terminals:
 #
 #   just lab2 gate                 workstation: the submission's SpeedPID on the graded route
 #   just lab2 vehicle              car: route + team_dir
@@ -127,6 +132,58 @@ preflight *ARGS:
     #!/usr/bin/env bash
     source scripts/env.sh
     exec python3 scripts/testing/lab2/waypoint_preflight.py "$@"
+
+#   just lab2 run                               the car: route, team_dir, car, team from the config
+#   just lab2 run car:=B team_dir:=~/lab2/team3 (team:= here is the team NUMBER, as in record)
+#   just lab2 run --bench [--camera mock]       the same flow on the vehicle bench
+#   just lab2 run --bench --yes                 engage without asking (bench only; tests)
+# Stack output goes to <bag_dir>/run_logs/lab2_uturn_N/, not the terminal. It asks before engaging
+# and stops the car (disengage) on an MRM, a disengage, a localization loss or the timeout.
+# Ctrl-C at any point: disengage, close the bag, stop the stack.
+# One graded run: stack, preflight, record, engage, watch, stop, audit
+[positional-arguments]
+run *ARGS:
+    #!/usr/bin/env bash
+    source scripts/env.sh
+    exec python3 scripts/testing/lab2/lab2_run.py "$@"
+
+#   just lab2 audit                          the latest bag, car/team/reference from the config
+#   just lab2 audit rosbags/lab2_uturn_3
+#   just lab2 audit --show                   also open the PNG (export DISPLAY=:1 on the car, view over RDP)
+# Writes BAG/audit.png (speed, the run on the floor, path deviation) and BAG/audit.json.
+# Audit a bag: check-bags + grade verdict, every metric, the violations, and a plot
+[positional-arguments]
+audit *ARGS:
+    #!/usr/bin/env bash
+    source scripts/env.sh
+    source scripts/testing/lab2/lab2_config.sh
+    lab2_config audit "$@" || exit 2
+    exec ros2 run autosdv_waypoint_lab lab2_audit "${LAB2_ARGS[@]}"
+
+#   just lab2 integration-test                       the reference controller, rendered boards
+#   just lab2 integration-test submission:=DIR       a student's SpeedPID (team_dir:=DIR for Part 2)
+#   just lab2 integration-test --camera virtual      the modelled localizer instead (faster)
+# Bags go to tmp/lab2_integration/bags (bag_dir:= to change), car SIM, team 0. PASS needs: the run
+# finished, check-bags (bench mode) ACCEPT, grade valid, audit.png, localization vs true pose ok.
+# TA: the whole Part 2 pipeline on the bench, no car; PASS/FAIL
+[positional-arguments]
+integration-test *ARGS:
+    #!/usr/bin/env bash
+    source scripts/env.sh
+    ctrl=()
+    case " $* " in
+        *" submission:="*|*" team_dir:="*|*" speed_controller_class:="*) ;;
+        *) ctrl=(speed_controller_class:=autosdv_vehicle_interface.speed_controller:AckermannSpeedPID) ;;
+    esac
+    exec python3 scripts/testing/lab2/lab2_run.py --bench --yes --integration \
+        car:=SIM team:=0 bag_dir:=tmp/lab2_integration/bags "${ctrl[@]}" "$@"
+
+# TA: fuzz the Part 2 gates with mutated copies of a valid bag (--gate: also the bench gate)
+[positional-arguments]
+fuzz *ARGS:
+    #!/usr/bin/env bash
+    source scripts/env.sh
+    exec python3 scripts/testing/lab2/fuzz_bags.py "$@"
 
 # Engage autonomous mode (the car starts the course)
 engage:

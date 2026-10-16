@@ -78,6 +78,8 @@ class Path:
 
     def project(self, x: float, y: float) -> Projection:
         """Closest point on the polyline (not just the closest waypoint)."""
+        if not (math.isfinite(x) and math.isfinite(y)):
+            raise ValueError(f'cannot project a non-finite point ({x}, {y}) onto the path')
         best = None
         best_d = math.inf
         for i in range(len(self.x) - 1):
