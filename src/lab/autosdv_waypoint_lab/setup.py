@@ -52,6 +52,7 @@ setup(
             'lab2_make_uturn = autosdv_waypoint_lab.uturn:main',
             'lab2_audit = autosdv_waypoint_lab.audit:main',
             'mock_aruco_camera = autosdv_waypoint_lab.mock_camera_node:main',
+            'bench_straight_driver = autosdv_waypoint_lab.bench_straight_driver_node:main',
         ],
     },
 )

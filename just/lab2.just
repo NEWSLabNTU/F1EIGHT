@@ -413,6 +413,20 @@ survey-solve *ARGS:
     source scripts/env.sh
     exec ros2 run autosdv_marker_survey lab2_marker_survey_solve "$dir/survey_data.npz" --course "$dir" "$@"
 
+#   just lab2 survey-align                       surveys/latest; the car in the taped start box
+#   just lab2 survey-align surveys/<dir> [--route lab2_uturn] [--force]
+#   just lab2 survey-align DIR --bench --truth TRUTH_DIR      the vehicle bench, no car
+# READY, then drive the car STRAIGHT along the taped first leg (2 m or more), stop, Ctrl-C.
+# Nothing here can drive the car (no tracker, the actuator as a dry run). Writes the aligned
+# course (the route's path.csv, the boards in its frame) and align_report.txt into the survey;
+# the stage-1 result stays in DIR/stage1/. Then: loc-check, run.
+# Survey stage 2: put the survey into the route's frame (origin at the start box, x along the first leg)
+[positional-arguments]
+survey-align *ARGS:
+    #!/usr/bin/env bash
+    source scripts/env.sh
+    exec python3 scripts/testing/lab2/survey_align.py "$@"
+
 #   just lab2 plot                           the latest bag
 #   just lab2 plot rosbags/lab2_uturn_1
 #   just lab2 plot --dry-run                 print the command, open nothing

@@ -5,6 +5,7 @@ import time
 from pathlib import Path
 
 import pytest
+import yaml
 
 sys.path.insert(0, str(Path(__file__).resolve().parent))
 import lab2_config as lc  # noqa: E402
@@ -136,15 +137,20 @@ def test_record_fills_car_team_and_the_next_name(tmp_path):
                     '--name', 'mine', '--bench']
 
 
-def test_vehicle_and_gate_keep_the_explicit_arguments(tmp_path):
+def test_vehicle_and_gate_keep_the_explicit_arguments(tmp_path, monkeypatch):
+    monkeypatch.setattr(lc, 'SURVEY_LATEST', tmp_path / 'surveys' / 'latest')
     f = tmp_path / 'x.yaml'
     f.write_text('team_dir: /t/team3\nsubmission: /s/sub\n')
     cf = 'config:=' + str(f)
+    (tmp_path / 'c').mkdir()
+    (tmp_path / 'c' / 'course.yaml').write_text('path: path.csv\n')
     assert lc.plan('vehicle', [cf])[0] == ['route:=lab2_uturn', 'team:=/t/team3']
     assert lc.plan('vehicle', [cf, 'route:=hall_demo', 'team:=/o/t'])[0] == \
         ['route:=hall_demo', 'team:=/o/t']
-    assert lc.plan('vehicle', [cf, 'course_dir:=/c', 'submission:=/x'])[0] == \
-        ['course_dir:=/c', 'submission:=/x']
+    assert lc.plan('vehicle', [cf, f'course_dir:={tmp_path / "c"}', 'submission:=/x'])[0] == \
+        [f'course_dir:={tmp_path / "c"}', 'submission:=/x']
+    with pytest.raises(lc.ConfigError, match='no course.yaml'):
+        lc.plan('vehicle', [cf, 'course_dir:=/nonexistent'])
     assert lc.plan('vehicle', [cf, 'speed_controller_class:=a:B'])[0] == \
         ['speed_controller_class:=a:B', 'route:=lab2_uturn']
     assert lc.plan('gate', [cf])[0] == ['submission:=/s/sub']
@@ -173,3 +179,52 @@ def test_show_names_every_source(tmp_path):
     f.write_text('car: A\n')
     out = lc.show(['config:=' + str(f), 'team:=4'])
     assert f'# {f}' in out and '# command line' in out and '# default' in out and '# not set' in out
+
+
+def _aligned_survey(root, route='lab2_uturn', path_text=None):
+    """A survey directory as `just lab2 survey-align` leaves it."""
+    import shutil
+    src = lc.COURSES / route
+    d = root / 'surveys' / '2026-10-16_10-00-00'
+    d.mkdir(parents=True)
+    t = yaml.safe_load((src / 'course.yaml').read_text())
+    t['alignment'] = {'route': route}
+    t['markers'] = [{'id': 24, 'x': 1.0, 'y': 2.0, 'yaw': 0.1}]
+    (d / 'course.yaml').write_text(yaml.safe_dump(t))
+    shutil.copyfile(src / 'path.csv', d / 'path.csv')
+    if path_text is not None:
+        (d / 'path.csv').write_text(path_text)
+    (root / 'surveys' / 'latest').symlink_to(d.name)
+    return d
+
+
+def test_vehicle_runs_the_aligned_survey(tmp_path, monkeypatch, capsys):
+    monkeypatch.setattr(lc, 'SURVEY_LATEST', tmp_path / 'surveys' / 'latest')
+    f = tmp_path / 'x.yaml'
+    f.write_text('team_dir: /t/team3\n')
+    cf = 'config:=' + str(f)
+    # no survey: the packaged course, said out loud
+    assert lc.plan('vehicle', [cf])[0][0] == 'route:=lab2_uturn'
+    assert 'PACKAGED' in capsys.readouterr().err
+    d = _aligned_survey(tmp_path)
+    args, line = lc.plan('vehicle', [cf])
+    assert args[0] == f'course_dir:={d.resolve()}' and 'course_dir' in line
+    # the bench, `package`, and another route never take it
+    assert lc.plan('vehicle', [cf], bench=True)[0][0] == 'route:=lab2_uturn'
+    assert lc.plan('vehicle', [cf, 'course_dir:=package'])[0][0] == 'route:=lab2_uturn'
+    assert lc.plan('vehicle', [cf, 'route:=hall_demo'])[0][0] == 'route:=hall_demo'
+    assert "aligned for route 'lab2_uturn'" in capsys.readouterr().err
+
+
+def test_a_stale_or_unaligned_survey_is_not_run(tmp_path, monkeypatch, capsys):
+    monkeypatch.setattr(lc, 'SURVEY_LATEST', tmp_path / 'surveys' / 'latest')
+    d = _aligned_survey(tmp_path, path_text='0,0\n1,0\n')
+    ok, why = lc.aligned_for(d, 'lab2_uturn')
+    assert not ok and 'older' in why
+    assert lc.plan('vehicle', ['team_dir:=/t'])[0][0] == 'route:=lab2_uturn'
+    assert 'run `just lab2 survey-align` again' in capsys.readouterr().err
+    t = yaml.safe_load((d / 'course.yaml').read_text())
+    del t['alignment']
+    (d / 'course.yaml').write_text(yaml.safe_dump(t))
+    ok, why = lc.aligned_for(d, 'lab2_uturn')
+    assert not ok and 'not aligned' in why

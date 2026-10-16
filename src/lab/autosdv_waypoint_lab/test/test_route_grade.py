@@ -223,7 +223,7 @@ def test_geometry_from_the_template():
     d = rg.template_dir('uturn')
     assert d and bm.ROUTES == ('uturn',)
     geo = rg.geometry_from_course(d, 'uturn')
-    assert (geo.dir_x, geo.dir_y) == pytest.approx((1.0, 0.0))
+    assert (geo.dir_x, geo.dir_y) == pytest.approx((-1.0, 0.0))
     assert bm.classify_route(d) == 'uturn'
     assert bm.classify_route(rg.template_dir('uturn').replace('lab2_uturn', 'hall_demo')) is None
 
@@ -407,7 +407,7 @@ def test_a_jump_along_the_path_is_caught():
     msgs = msgs_for()
     kin_ = []
     for t, k in msgs[g.KINEMATIC]:
-        if 10.0 <= t <= 11.0:              # 1 m ahead along the out leg (driving -x) for 1 s
+        if 10.0 <= t <= 11.0:              # 1 m back along the out leg (driving +x) for 1 s
             p = k.pose.pose.position
             k = kin(p.x - 1.0, p.y)
         kin_.append((t, k))

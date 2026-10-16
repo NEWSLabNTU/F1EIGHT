@@ -34,6 +34,8 @@
        description="load the localizer into this container (the ZED's) instead of its own process; empty: its own process"/>
   <arg name="ekf_param_file" default="$(find-pkg-share autoware_launch)/config/localization/ekf_localizer.param.yaml"/>
   <arg name="use_sim_time" default="false"/>
+  <arg name="launch_start_pose_init" default="true"
+       description="false: something else seeds the EKF (survey-align seeds it from the markers it sees)"/>
 
   <let name="lanelet2_map_path" value="$(var course_dir)/lanelet2_map.osm"/>
 
@@ -131,7 +133,8 @@
         <arg name="output_twist_name" value="twist"/>
         <arg name="output_twist_with_covariance_name" value="twist_with_covariance"/>
       </include>
-      <node pkg="autosdv_waypoint_lab" exec="start_pose_init" name="start_pose_init" output="screen">
+      <node pkg="autosdv_waypoint_lab" exec="start_pose_init" name="start_pose_init" output="screen"
+            if="$(var launch_start_pose_init)">
         <param name="course_dir" value="$(var course_dir)"/>
         <param name="use_sim_time" value="$(var use_sim_time)"/>
       </node>

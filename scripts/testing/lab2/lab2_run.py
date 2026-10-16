@@ -535,7 +535,8 @@ class Run:
     # ---- steps
     def plan(self):
         o = self.o
-        stack_args, summary = lc.plan('vehicle', vehicle_config_args(o.config_args) + list(o.launch_args))
+        stack_args, summary = lc.plan('vehicle', vehicle_config_args(o.config_args) + list(o.launch_args),
+                                      bench=o.bench)
         record_args, _ = lc.plan('record', list(o.config_args))
         audit_args, _ = lc.plan('audit', list(o.config_args) + ['BAG'])
         out_dir = Path(record_args[record_args.index('--out-dir') + 1])

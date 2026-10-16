@@ -33,11 +33,16 @@ YAW_STEP, at least CLEARANCE from the path. The goals, in order:
      without a fix there the EKF only dead-reckons (and the monitor's error_age
      runs out while the car stands),
 
-with the fewest boards that achieve them. One board is the ORIGIN: it faces
-+x and stands on the out leg's line beyond the turn's apex, so the course frame
-is the one `just lab2 survey` writes (origin on the floor below that board's
-marker, x the way it faces) and the route is only shifted along x by the
-board's distance from the turn.
+with the fewest boards that achieve them. One board stands on the first leg's
+line beyond the turn, facing the start box: the search anchors on it (it is
+also a convenient origin for the stage-1 survey, though any board will do).
+
+The frame is the START-BOX frame, the one `just lab2 survey-align` writes:
+origin on the floor at the start box (base_link, the rear axle), x along the
+first leg (the way the car drives off), y to the car's left, z up. The route is
+taped on the floor and the boards are placed from the table this writes,
+measured from the start box; the survey then measures where they really are,
+and survey-align puts that map into this frame, so path.csv never moves.
 
 Without --write nothing is written: the summary, the board table and a diff
 against the files on disk are printed. With --write a layout that misses a goal
@@ -184,15 +189,14 @@ class Board:
     x: float
     y: float
     yaw: float          # facing direction, rad
-    origin: bool = False
+    origin: bool = False    # the ANCHOR: the search's first board, on the first leg's line
 
 
 @dataclass
 class Layout:
     radius: float
     leg: float
-    shift: float                    # course x = turn-frame x + shift
-    xs: List[float]                 # path, course frame
+    xs: List[float]                 # path, course (start-box) frame
     ys: List[float]
     boards: List[Board]
     start: Tuple[float, float, float]
@@ -217,11 +221,11 @@ class Layout:
 
     @property
     def centre(self) -> Tuple[float, float]:
-        return (self.shift, self.radius)
+        return (self.leg, -self.radius)
 
     @property
     def apex(self) -> Tuple[float, float]:
-        return (self.shift - self.radius, self.radius)
+        return (self.leg + self.radius, -self.radius)
 
 
 class _Problem:
@@ -377,19 +381,29 @@ def place_boards(radius: float, leg: float, seed: int = SEED, cam: Optional[Came
 
 # ------------------------------------------------------------ the layout
 
+def turn_to_course(x: float, y: float, leg: float) -> Tuple[float, float]:
+    """A turn-frame point in the course (start-box) frame: the turn frame turned
+    through 180 degrees about the start box (leg, 0), which the car leaves driving
+    -x there. A rotation, not a mirror: a right turn stays a right turn."""
+    return round(leg - x, 3) + 0.0, round(-y, 3) + 0.0
+
+
+def _wrap_yaw(a: float) -> float:
+    a = math.atan2(math.sin(a), math.cos(a))
+    return math.pi if abs(a + math.pi) < 1e-9 else a
+
+
 def make_layout(radius: float = DEFAULT_RADIUS, leg: float = DEFAULT_LEG, seed: int = SEED) -> Layout:
     radius, leg = float(radius), float(leg)
     boards_t, failed = place_boards(radius, leg, seed)
-    shift = -boards_t[0][0]
     xs_t, ys_t = route_polyline(radius, leg)
-    xs = [round(x + shift, 3) for x in xs_t]
-    ys = [round(y, 3) for y in ys_t]
+    xs, ys = (list(v) for v in zip(*(turn_to_course(x, y, leg) for x, y in zip(xs_t, ys_t))))
     # ids: the origin first, the rest in the order the car first sees them
     cam = CameraModel(marker_size=MARKER_SIZE)
     cp = CoursePath(xs, ys, [V_REF] * len(xs), closed=False)
     path = Path(cp.x, cp.y, cp.v)
-    start = (xs[0], ys[0], math.pi)
-    placed = [(round(x + shift, 3), round(y, 3), round(a, 4)) for x, y, a in boards_t]
+    start = (xs[0], ys[0], 0.0)
+    placed = [(*turn_to_course(x, y, leg), round(_wrap_yaw(a + math.pi), 4)) for x, y, a in boards_t]
 
     def landmark(x, y, a):
         return course_mod.Landmark('b', (x, y, MARKER_HEIGHT), (-math.sin(a), math.cos(a), 0.0),
@@ -407,7 +421,7 @@ def make_layout(radius: float = DEFAULT_RADIUS, leg: float = DEFAULT_LEG, seed: 
     boards = [Board(FIRST_ID, *placed[0], origin=True)] + \
         [Board(FIRST_ID + 1 + i, *b) for i, b in enumerate(rest)]
     (t0, t1), = turn_spans(xs, ys)
-    lay = Layout(radius, leg, shift, xs, ys, boards, start, (xs[-1], ys[-1]), (t0, t1),
+    lay = Layout(radius, leg, xs, ys, boards, start, (xs[-1], ys[-1]), (t0, t1),
                  Path(xs, ys, [V_REF] * len(xs)).length, fewer_failed=failed)
     evaluate(lay)
     return lay
@@ -474,7 +488,7 @@ def evaluate(lay: Layout) -> None:
     cam = CameraModel(marker_size=MARKER_SIZE)
     lms = [lm for v in course_mod.parse_osm_landmarks(course_mod.make_osm(c)).values() for lm in v]
     lay.stop_box_min = min(sum(1 for lm in lms if visible(cam, p[0], p[1], p[2], lm))
-                           for p in _start_box((lay.stop[0], lay.stop[1], 0.0)))
+                           for p in _start_box((lay.stop[0], lay.stop[1], math.pi)))
     lay.problems = []
     if lay.start_box_min < START_BOX_MIN:
         lay.problems.append(f'the start box sees {lay.start_box_min} board(s), {START_BOX_MIN} wanted')
@@ -503,6 +517,7 @@ def _deg(a):
 
 def _facing(a):
     names = {0: '+x', 90: '+y', 180: '-x', -180: '-x', -90: '-y'}
+    a = _wrap_yaw(a)
     d = round(math.degrees(a))
     return names.get(d, _deg(a))
 
@@ -522,7 +537,7 @@ def board_lines(lay: Layout, prefix: str = '') -> List[str]:
     out = []
     for b in lay.boards:
         seen = ', '.join(f'{a:.1f}-{c:.1f}' for a, c in lay.seen_on.get(b.id, [])) or 'start box only'
-        role = 'ORIGIN' if b.origin else ''
+        role = 'ANCHOR' if b.origin else ''
         out.append(f'{prefix}id {b.id}  ({b.x:6.2f}, {b.y:5.2f})  facing {_facing(b.yaw):<8} '
                    f'{role:<6}  in view at s = {seen} m')
     return out
@@ -541,7 +556,7 @@ def course_yaml(lay: Layout) -> str:
     ex, ey = lay.stop
     x0, x1, y0, y1 = floor_extent(lay)
     n = len(lay.boards)
-    origin = lay.boards[0]
+    anchor = lay.boards[0]
     why_n = (f'The search found no layout of {lay.fewer_failed} that meets all four'
              if lay.fewer_failed else f'{n} is the fewest the search tries')
     gap_s = lay.longest_gap / V_REF
@@ -554,29 +569,27 @@ def course_yaml(lay: Layout) -> str:
         '# the radius or the legs, run that again with the new numbers; do not edit',
         '# this file, path.csv or the map by hand.',
         '#',
-        f'# Route: from the start box, straight {L:g} m driving -x, a RIGHT U-turn of',
-        f'# radius {r:g} m, straight {L:g} m back driving +x in the other lane; the legs',
+        f'# Route: from the start box, straight {L:g} m driving +x, a RIGHT U-turn of',
+        f'# radius {r:g} m, straight {L:g} m back driving -x in the other lane; the legs',
         f'# are {2 * r:g} m apart, centre to centre. One run at v_ref {V_REF} m/s, open',
         f'# path; the path publisher\'s end ramp (decel {DECEL} m/s^2) brings the car to',
         '# rest on the last waypoint, which is the graded stop point. Path length',
         f'# {lay.path_length:.2f} m; the turn is s = {lay.turn[0]:.2f} to {lay.turn[1]:.2f} m along it',
         '# (the grader splits straight from turn by arc length, read from path.csv).',
         '#',
-        '# Frame: the course frame `just lab2 survey` writes -- origin on the floor',
-        '# below the ORIGIN BOARD\'s marker centre, x the way that board faces, y to',
-        f'# its left, z up. The origin board (id {origin.id}) stands on the out leg\'s line,',
-        f'# {ax - origin.x:.2f} m beyond the turn\'s apex, facing +x (at the car on the out',
-        f'# leg). It cannot stand nearer the turn and stay {CLEARANCE} m clear of it,',
-        f'# which is why the route starts at x = {sx:g}.',
+        '# Frame: the START-BOX frame `just lab2 survey-align` writes -- origin on the',
+        '# floor at the start box (base_link: the rear axle centre), x along the first',
+        '# leg (the way the car drives off), y to the car\'s left, z up. A right turn',
+        '# from +x goes to -y, so the second leg runs at y = -2R.',
         '#',
         '# Tape marks (rear axle for the car):',
-        f'#   start box    ({sx:.2f}, {sy:.2f}), car pointing -x, at the origin board',
+        f'#   start box    ({sx:.2f}, {sy:.2f}), car pointing +x along the first leg',
         f'#   turn centre  ({cx:.2f}, {cy:.2f}); apex ({ax:.2f}, {ay:.2f})',
         f'#   stop line    ({ex:.2f}, {ey:.2f}): level with the start box, in the other lane',
         f'# Floor: x {x0:.1f} to {x1:.1f}, y {y0:.1f} to {y1:.1f} (route and boards), clear.',
         '#',
         '# Boards (DICT_5X5_1000, 0.38 m black square on a 500 mm plate standing on',
-        f'# the floor, so the marker centre is 0.25 m up). {n} boards:',
+        f'# the floor, so the marker centre is 0.25 m up), measured from the start box. {n} boards:',
     ]
     h += board_lines(lay, '#   ')
     h += [
@@ -594,12 +607,15 @@ def course_yaml(lay: Layout) -> str:
         f'# to {lay.gap_at[1]:.1f} m), {gap_s:.1f} s at {V_REF} m/s, under localization_monitor\'s',
         f'# {ERROR_AGE:g} s error_age.',
         '#',
-        '# Setting up: place the boards as above, survey with the origin board as the',
-        '# origin (`just lab2 survey <copy of this dir> <origin board id>`), and keep',
-        '# path.csv and start_pose: the survey replaces only `markers`, `marker_size`,',
-        '# `dictionary` and `survey`, so a course laid out as this file says stays',
-        f'# consistent with the measured boards. The ids are placeholders ({FIRST_ID} is a',
-        '# real board id); the survey writes the ids the boards actually carry.',
+        '# Setting up (docs/guides/lab2-waypoint-stack.md, "On the field"): tape the',
+        '# route, place the boards by the table above, measured from the start box (a',
+        '# few cm off is fine: the survey measures them), survey them with any board as',
+        f'# the origin (`just lab2 survey ID`; {anchor.id}, the ANCHOR, faces the first leg),',
+        '# then `just lab2 survey-align` with the car in the start box, driven straight',
+        '# along the taped first leg. That writes the measured boards in THIS frame beside',
+        '# this path.csv and start_pose, so the route lies where the tape is. The ids are',
+        f'# placeholders ({FIRST_ID} is a real board id); the survey writes the ids the',
+        '# boards actually carry.',
     ]
     body = [
         'path: path.csv',
@@ -635,11 +651,12 @@ def summary(lay: Layout) -> str:
     (cx, cy), (ax, ay) = lay.centre, lay.apex
     out = [
         f'lab2_uturn: radius {lay.radius:g} m, legs {lay.leg:g} m, {2 * lay.radius:g} m apart, v_ref {V_REF} m/s, 1 run',
-        f'  start box     ({sx:.2f}, {sy:.2f}) yaw pi (driving -x)',
+        f'  start box     ({sx:.2f}, {sy:.2f}) yaw 0 (driving +x; the frame origin)',
         f'  turn          centre ({cx:.2f}, {cy:.2f}), apex ({ax:.2f}, {ay:.2f}), right turn',
-        f'  stop point    ({ex:.2f}, {ey:.2f}) (driving +x)',
+        f'  stop point    ({ex:.2f}, {ey:.2f}) (driving -x)',
         f'  path length   {lay.path_length:.2f} m; turn at s = {lay.turn[0]:.2f} .. {lay.turn[1]:.2f} m',
-        f'  boards        {len(lay.boards)} (origin id {lay.boards[0].id} at (0, 0) facing +x)',
+        f'  boards        {len(lay.boards)} (anchor id {lay.boards[0].id} on the first leg\'s line, '
+        'facing the start box)',
     ]
     out += board_lines(lay, '    ')
     out += [
@@ -661,14 +678,14 @@ def spec_block(lay: Layout) -> str:
         deg = math.degrees(b.yaw)
         deg = 180.0 if abs(deg + 180.0) < 0.5 else deg
         rows.append(f'| {b.id} | {b.x:.2f} | {b.y:.2f} | {deg:.0f} deg | '
-                    f'{"origin" if b.origin else ""} |')
+                    f'{"anchor" if b.origin else ""} |')
     return '\n'.join([
         f'Generated with radius {lay.radius:g} m, leg {lay.leg:g} m ({_command(lay)}).',
         f'Route lab2_uturn: straight {lay.leg:g} m, right U-turn R = {lay.radius:g} m '
         f'(legs {2 * lay.radius:g} m apart, centre to centre), straight {lay.leg:g} m back; '
         f'path length {lay.path_length:.2f} m, one run at {V_REF} m/s.',
-        f'Course frame: origin on the floor below the origin board (id {lay.boards[0].id}), x the way it faces.',
-        f'Start box (rear axle): ({sx:.2f}, {sy:.2f}), car facing -x. '
+        'Course frame: origin at the start box (rear axle), x along the first leg, y to the car\'s left.',
+        f'Start box (rear axle): ({sx:.2f}, {sy:.2f}), car facing +x. '
         f'Stop line (rear axle): ({ex:.2f}, {ey:.2f}). '
         f'Turn centre ({cx:.2f}, {cy:.2f}), apex ({ax:.2f}, {ay:.2f}).',
         f'Boards: {len(lay.boards)} (0.38 m DICT_5X5_1000 on 500 mm floor plates; ids are placeholders):',
@@ -709,7 +726,8 @@ def spec_tex(lay: Layout) -> str:
         f'\\def\\uturnCovered{{{lay.fraction * 100:.0f}}}%    percent of the path with a board in view',
         f'\\def\\uturnGapLongest{{{lay.longest_gap:.1f}}}% longest stretch with no board [m]',
         f'\\def\\uturnGapSeconds{{{lay.longest_gap / V_REF:.1f}}}% ... at the reference speed [s]',
-        '% x/y/facing in degrees/id/is-origin, for \\foreach',
+        '% x/y/facing in degrees/id/is-anchor, for \\foreach. The start-box frame: origin',
+        '% at the start box (rear axle), x along the first leg, y to the car\'s left.',
         f'\\def\\uturnBoards{{{boards}}}',
     ]
     return '\n'.join(lines) + '\n'

@@ -31,6 +31,12 @@ def write_course(course_dir: str, markers: List[SurveyedMarker], origin_id: int,
     else:
         course = {'path': 'path.csv', 'closed': True, 'laps': 3, 'v_ref': 0.8,
                   'start_pose': start_pose or {'x': 0.0, 'y': 0.0, 'yaw': 0.0}}
+    if course.pop('alignment', None) is not None:
+        # survey-align had put the markers into the start-box frame; these are in the
+        # origin board's again, so the alignment no longer holds
+        print(f'WARNING: {path} was aligned (`just lab2 survey-align`); this survey replaces its '
+              'markers in the origin board\'s frame and drops the alignment. Run '
+              '`just lab2 survey-align` again before any run.')
     stamp = datetime.datetime.now().astimezone().isoformat(timespec='seconds')
     course['marker_size'] = float(marker_size)
     course['dictionary'] = dictionary

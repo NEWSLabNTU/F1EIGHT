@@ -13,7 +13,7 @@ Precedence, highest first:
     the user's file                     ~/lab2/lab2.yaml, or config:=FILE / --config FILE
     the built-in defaults               src/lab/autosdv_waypoint_lab/config/lab2_defaults.yaml
 
-Keys: car, team, team_dir, submission, route, reference, bag_dir. A missing
+Keys: car, team, team_dir, submission, route, course_dir, reference, bag_dir. A missing
 user file is fine as long as every key a recipe needs has a value; a missing
 required key is one error line naming the key and the file to put it in.
 
@@ -23,7 +23,7 @@ recipes run from the repository root).
 
 Recipes:
 
-    vehicle     route:= (or course_dir:=) and team:=TEAM_DIR, unless given
+    vehicle     course_dir:= (below) and team:=TEAM_DIR, unless given
     gate        submission:=SUBMISSION, unless a controller is given
     record      --car --team --out-dir, and --name ROUTE_N (the next free one)
     grade       no bag: --score LATEST --reference REFERENCE
@@ -35,6 +35,12 @@ Recipes:
 
 `team:=` means the team DIRECTORY in vehicle and gate (as it always has) and
 the team NUMBER elsewhere.
+
+Which course the car runs (`course_dir`): `auto` (the default) is the aligned
+survey surveys/latest when `just lab2 survey-align` aligned it for `route`,
+else the route's packaged course (its PLANNED boards, with a warning); `package`
+is always the packaged course; a directory is that course. The bench
+(`just lab2 run --bench`) takes `auto` as `package`: a survey is of the field.
 """
 import os
 import re
@@ -46,9 +52,12 @@ import yaml
 REPO = Path(__file__).resolve().parents[3]
 DEFAULTS = REPO / 'src/lab/autosdv_waypoint_lab/config/lab2_defaults.yaml'
 USER_FILE = Path('~/lab2/lab2.yaml')
-KEYS = ('car', 'team', 'team_dir', 'submission', 'route', 'reference', 'bag_dir')
+KEYS = ('car', 'team', 'team_dir', 'submission', 'route', 'course_dir', 'reference', 'bag_dir')
 PATH_KEYS = ('team_dir', 'submission', 'reference', 'bag_dir')
 LAUNCH_RECIPES = ('vehicle', 'gate')
+COURSE_CHOICES = ('auto', 'package')
+SURVEY_LATEST = REPO / 'surveys' / 'latest'
+COURSES = REPO / 'src/lab/autosdv_waypoint_lab/config/courses'
 
 TEMPLATE_HEAD = """\
 # Lab 2 settings for the `just lab2` commands.
@@ -66,6 +75,7 @@ TEMPLATE_KEYS = [
 ]
 TEMPLATE_DEFAULTS = [
     ('route', 'the graded course'),
+    ('course_dir', 'auto: surveys/latest once survey-align aligned it, else the route\'s package course'),
     ('reference', "the car's TA reference bag, for `just lab2 grade`"),
     ('bag_dir', 'where bags are recorded and looked for'),
 ]
@@ -121,6 +131,8 @@ class Config:
                     continue
                 if k in PATH_KEYS:
                     v = _path(v, base)
+                elif k == 'course_dir' and str(v) not in COURSE_CHOICES:
+                    v = _path(v, base)
                 elif k == 'route' and '/' in str(v):
                     v = _path(v, base)
                 else:
@@ -141,6 +153,69 @@ class Config:
                 f'no {key} set{" (" + why + ")" if why else ""}: add `{key}: {example}` to '
                 f'{self.file}{hint}, or pass {key}:=...')
         return self.values[key]
+
+
+# ---- the course -----------------------------------------------------------------------------
+
+def _route_fields(course_dir: Path):
+    d = yaml.safe_load((course_dir / 'course.yaml').read_text()) or {}
+    sp = d.get('start_pose') or {}
+    name = str(d.get('path', 'path.csv'))
+    return (name, (course_dir / name).read_bytes(), bool(d.get('closed', True)), int(d.get('laps', 1)),
+            round(float(d.get('v_ref', 0.8)), 6),
+            tuple(round(float(sp.get(k, 0.0)), 6) for k in ('x', 'y', 'yaw'))), d
+
+
+def aligned_for(course_dir, route: str):
+    """(True, '') if course_dir is a survey that `just lab2 survey-align` aligned for the
+    route `route` (a packaged course name), with that route's path, start pose, laps
+    and v_ref unchanged since; else (False, why)."""
+    course_dir = Path(course_dir)
+    if not (course_dir / 'course.yaml').is_file():
+        return False, f'{course_dir} has no course.yaml'
+    template = Path(route) if '/' in str(route) else COURSES / str(route)
+    try:
+        mine, d = _route_fields(course_dir)
+    except (OSError, ValueError, yaml.YAMLError) as e:
+        return False, f'{course_dir}: {e}'
+    al = d.get('alignment')
+    if not isinstance(al, dict):
+        return False, f'{course_dir} is not aligned (run `just lab2 survey-align`)'
+    if str(al.get('route')) != template.name:
+        return False, f'{course_dir} is aligned for route {al.get("route")!r}, not {template.name!r}'
+    try:
+        theirs, _ = _route_fields(template)
+    except (OSError, ValueError, yaml.YAMLError) as e:
+        return False, f'route {template}: {e}'
+    if mine != theirs:
+        return False, (f'{course_dir} was aligned for an older {template.name} (its path, start pose, '
+                       'laps or v_ref differ): run `just lab2 survey-align` again')
+    return True, ''
+
+
+def course_for(c: 'Config', bench: bool = False):
+    """(the launch argument naming the course, the summary entry, a warning or '')."""
+    route = c.require('route')
+    choice = c.get('course_dir', 'auto')
+    if choice not in COURSE_CHOICES:
+        if not Path(choice, 'course.yaml').is_file():
+            raise ConfigError(f'course_dir {choice} ({c.source("course_dir")}) has no course.yaml')
+        return f'course_dir:={choice}', ('course_dir', choice), ''
+    warn = ''
+    if choice == 'auto' and not bench:
+        latest = SURVEY_LATEST
+        if latest.is_dir():
+            ok, why = aligned_for(latest, route)
+            if ok:
+                d = str(latest.resolve())
+                return f'course_dir:={d}', ('course_dir', d), ''
+            warn = (f'surveys/latest not used: {why}. Running the PACKAGED {route}, whose boards are '
+                    'where the plan put them, not where they stand')
+        else:
+            warn = (f'no surveys/latest: running the PACKAGED {route}, whose boards are where the plan '
+                    'put them (survey, then `just lab2 survey-align`)')
+    arg = f'course_dir:={route}' if '/' in route else f'route:={route}'
+    return arg, ('route', route), warn
 
 
 # ---- bags -------------------------------------------------------------------------------
@@ -229,8 +304,9 @@ def _home(p) -> str:
     return '~' + s[len(h):] if s == h or s.startswith(h + '/') else s
 
 
-def plan(recipe, argv, cwd=REPO):
-    """(args for the recipe's command, the dim summary line)."""
+def plan(recipe, argv, cwd=REPO, bench=False):
+    """(args for the recipe's command, the dim summary line). bench: the vehicle bench
+    (`course_dir: auto` is the packaged course there)."""
     cfg_file, cli, rest = split_args(recipe, argv)
     c = Config(cli, cfg_file, cwd=cwd)
     used = []
@@ -240,10 +316,12 @@ def plan(recipe, argv, cwd=REPO):
 
     if recipe == 'vehicle':
         out = list(rest)
-        if not _has(rest, 'course:=', 'course_dir:='):
-            route = c.require('route')
-            out.append(f'course_dir:={route}' if '/' in route else f'route:={route}')
-            use('route')
+        if not _has(rest, 'course:=', 'route:='):
+            arg, (k, v), warn = course_for(c, bench)
+            out.append(arg)
+            use(k, v)
+            if warn:
+                print(f'warning: {warn}', file=sys.stderr)
         if c.source('submission') == 'command line' and c.source('team_dir') != 'command line':
             out.append(f'submission:={c.get("submission")}')
             use('submission')

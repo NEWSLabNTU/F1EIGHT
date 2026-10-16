@@ -48,6 +48,7 @@ just lab2 plot                    # the latest bag
 | `team_dir` | `vehicle`: the team's controller and `path_tracker.param.yaml` (what `team:=DIR` passes) | none (required by `vehicle`) |
 | `submission` | `gate`: the controller to gate (what `submission:=DIR` passes) | none (required by `gate`) |
 | `route` | `vehicle`, and the bag name (`lab2_uturn` -> `uturn_N`) | `lab2_uturn` |
+| `course_dir` | `vehicle`/`run`: the course the car runs. `auto`: `surveys/latest` if `survey-align` aligned it for `route` (same `path.csv`, start pose, laps, `v_ref`), else the route's packaged course, with a warning; `package`; or a directory. The bench (`run --bench`) takes `auto` as `package` | `auto` |
 | `reference` | `grade`: the car's TA reference bag | `~/lab2/reference/uturn` |
 | `bag_dir` | where `record` writes and `grade`/`check-bags`/`plot` look | `rosbags` |
 
@@ -376,16 +377,90 @@ camera run, so it is not fitted in. To see what it would cost, run the bench
 with `pose_noise_std` 0.09 and yaw noise 1.6° (below). `distance_threshold`
 (5 m) could be raised for a 480 mm marker; that has not been measured.
 
-## Surveying a hall with the car (`just lab2 survey`)
+## On the field: tape, boards, survey, align (`just lab2 survey`, `just lab2 survey-align`)
 
-Boards that cannot stay on the walls are placed anew each visit, so the course
-is surveyed each visit too, with the car's own ZED:
-`just lab2 survey COURSE_DIR ORIGIN_ID`. Drive slowly past every board; the
-survey discovers the markers live, bundle-adjusts the recording (linked by the
-ZED's visual-inertial tracking) and writes `course.yaml` and the map in the
-frame of the origin marker. Write `path.csv` in that frame. Details and
-accuracy: `src/lab/autosdv_marker_survey/README.md` (simulated: 1–3 cm median,
-under 5 cm worst).
+Boards are placed anew each visit and never land exactly where they did last
+time, nor exactly where the plan says; the car is never placed exactly the same
+in the start box either. What has to hold is that the **route the car follows
+is the route taped on the floor**. So the map is built in two stages and put
+into the route's own frame, the START-BOX frame: origin at the start box (the
+rear axle, `base_link`), x along the first leg, y to the car's left, z up.
+`path.csv` is written in that frame once (`make-uturn`) and never moves.
+
+The procedure, on the car, in tmux:
+
+1. **Tape the route** from the numbers in `lab2_uturn/course.yaml`'s header
+   (start box at (0, 0) facing +x, turn centre (10, −1.5), stop line (0, −3)
+   for R 1.5 m / 10 m legs).
+2. **Place the boards** by the same header's table, measured from the start box.
+   A few centimetres or degrees off does not matter: the survey measures where
+   they really are. Upright, on the floor.
+3. **Stage 1, the survey:** `just lab2 survey 24` (any board id can be the
+   origin; 24, the anchor, faces the first leg). Drive or push the car slowly
+   past every board, Ctrl-C. This measures the boards relative to one another,
+   in the frame of that board, and writes `surveys/<date>_<time>/` (and
+   `surveys/latest`). Its floor is fitted to the car's own poses, so a board
+   that leans does not tilt the map; a board that is turned or misplaced turns
+   and shifts it, which is what stage 2 removes. Details:
+   `src/lab/autosdv_marker_survey/README.md`.
+4. **Stage 2, the alignment:** put the car in the taped start box pointing
+   along the first leg, then `just lab2 survey-align`. It starts the
+   localization on the stage-1 map (ZED, AR-tag localizer, EKF; the actuator as
+   a dry run, no tracker: nothing can drive the car), finds the boards in the
+   image and seeds the EKF from them, and prints **READY**. Then drive the car
+   **straight along the taped first leg** by transmitter or by hand, 2 m or more
+   (under 1 m is refused), stop, Ctrl-C. It writes the aligned course into the
+   survey directory: the route's own `path.csv` (byte for byte, so
+   `check-bags` sees the template's route hash), `start_pose` (0, 0, 0), the
+   boards in the start-box frame, the map, `ar_tag.param.yaml`, and
+   `align_report.txt`. The stage-1 result stays in `stage1/`, the recorded drive
+   in `align_poses.csv` / `align_pnp.csv` (`lab2_survey_align_solve DIR [--force]`
+   aligns it again without the car). Surveying into the directory again drops
+   the alignment; align again after it.
+5. **`just lab2 loc-check`**: drive the U-turn by hand along the tape; the red
+   trail should lie on the white path.
+6. **`just lab2 run`** for each graded run: with `course_dir: auto` (the
+   default) it runs `surveys/latest` once it is aligned for the route.
+
+How stage 2 computes the frame (`autosdv_marker_survey/align.py`):
+
+- **origin** = the car's start pose averaged over the second before it moved
+  (the motion onset is found from the wheel speed, else from the pose);
+- **x** = the direction of a least-squares line through every pose of the
+  drive, start included (not just its two ends);
+- **z** = the stage-1 floor normal (fitted to every stage-1 keyframe's
+  `base_link`; one straight line cannot fix a plane's roll about itself). The
+  drive's slope and the EKF's mean roll and pitch are reported as a check; a
+  slope over 2° is a warning;
+- the boards move by that planar rigid motion; their height, pitch and roll
+  stay.
+
+The poses are, where possible, **multi-board poses**: one PnP over every
+corner of every mapped board in a camera frame, with its uncertainty from the
+PnP's Jacobian (frames over 1.5 cm are dropped, the rest weighted). The EKF's
+own pose is not good enough for this: the AR-tag localizer takes each fix from
+ONE board's orientation, a degree or so off at 4 m, which put the localized
+start box 7-8 cm off on the bench, and that bias carries into the line. With
+fewer than two boards in view the EKF's poses are used, with a warning.
+
+Refused (named constants in `align.py`; `--force` overrides with a warning):
+a drive under 1 m (warned under 2 m); a pose more than 5 cm off the fitted line
+(the drive was not straight); under 0.5 s at rest before the drive; the car's
+heading at rest more than 10° from the line it drove. The report also gives
+the heading's 1-sigma (from the lateral scatter, poses taken as correlated over
+25 cm) and what it means 10 m away, the start pose's spread at rest, and how far
+the localizer's own start fix was from the multi-board one.
+
+Bench check, no car (`scripts/testing/lab2/align_bench.py --run`): the true
+field is `lab2_uturn` with the anchor board 12 cm / 7 cm off, turned 3° and
+leaning 10° back, the car 4 cm / 3 cm / 1.5° off the taped box; stage 1 is what
+the survey's frame code makes of that board (every board up to 18 m off the
+route frame). `survey-align --bench` (the mock camera rendering the true field,
+`bench_straight_driver` driving 3 m at 0.3 m/s in place of the TA) recovers
+every board within **0.9 cm and 0.01°** of the truth in the frame of where the
+car really started (heading 1-sigma 0.08°), and `just lab2 run --bench --camera
+mock ... course_dir:=tmp/lab2_align/survey` on the result is VALID, 45 / 45.
+`bench_straight_driver` refuses to run where the actuator publishes (the car).
 
 ## The graded route (`lab2_uturn`)
 
@@ -394,24 +469,23 @@ One graded bag, one course: straight 10 m, a **right U-turn of radius 1.5 m**
 run at 0.8 m/s. The path publisher's end ramp stops the car on the last
 waypoint, the stop line, level with the start box; once the run is finished
 the whole trajectory reads 0 m/s, so the car stays stopped even when the
-localized pose settles a little short of the line. The template is already in
-the frame the survey writes (origin on the floor below the origin board's
-marker, x the way it faces), so the TA lays the boards out as `course.yaml`'s
-header says, surveys a copy of the directory with that board as the origin,
-and keeps its `path.csv` and `start_pose`.
+localized pose settles a little short of the line. The template is in the
+START-BOX frame `just lab2 survey-align` writes (above): the TA tapes the route
+and places the boards from `course.yaml`'s header, surveys, and aligns.
 
-| | course frame (m) |
+| | start-box frame (m) |
 |---|---|
-| origin board (id 24) | (0, 0), facing +x, 1 m beyond the turn's apex on the out leg's line |
-| start box (rear axle) | (12.5, 0), car facing −x |
-| turn centre / apex | (2.5, 1.5) / (1.0, 1.5) |
-| stop line (rear axle) | (12.5, 3.0), car facing +x |
+| start box (rear axle) | (0, 0), car facing +x: the origin |
+| turn centre / apex | (10, −1.5) / (11.5, −1.5): a right turn from +x goes to −y |
+| stop line (rear axle) | (0, −3.0), car facing −x |
+| anchor board (id 24) | (12.5, 0), facing −x: on the first leg's line beyond the turn |
 | path | 24.71 m; the turn is s = 10.00 to 14.71 m |
 
 Eight floor-standing 500 mm boards (`DICT_5X5_1000`, black square 0.38 m,
-`marker_height: 0.25`; the ids are placeholders the survey replaces). The
-origin board cannot stand at the suggested (0, 0) of a route starting at
-x = 11.5: that point is 0.6 m from the arc, so the route is shifted 1 m along x.
+`marker_height: 0.25`; the ids are placeholders the survey replaces). Until
+2026-10-16 the template was in the frame of the origin board (the start box at
+(12.5, 0) facing −x); the boards and the route are the same, turned through
+180° about the start box.
 
 **Everything in the directory is generated** from the radius and the leg length:
 
@@ -453,8 +527,9 @@ turn's extent from `path.csv`, so a new radius or leg needs no code change;
 writes, and runs it at R 1.0 m / 6 m legs and R 2.5 m / 14 m legs.
 
 ```bash
-just lab2 vehicle route:=lab2_uturn                         # the template as shipped
-just lab2 vehicle course_dir:=$PWD/courses/uturn_today      # a surveyed copy
+just lab2 vehicle                                           # course_dir auto: the aligned surveys/latest
+just lab2 vehicle course_dir:=package                       # the template as shipped (planned boards)
+just lab2 vehicle course_dir:=$PWD/surveys/2026-10-16_10-02-11   # one survey in particular
 ```
 
 The kinematic bench (reference tracker, default lookahead, 5 cm / 2° pose
@@ -501,6 +576,8 @@ odometry median 10 cm / p95 24 cm with the bench's default detection noise
 The order on the car, each step in the same tmux session (a window each), each
 one cheap enough to repeat after any change to the car:
 
+0. after the boards are placed (each visit): `just lab2 survey 24`, then
+   `just lab2 survey-align` (On the field, above);
 1. `just lab2 preflight` with the stack up and the car in the start box
    (`just lab2 run` also runs it itself before engaging);
 2. `just lab2 camera-check COURSE`: fix quality and the per-marker survey check;
