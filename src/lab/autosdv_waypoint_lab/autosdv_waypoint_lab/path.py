@@ -164,6 +164,30 @@ def curvatures(x: Sequence[float], y: Sequence[float]) -> List[float]:
     return k
 
 
+def turn_spans(x: Sequence[float], y: Sequence[float], min_angle: float = 1e-3,
+               merge: float = 0.5) -> List[Tuple[float, float]]:
+    """Arc-length intervals [s0, s1] of an open polyline where it turns.
+
+    A vertex turns when the heading changes there by more than `min_angle`.
+    A run of turning vertices is one interval, from the first to the last of
+    them, so a straight-arc-straight polyline gives exactly the arc: its two
+    tangent points turn (by half a chord's angle) and every vertex between
+    them turns. Runs less than `merge` metres apart are joined.
+    """
+    s = arc_lengths(x, y)
+    spans: List[Tuple[float, float]] = []
+    for i in range(1, len(x) - 1):
+        a = math.atan2(y[i] - y[i - 1], x[i] - x[i - 1])
+        b = math.atan2(y[i + 1] - y[i], x[i + 1] - x[i])
+        if abs(wrap_angle(b - a)) <= min_angle:
+            continue
+        if spans and s[i] - spans[-1][1] <= merge:
+            spans[-1] = (spans[-1][0], s[i])
+        else:
+            spans.append((s[i], s[i]))
+    return spans
+
+
 def resample(x: Sequence[float], y: Sequence[float], v: Sequence[float],
              spacing: float) -> Tuple[List[float], List[float], List[float]]:
     """Points every `spacing` metres along the polyline; v interpolated."""
