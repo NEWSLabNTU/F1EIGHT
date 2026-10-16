@@ -65,7 +65,8 @@ def judge(v_ref, speeds, finished, laps_done, laps, mrm, faults, stalled, at_res
     if faults:
         why.append(f'SpeedPID fault ({faults[0]})')
     if mrm:
-        why.append('MRM raised')
+        # `mrm` is True, or the monitor's one-line description of what raised it.
+        why.append('MRM raised' + (f' ({mrm})' if isinstance(mrm, str) else ''))
     if stalled:
         why.append(f'car did not move ({STALL_M} m in {STALL_S:.0f} s)')
     elif timed_out and not finished:
@@ -107,6 +108,7 @@ def make_monitor():
     import rclpy
     from autoware_adapi_v1_msgs.msg import MrmState, OperationModeState
     from tier4_system_msgs.msg import OperationModeAvailability
+    from autoware_adapi_v1_msgs.msg import DiagGraphStatus, DiagGraphStruct
     from autosdv_lab_msgs.msg import WaypointProgress
     from nav_msgs.msg import Odometry
     from rclpy.node import Node
@@ -130,7 +132,16 @@ def make_monitor():
                                      self.on_progress, 10)
             self.create_subscription(String, '/autosdv/actuator_node/debug/mode',
                                      self.on_actuator_mode, latched)
+            self.create_subscription(DiagGraphStruct, '/diagnostics_graph/struct',
+                                     self.on_struct, latched)
+            self.create_subscription(DiagGraphStatus, '/diagnostics_graph/status',
+                                     self.on_status, 10)
             self.MRM_NORMAL = MrmState.NORMAL
+            self.MRM_STATES = {MrmState.MRM_OPERATING: 'operating', MrmState.MRM_SUCCEEDED: 'succeeded',
+                               MrmState.MRM_FAILED: 'failed'}
+            self.MRM_BEHAVIORS = {MrmState.EMERGENCY_STOP: 'EMERGENCY_STOP',
+                                  MrmState.COMFORTABLE_STOP: 'COMFORTABLE_STOP',
+                                  MrmState.PULL_OVER: 'PULL_OVER'}
             self.AUTONOMOUS = OperationModeState.AUTONOMOUS
             self.reset()
 
@@ -138,6 +149,12 @@ def make_monitor():
             self.available = None
             self.mode = None
             self.mrm_since = None
+            self.mrm_info = None
+            self.engaged_at = None
+            self.avail_at = None
+            self.avail_false_at = None
+            self.diag_names = []
+            self.diag_bad = {}           # leaf name -> (time last non-OK, message)
             self.speed = 0.0
             self.speeds = []
             self.recording = False
@@ -146,6 +163,45 @@ def make_monitor():
 
         def on_avail(self, m):
             self.available = bool(m.autonomous)
+            self.avail_at = time.monotonic()
+            if not self.available:
+                self.avail_false_at = self.avail_at
+
+        def on_struct(self, m):
+            # the unit path each leaf hangs under, e.g. /adapi/mrm_request/delegate
+            self.diag_names = [m.nodes[d.parent].path if d.parent < len(m.nodes) else d.name
+                               for d in m.diags]
+
+        def on_status(self, m):
+            now = time.monotonic()
+            for i, d in enumerate(m.diags):
+                lvl = d.level[0] if isinstance(d.level, bytes) else int(d.level)   # a ROS `byte`
+                if lvl != 0:
+                    name = self.diag_names[i] if i < len(self.diag_names) else f'diag #{i}'
+                    level = {1: 'WARN', 2: 'ERROR', 3: 'STALE'}.get(lvl, 'not OK')
+                    self.diag_bad[name] = (now, f'{level}: {d.message}' if d.message else level)
+
+        def describe_mrm(self, m, now):
+            """What the fail-safe did and when, from the first MRM message."""
+            what = (f"{self.MRM_STATES.get(m.state, m.state)} "
+                    f"{self.MRM_BEHAVIORS.get(m.behavior, 'behavior ' + str(m.behavior))}")
+            when = (f'{now - self.engaged_at:.1f} s after engage' if self.engaged_at is not None
+                    else 'before engage')
+            return f'{what}, {when}'
+
+        def mrm_reason(self):
+            """The MRM line plus the diagnostics that were not OK around it.
+
+            The status message that carries the cause can arrive just after the
+            MRM message, so this is read once the run is over, not in the callback.
+            """
+            if self.mrm_since is None:
+                return None
+            bad = [f'{n} {msg}' for n, (t, msg) in self.diag_bad.items()
+                   if abs(t - self.mrm_since) < 2.0]
+            return self.mrm_info + ('; not OK around it: ' + ', '.join(bad[:4]) if bad
+                                    else '; no diagnostic was not OK (the availability message '
+                                         'went false)')
 
         def on_mode(self, m):
             self.mode = int(m.mode)
@@ -153,6 +209,7 @@ def make_monitor():
         def on_mrm(self, m):
             if m.state != self.MRM_NORMAL and self.mrm_since is None:
                 self.mrm_since = time.monotonic()
+                self.mrm_info = self.describe_mrm(m, self.mrm_since)
 
         def on_odom(self, m):
             self.speed = m.twist.twist.linear.x
@@ -189,6 +246,7 @@ def run_route(rclpy, mon, env, workdir, route, extra, timeout):
             result.update(ok=False, why=['engage refused'])
             return result
         t0 = time.monotonic()
+        mon.engaged_at = t0
 
         def over():
             p = mon.progress
@@ -213,7 +271,7 @@ def run_route(rclpy, mon, env, workdir, route, extra, timeout):
         p = mon.progress
         finished = bool(p and p.finished)
         ok, why = judge(v_ref, mon.speeds, finished, int(p.laps_done) if p else 0, laps,
-                        mon.mrm_since is not None, mon.faults, stalled,
+                        mon.mrm_reason() or False, mon.faults, stalled,
                         abs(mon.speed) < 0.05, time.monotonic() - t0 >= timeout)
         moving = [s for s in mon.speeds if s > 0.1]
         result.update(ok=ok, why=why, seconds=round(time.monotonic() - t0, 1),

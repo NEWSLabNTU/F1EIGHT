@@ -25,6 +25,15 @@ def test_fault_mrm_stall_each_fail():
     assert not run(stalled=True, finished=False, speeds=[0.0])[0]
 
 
+def test_mrm_reason_is_named_in_the_failure():
+    ok, why = run(mrm='operating COMFORTABLE_STOP, 3.1 s after engage; not OK around it: '
+                      '/adapi/mrm_request/delegate STALE')
+    assert not ok
+    assert why[0].startswith('MRM raised (operating COMFORTABLE_STOP')
+    assert 'delegate STALE' in why[0]
+    assert run(mrm=True)[1] == ['MRM raised']
+
+
 def test_unfinished_and_short_laps_fail():
     assert not run(finished=False, timed_out=True)[0]
     assert 'laps' in run(laps_done=0)[1][0]
