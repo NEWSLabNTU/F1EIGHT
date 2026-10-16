@@ -60,5 +60,5 @@ scores 0, with the reasons printed, unless it was engaged, finished at the
 stop, raised no MRM, never disengaged, and kept the localized pose within
 0.3 m of the path from engage to rest (`path_dev_max`).
 
-The reference bag is a TA run of `lab2_uturn` on the same car; keep one per car,
-e.g. `~/lab2/reference/<car>/uturn`.
+The reference bag is a TA run of `lab2_uturn` on the same car; keep it on that car
+at `~/lab2/reference/uturn`, the path the student spec gives.
