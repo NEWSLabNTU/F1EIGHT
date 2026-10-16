@@ -29,9 +29,10 @@ class KeyboardControlGUI(Node):
         super().__init__('keyboard_control_gui')
 
         # Declare parameters with defaults
-        self.declare_parameter('speed_step_ms', 0.5)
+        # Defaults sized for the small car, so a launch without the config file is safe too
+        self.declare_parameter('speed_step_ms', 0.1)
         self.declare_parameter('steering_step_deg', 1.0)
-        self.declare_parameter('max_speed_ms', 27.78)
+        self.declare_parameter('max_speed_ms', 1.0)
         self.declare_parameter('max_steer_deg', 22.5)
         self.declare_parameter('publish_rate', 30.0)
 
