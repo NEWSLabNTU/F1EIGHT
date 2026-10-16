@@ -251,10 +251,10 @@ def main(argv=None):
                     help='course directory, for the true cross-track on bench bags')
     ap.add_argument('--json', action='store_true')
     ap.add_argument('--score', action='store_true',
-                    help='route grading (straight / circle): points, gates and the team total; see route_grade.py')
+                    help='route grading (lab2_uturn): points and validity; see route_grade.py')
     ap.add_argument('--reference', action='append', default=[], metavar='BAG',
-                    help='with --score: the car\'s TA reference bag for a route (repeat per route)')
-    ap.add_argument('--route', choices=['straight', 'circle_cw', 'circle_ccw'], default=None,
+                    help='with --score: the car\'s TA reference bag of the route')
+    ap.add_argument('--route', choices=['uturn'], default=None,
                     help='with --score: the route, when the bag has no metadata (one bag only)')
     args = ap.parse_args(argv)
     if args.score:
@@ -304,7 +304,7 @@ def score_main(args):
         print(f'\nteam total: {tot:.2f} / {mx:g}')
         for m, s_, _ in out:
             if s_.invalid:
-                print(f'  {m.name}: INVALID, re-run (counts 0 until a valid bag exists)')
+                print(f'  {m.name}: INVALID (scores 0)')
     return 0
 
 

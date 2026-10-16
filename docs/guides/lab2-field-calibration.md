@@ -89,9 +89,9 @@ part of the value, not an error.
 
 Re-run `steer-hold` once at -50 with the new ratio loaded
 (`--ratio <fitted>`): the circle must match the first fit's radius within
-10 %. Then drive R 1.5 m (`lab2_circle_cw`) by hand and check the tracker's
+10 %. Then drive the R 1.5 m U-turn (`lab2_uturn`) by hand and check the tracker's
 commanded angle stays under 80 % of `max_steer_angle`. A car that fails the
-margin cannot run the R 1.5 m circle: tell the instructor; the course changes,
+margin cannot run the R 1.5 m U-turn: tell the instructor; the course changes,
 not the check. The measured values go on the car's sign-off sheet
 (`field/lab2-car-signoff.md`, part C in the course repository).
 

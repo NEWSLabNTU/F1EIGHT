@@ -1,15 +1,15 @@
 #!/usr/bin/env python3
-"""Lab 2 vehicle-bench gate: does the team's SpeedPID drive the three graded routes?
+"""Lab 2 vehicle-bench gate: does the team's SpeedPID drive the graded route (lab2_uturn)?
 
-Each route starts a fresh vehicle bench (`just lab2 bench`: the car's actuator
+Each route (by default the one graded route) starts a fresh vehicle bench (`just lab2 bench`: the car's actuator
 with the SpeedPID plug-in, the EKF, the reference tracker, the MRM path, and a
 plant model for the car), engages, waits for the run to finish and prints one
-PASS or FAIL line. Exit status is the number of FAILs. A team has to pass all
-three before it gets car time.
+PASS or FAIL line. Exit status is the number of FAILs. A team has to pass
+before it gets car time.
 
     just lab2 gate speed_controller_class:=lab2_waypoint.speed_pid:SpeedPID \\
                    "speed_controller_params:={kp: 15.0, ki: 5.0}"
-    just lab2 gate --only lab2_straight          # one route
+    just lab2 gate --only hall_demo              # another course instead
     just lab2 gate --list
 
 Arguments after the options go to the bench's launch file unchanged, which is
@@ -50,7 +50,7 @@ import waypoint_checks as wc  # noqa: E402  (Bench, spin_until, call, bring_up, 
 
 REPO = wc.REPO
 COURSES_DIR = REPO / 'src/lab/autosdv_waypoint_lab/config/courses'
-ROUTES = ['lab2_straight', 'lab2_circle_cw', 'lab2_circle_ccw']
+ROUTES = ['lab2_uturn']
 
 SPEED_MEDIAN = (0.6, 1.15)   # x v_ref
 SPEED_PEAK = 1.5             # x v_ref

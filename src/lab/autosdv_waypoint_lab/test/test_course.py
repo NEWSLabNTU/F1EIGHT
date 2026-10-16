@@ -1,3 +1,4 @@
+import functools
 import math
 
 import pytest
@@ -60,7 +61,7 @@ def test_shipped_dictionary_files_exist():
         assert os.path.isfile(os.path.join(here, 'config', 'dictionaries', name + '.dict'))
 
 
-SHIPPED_COURSES = ('hall_demo', 'lab2_straight', 'lab2_circle_cw', 'lab2_circle_ccw')
+SHIPPED_COURSES = ('hall_demo', 'lab2_uturn')
 
 
 def _course_dir(name):
@@ -100,73 +101,126 @@ def test_an_upright_marker_is_unchanged_by_the_tilt_fields():
     assert a.corners(0.25) == b.corners(0.25)
 
 
-# ------------------------------------------------ the Lab 2 grading routes
+# ------------------------------------------------ the Lab 2 graded route (lab2_uturn)
 
-LAB2_ROUTES = ('lab2_straight', 'lab2_circle_cw', 'lab2_circle_ccw')
-
-
-@pytest.mark.parametrize('name', LAB2_ROUTES)
-def test_lab2_route_is_covered_from_start_box_to_finish(name):
-    from autosdv_waypoint_lab.marker_sim import CameraModel, coverage
-    from autosdv_waypoint_lab.path import CoursePath, Path, load_csv
-    c = load_course(_course_dir(name))
-    x, y, v = load_csv(c.path_file, c.v_ref)
-    cp = CoursePath(x, y, v, closed=c.closed)
-    sp = c.start_pose
-    cov = coverage(Path(cp.x, cp.y, cp.v), parse_osm_landmarks(make_osm(c)),
-                   (sp.x, sp.y, sp.yaw), CameraModel(marker_size=c.marker_size))
-    if name == 'lab2_straight':
-        # three boards on purpose: one blind stretch (2.94 m, ~3.7 s at 0.8 m/s)
-        # under localization_monitor's error_age of 5 s; every start-box
-        # placement still sees both side boards.
-        assert cov.longest_gap <= 0.8 * 5.0 * 0.8   # < error_age at v_ref
-        assert cov.start_box_min >= 1
-        return
-    assert cov.fraction == 1.0
-    assert cov.start_box_min >= 1
+def _uturn_spec():
+    import yaml
+    with open(_course_dir('lab2_uturn') + '/course.yaml') as f:
+        d = yaml.safe_load(f)
+    return float(d['uturn']['radius']), float(d['uturn']['leg'])
 
 
-@pytest.mark.parametrize('name', LAB2_ROUTES)
-def test_lab2_route_is_in_the_origin_boards_frame(name):
+@functools.lru_cache(maxsize=None)
+def _layout(radius, leg=10.0):
+    from autosdv_waypoint_lab import uturn
+    return uturn.make_layout(radius, leg)
+
+
+def test_lab2_uturn_path_is_the_declared_geometry():
+    # path.csv is the route course.yaml declares (radius, leg), shifted along x
+    # so that the origin board stands at (0, 0): a right U-turn, legs 2R apart,
+    # the stop point level with the start box in the other lane.
+    from autosdv_waypoint_lab import uturn
+    from autosdv_waypoint_lab.path import load_csv, turn_spans
+    radius, leg = _uturn_spec()
+    c = load_course(_course_dir('lab2_uturn'))
+    x, y, _ = load_csv(c.path_file, c.v_ref)
+    xt, yt = uturn.route_polyline(radius, leg)
+    shift = x[0] - xt[0]
+    assert x == pytest.approx([v + shift for v in xt], abs=1e-3)
+    assert y == pytest.approx(yt, abs=1e-3)
+    assert not c.closed and c.laps == 1 and c.v_ref == pytest.approx(0.8)
+    assert (c.start_pose.x, c.start_pose.y, c.start_pose.yaw) == pytest.approx((x[0], 0.0, math.pi), abs=1e-3)
+    assert (x[-1], y[-1]) == pytest.approx((x[0], 2 * radius), abs=1e-3)
+    (s0, s1), = turn_spans(x, y)
+    assert (s0, s1) == pytest.approx((leg, leg + math.pi * radius), abs=0.02)
+    # turning right: driving -x, the turn centre is on the +y side
+    assert min(y) == pytest.approx(0.0) and max(y) == pytest.approx(2 * radius)
+
+
+def test_lab2_uturn_is_in_the_origin_boards_frame():
     # `just lab2 survey DIR ORIGIN` puts the origin board at (0, 0) facing +x
     # and keeps path.csv: the template must already be in that frame.
-    from autosdv_waypoint_lab.path import load_csv
-    c = load_course(_course_dir(name))
+    c = load_course(_course_dir('lab2_uturn'))
     origin = [m for m in c.markers if (m.x, m.y) == (0.0, 0.0)]
-    assert len(origin) == 1 and origin[0].yaw == pytest.approx(0.0)
+    assert len(origin) == 1 and origin[0].yaw == pytest.approx(0.0) and origin[0].id == 24
     assert all(m.z == pytest.approx(0.25) for m in c.markers)   # floor-standing 500 mm board
+    assert sorted(m.id for m in c.markers) == list(range(24, 24 + len(c.markers)))
+
+
+def _check_coverage(xs, ys, boards, start, stop):
+    from autosdv_waypoint_lab import uturn
+    from autosdv_waypoint_lab.course import Course, Marker, Pose2D
+    c = Course('.', 'path.csv', False, 1, 0.8, Pose2D(*start), 0.38,
+               [Marker(i, bx, by, 0.25, byaw) for i, (bx, by, byaw) in enumerate(boards)], 'DICT_5X5_1000')
+    cov, turn, _, _, _ = uturn.course_coverage(c, (xs, ys))
+    assert cov.start_box_min >= 2                  # a fix (two) before the car moves
+    assert cov.longest_gap <= 3.2                  # ~4 s at 0.8 m/s, under error_age 5 s
+    assert turn == 1.0                             # a board in view through the whole turn
+    cam = uturn.CameraModel(marker_size=0.38)
+    lms = [lm for v in parse_osm_landmarks(make_osm(c)).values() for lm in v]
+    assert min(sum(1 for lm in lms if uturn.visible(cam, *p, lm))
+               for p in uturn._start_box((stop[0], stop[1], 0.0))) >= 1    # a fix at the stop
+    d = uturn._point_path_distance([b[0] for b in boards], [b[1] for b in boards],
+                                   *uturn.car_track(xs, ys))
+    assert d.min() >= 1.4 - 1e-6                   # 1 m clear of the car
+
+
+def test_lab2_uturn_shipped_boards_cover_the_route():
+    from autosdv_waypoint_lab.path import load_csv
+    c = load_course(_course_dir('lab2_uturn'))
     x, y, _ = load_csv(c.path_file, c.v_ref)
-    assert (c.start_pose.x, c.start_pose.y) == pytest.approx((x[0], y[0]), abs=1e-3)
+    _check_coverage(x, y, [(m.x, m.y, m.yaw) for m in c.markers],
+                    (c.start_pose.x, c.start_pose.y, c.start_pose.yaw), (x[-1], y[-1]))
 
 
-def test_lab2_circles_share_one_ring_about_3_5_0():
-    cw = load_course(_course_dir('lab2_circle_cw'))
-    ccw = load_course(_course_dir('lab2_circle_ccw'))
-    assert cw.markers == ccw.markers
-    for m in cw.markers:
-        assert math.hypot(m.x - 3.5, m.y) == pytest.approx(3.5, abs=1e-3)
-        # each board faces the centre
-        assert math.cos(math.atan2(-m.y, 3.5 - m.x) - m.yaw) == pytest.approx(1.0, abs=1e-6)
+def test_lab2_uturn_shipped_files_are_what_make_uturn_writes():
+    # every file of the course is generated: edit the radius, not the files
+    import os
+    from autosdv_waypoint_lab import uturn
+    radius, leg = _uturn_spec()
+    d = _course_dir('lab2_uturn')
+    for name, text in uturn.files(_layout(radius, leg), d).items():
+        with open(os.path.join(d, name)) as f:
+            assert f.read() == text, f'{name}: run just lab2 make-uturn {radius:g} --write'
 
 
-@pytest.mark.parametrize('name,radius,laps', [('lab2_circle_cw', 1.5, 3),
-                                              ('lab2_circle_ccw', 2.5, 3),
-                                              ('lab2_straight', None, 1)])
-def test_reference_tracker_completes_the_lab2_route(name, radius, laps):
+# other radii and leg lengths: the generator must meet the goals there too
+@pytest.mark.parametrize('radius,leg', [(1.0, 6.0), (2.5, 14.0)])
+def test_make_uturn_meets_the_goals_at_other_sizes(radius, leg, tmp_path):
+    from autosdv_waypoint_lab import bag_meta as bm
+    from autosdv_waypoint_lab import route_grade as rg
+    from autosdv_waypoint_lab import uturn
+    lay = _layout(radius, leg)
+    assert lay.ok, lay.problems
+    assert (lay.radius, lay.leg) == (radius, leg)
+    assert lay.start[0] - lay.boards[0].x == pytest.approx(lay.shift + leg)
+    assert lay.stop == pytest.approx((lay.start[0], 2 * radius))
+    assert lay.path_length == pytest.approx(2 * leg + math.pi * radius, abs=0.01)
+    _check_coverage(lay.xs, lay.ys, [(b.x, b.y, b.yaw) for b in lay.boards], lay.start, lay.stop)
+    for name, text in uturn.files(lay, str(tmp_path)).items():
+        (tmp_path / name).write_text(text)
+    c = load_course(str(tmp_path))
+    assert (tmp_path / 'lanelet2_map.osm').read_text() == make_osm(c)
+    assert bm.classify_route(str(tmp_path)) == 'uturn'
+    geo = rg.geometry_from_course(str(tmp_path), 'uturn')
+    assert geo.turns == [pytest.approx((leg, leg + math.pi * radius), abs=0.02)]
+    import yaml
+    assert yaml.safe_load((tmp_path / 'course.yaml').read_text())['uturn'] == {'radius': radius, 'leg': leg}
+    assert (geo.dir_x, geo.dir_y) == pytest.approx((1.0, 0.0))
+
+
+def test_reference_tracker_completes_the_lab2_uturn():
     from autosdv_waypoint_lab import kinematic_bench as kb
     from autosdv_waypoint_lab.path import CoursePath, load_csv
     from autosdv_waypoint_lab.reference.path_tracker import PathTracker
     from autosdv_waypoint_lab.tracker_api import VehicleGeometry
-    c = load_course(_course_dir(name))
+    c = load_course(_course_dir('lab2_uturn'))
     x, y, v = load_csv(c.path_file, c.v_ref)
     cp = CoursePath(x, y, v, closed=c.closed, v_max=0.8, decel=0.3, laps=c.laps)
     veh = VehicleGeometry()
     r = kb.run(PathTracker({}, veh), cp, (c.start_pose.x, c.start_pose.y, c.start_pose.yaw), veh,
                kb.BenchParams(pose_noise_std=0.05, yaw_noise_std=math.radians(2.0)))
-    assert r.finished and r.laps == laps
+    assert r.finished and r.laps == 1
     assert r.cross_track_max < 0.1
-    if radius is None:
-        assert math.hypot(r.x[-1] - x[-1], r.y[-1] - y[-1]) < 0.15
-    else:
-        rad = [math.hypot(px - 3.5, py) for px, py, s in zip(r.x, r.y, r.speed) if s > 0.7]
-        assert sum(rad) / len(rad) == pytest.approx(radius, abs=0.05)
+    assert math.hypot(r.x[-1] - x[-1], r.y[-1] - y[-1]) < 0.15

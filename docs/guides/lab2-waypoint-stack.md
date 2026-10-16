@@ -11,6 +11,8 @@ localized pose and the path) and the `SpeedPID` (the actuator's inner loop).
 | `just lab2 bench` | `waypoint_follow_bench.launch.xml` | a workstation: the car's stack, a plant model for the hardware |
 | `just lab2 bench-checks` | (starts benches) | the safety behaviour, PASS/FAIL |
 | `just lab2 preflight` | (reads the running stack) | before engaging: nodes, rates, marker fixes, start box, TF, availability, MRM, graph |
+| `just lab2 gate` | (starts a bench) | a team's SpeedPID drives `lab2_uturn`, PASS/FAIL before car time |
+| `just lab2 make-uturn R [--leg L]` | (no ROS) | regenerate the graded course from its radius and leg length |
 
 The design and the decisions behind it are in the course repository,
 `2026/labs/Lab2/lab2-system-design.md`. The coach-board lab this replaced is
@@ -149,43 +151,76 @@ frame of the origin marker. Write `path.csv` in that frame. Details and
 accuracy: `src/lab/autosdv_marker_survey/README.md` (simulated: 1–3 cm median,
 under 5 cm worst).
 
-## The grading routes (`lab2_straight`, `lab2_circle_cw`, `lab2_circle_ccw`)
+## The graded route (`lab2_uturn`)
 
-The three graded bags each have a course template, already in the frame the
-survey writes (origin on the floor below the origin board's marker, x the way
-it faces), so the TA lays the boards out as the template's header says,
-surveys a copy of the directory with that board as the origin, and keeps its
-`path.csv` and `start_pose`:
+One graded bag, one course: straight 10 m, a **right U-turn of radius 1.5 m**
+(legs 3 m apart, centre to centre), straight 10 m back in the other lane, one
+run at 0.8 m/s. The path publisher's end ramp stops the car on the last
+waypoint, the stop line, level with the start box. The template is already in
+the frame the survey writes (origin on the floor below the origin board's
+marker, x the way it faces), so the TA lays the boards out as `course.yaml`'s
+header says, surveys a copy of the directory with that board as the origin,
+and keeps its `path.csv` and `start_pose`.
 
-| course | route | origin board | boards |
-|---|---|---|---|
-| `lab2_straight` | open 10 m, x 11.5 → 1.5 heading −x, 1 run at 0.8 m/s, end ramp stops it | the end board, (0, 0) facing +x, 1.5 m past the stop | end board + 2 angled side boards (3 boards) |
-| `lab2_circle_cw` | clockwise R 1.5 m about (3.5, 0), 3 laps at 0.8 m/s | a ring board, (0, 0) facing +x | ring of 6 at R 3.5 m facing the centre |
-| `lab2_circle_ccw` | counter-clockwise R 2.5 m about (3.5, 0), 3 laps | the same ring board | the same ring |
+| | course frame (m) |
+|---|---|
+| origin board (id 24) | (0, 0), facing +x, 1 m beyond the turn's apex on the out leg's line |
+| start box (rear axle) | (12.5, 0), car facing −x |
+| turn centre / apex | (2.5, 1.5) / (1.0, 1.5) |
+| stop line (rear axle) | (12.5, 3.0), car facing +x |
+| path | 24.71 m; the turn is s = 10.00 to 14.71 m |
 
-All the lab's 500 mm boards standing on the floor (`DICT_5X5_1000`, black
-square 0.38 m, `marker_height: 0.25`); the ids are placeholders the survey replaces. The two
-circles share one ring, so one recording serves both: survey into one
-directory, then `lab2_marker_survey_solve <dir>/survey_data.npz --course
-<other dir>`.
+Eight floor-standing 500 mm boards (`DICT_5X5_1000`, black square 0.38 m,
+`marker_height: 0.25`; the ids are placeholders the survey replaces). The
+origin board cannot stand at the suggested (0, 0) of a route starting at
+x = 11.5: that point is 0.6 m from the arc, so the route is shifted 1 m along x.
+
+**Everything in the directory is generated** from the radius and the leg length:
 
 ```bash
-just lab2 vehicle route:=lab2_circle_cw                      # the template as shipped
-just lab2 vehicle course_dir:=$PWD/courses/circle_cw_today   # a surveyed copy
+just lab2 make-uturn 1.5                    # dry run: summary, a paste block for the spec, a diff
+just lab2 make-uturn 2.0 --leg 8 --write    # a new geometry: path, start/stop, boards, map, header
+python3 scripts/testing/lab2/make_uturn.py --radius 1.5 --leg 10 --write   # the same, no just
 ```
 
-`just lab2 course-map` on the templates: a marker in view on 100 % of every
-route, no gap, the start box always covered. The kinematic bench (reference
-tracker, default lookahead, 5 cm / 2° pose noise) completes each with cross-track
-under 3 cm, a 1.5 m circle at mean radius ±3 mm, and the straight stopping
-within 7 cm of its last waypoint. With the 0.38 m boards' measured 9 cm / 1.6°
-instead, it still completes each: cross-track under 5 cm, mean radius within
-6 mm, the straight stopping within 14 cm. Coverage is unchanged at 0.38 m
-(the field-of-view test uses the marker's width, and it stays inside the 100°
-camera). Course-file checks are tests in `test_course.py`.
-The R 1.5 m circle needs 0.21 rad of tire angle (0.13 rad for R 2.5 m): it is meaningless until the
+It writes `path.csv`, `course.yaml` (start pose, boards, `uturn: {radius, leg}`
+and a header whose numbers it computes), `lanelet2_map.osm`,
+`ar_tag.param.yaml` and `map_projector_info.yaml`. The boards come from a
+coverage search with the bench's detector model (`marker_sim.visible`: 100°
+hfov, 5 m = `ar_tag` `distance_threshold`, 60° incidence, 0.38 m marker): boards
+on a 0.5 m grid facing every 15°, at least 1.4 m from the car's track (1 m clear
+of the car), the fewest that give
+
+1. every start-box placement (±0.3 m, ±10°) sees ≥ 2 boards,
+2. no blind stretch over 3 m (localization_monitor's `error_age` is 5 s),
+3. a board in view through the whole U-turn,
+4. a car at rest near the stop line (±0.3 m, ±10°) sees ≥ 1, so the stop is
+   measured on a fix rather than on dead reckoning.
+
+For R 1.5 m that is 8 (no layout of 7 meets all four; without goal 4 seven
+would do): start box ≥ 2, the stop ≥ 1, a board in view on 85 % of the path,
+the turn on 100 %, the longest blind stretch 1.3 m (1.6 s). It refuses to
+write a layout that misses a goal (`--force` overrides). The grader reads the
+turn's extent from `path.csv`, so a new radius or leg needs no code change;
+`test_course.py` checks the shipped files are exactly what the generator
+writes, and runs it at R 1.0 m / 6 m legs and R 2.5 m / 14 m legs.
+
+```bash
+just lab2 vehicle route:=lab2_uturn                         # the template as shipped
+just lab2 vehicle course_dir:=$PWD/courses/uturn_today      # a surveyed copy
+```
+
+The kinematic bench (reference tracker, default lookahead, 5 cm / 2° pose
+noise) completes it with cross-track under 8 cm and the car stopping 6 cm from
+the stop line; with the 0.38 m boards' measured 9 cm / 1.6°, 8 cm and 8 cm.
+The R 1.5 m turn needs 0.21 rad of tire angle: it is meaningless until the
 car's `tire_angle_to_steer_ratio` is measured (`lab2-field-calibration.md`,
 car gate; `known-config-defects.md` §8).
+
+Grading (`route_grade.py`, `lab2-submission-bags.md`): speed RMSE on the legs
+(15) and in the turn (10), overshoot (5), stop error (15), each against the
+car's reference bag; a bag off the path by more than 0.3 m, unfinished, with an
+MRM or a disengage is invalid and scores 0.
 
 ## Checking localization by hand (`just lab2 loc-check`)
 

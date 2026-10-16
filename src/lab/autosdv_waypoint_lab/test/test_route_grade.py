@@ -37,118 +37,150 @@ def kin(x, y):
     return NS(pose=NS(pose=NS(position=NS(x=x, y=y))))
 
 
-def msgs_for(route, *, x_stop=0.0, overshoot=0.0, wobble=0.0, radius_off=0.0, mrm=False,
-             laps=3, finished=True, engaged=True, t_ramp=20.0, t_stop=24.0, rise=2.0):
-    ts = [0.1 * k for k in range(0, 300)]
-    modes = [(0.0, NS(mode=1))] + ([(1.0, NS(mode=g.AUTONOMOUS))] if engaged else [])
-    # shift: engaged at t=1; the profile starts at t=1
-    vel = [(t, NS(longitudinal_velocity=speed_profile(t - 1.0, t_ramp, t_stop, rise, overshoot, wobble)))
-           for t in ts if t >= 1.0]
-    cmd = [(t, NS(longitudinal=NS(velocity=cmd_profile(t - 1.0, t_ramp, t_stop)))) for t in ts if t >= 1.0]
-    if route == 'straight':
-        # drive along -x from 11.5; stop point at (0, 0) heading -x; car rests at x_stop
-        pos = []
-        s = 0.0
-        for t, v in vel:
-            s += v.longitudinal_velocity * 0.1
-            pos.append((t, kin(11.5 - s * (11.5 - x_stop) / max(1e-9, 11.5), 0.0)))
-        # rescale so the final position is exactly x_stop
-        final_s = s
-        pos = []
-        s = 0.0
-        for t, v in vel:
-            s += v.longitudinal_velocity * 0.1
-            pos.append((t, kin(11.5 + (x_stop - 11.5) * s / final_s, 0.0)))
+UTURN = rg.geometry_from_course(rg.template_dir('uturn'), 'uturn')
+T_RAMP, T_STOP = 31.0, 35.0     # the plateau covers the route up to its end ramp
+
+
+def place(geo, s, lateral=0.0):
+    """(x, y) at arc length s on the route (run on straight past its end), moved
+    `lateral` metres to the left."""
+    path = geo.path
+    if s <= path.length:
+        x, y, yaw = path.point_at(s)
     else:
-        R = 1.5 if route == 'circle_cw' else 2.5
-        w = 1 if route == 'circle_ccw' else -1
-        pos = [(t, kin((R + radius_off) * math.cos(w * 0.5 * t), (R + radius_off) * math.sin(w * 0.5 * t)))
-               for t, _ in vel]
-    prog = [(t, NS(laps_done=min(int(t // 8), laps), laps=laps if finished or True else 3,
+        x, y = geo.end_x + (s - path.length) * geo.dir_x, geo.end_y + (s - path.length) * geo.dir_y
+        yaw = math.atan2(geo.dir_y, geo.dir_x)
+    return x - lateral * math.sin(yaw), y + lateral * math.cos(yaw)
+
+
+def msgs_for(route='uturn', *, stop_off=0.0, overshoot=0.0, wobble=0.0, turn_dip=0.0, lateral=0.0,
+             mrm=False, laps=1, finished=True, engaged=True, t_ramp=T_RAMP, t_stop=T_STOP, rise=2.0,
+             geo=UTURN):
+    """A run along the route: engaged at t = 1, speed profile from t = 1, the car
+    coming to rest stop_off metres past the stop point (negative: short). In the
+    turn the measured speed is turn_dip lower (the position is integrated from
+    the profile, so the dip moves no sample)."""
+    ts = [0.1 * k for k in range(0, 450)]
+    modes = [(0.0, NS(mode=1))] + ([(1.0, NS(mode=g.AUTONOMOUS))] if engaged else [])
+    prof = [(t, speed_profile(t - 1.0, t_ramp, t_stop, rise, overshoot, wobble)) for t in ts if t >= 1.0]
+    final = sum(v * 0.1 for _, v in prof)
+    target_s = geo.path.length + stop_off
+    vel, pos, s = [], [], 0.0
+    for t, v in prof:
+        s += v * 0.1
+        sp = s * target_s / final
+        pos.append((t, kin(*place(geo, sp, lateral))))
+        on_plateau = 1.0 + rise <= t <= 1.0 + t_ramp
+        vel.append((t, NS(longitudinal_velocity=v - (turn_dip if on_plateau and geo.in_turn(sp) else 0.0))))
+    cmd = [(t, NS(longitudinal=NS(velocity=cmd_profile(t - 1.0, t_ramp, t_stop)))) for t in ts if t >= 1.0]
+    prog = [(t, NS(laps_done=laps if (finished and t >= t_stop + 1.0) else 0, laps=laps,
                    finished=finished and t >= t_stop + 1.0)) for t in ts]
-    out = {g.MODE: modes, g.VELOCITY: vel, g.CONTROL: cmd, g.KINEMATIC: pos, g.PROGRESS: prog,
-           g.MRM: [(0.0, NS(state=g.MRM_NORMAL))] + ([(10.0, NS(state=2))] if mrm else [])}
-    return out
+    return {g.MODE: modes, g.VELOCITY: vel, g.CONTROL: cmd, g.KINEMATIC: pos, g.PROGRESS: prog,
+            g.MRM: [(0.0, NS(state=g.MRM_NORMAL))] + ([(10.0, NS(state=2))] if mrm else [])}
 
 
-STRAIGHT = rg.Geometry('straight', end_x=0.0, end_y=0.0, dir_x=-1.0, dir_y=0.0)
-
-
-def circle_geo(R):
-    return rg.Geometry('circle', cx=0.0, cy=0.0, radius=R)
+def metrics(**kw):
+    return rg.route_metrics('b', msgs_for(**kw), 'uturn', UTURN)
 
 
 def test_window_and_speed_rmse_ignore_the_start_transient():
     # a wobble of 0.05 m/s amplitude -> RMS 0.05/sqrt(2); the slow start must not count
-    m = rg.route_metrics('b', msgs_for('straight', wobble=0.05), 'straight', STRAIGHT)
+    m = metrics(wobble=0.05)
     assert m.speed_rmse == pytest.approx(0.05 / math.sqrt(2), rel=0.1)
+    assert m.speed_rmse_straight == pytest.approx(0.05 / math.sqrt(2), rel=0.15)
+    assert m.speed_rmse_turn == pytest.approx(0.05 / math.sqrt(2), rel=0.25)
     assert 1.0 < m.t90 < 4.0            # 90 % reached on the ramp (t=1+1.8)
-    assert m.t_ramp == pytest.approx(1.0 + 19.9, abs=0.2)
-    assert m.window_s > 15
+    assert m.t_ramp == pytest.approx(1.0 + T_RAMP - 0.1, abs=0.2)
+    assert m.window_s > 25
 
 
-def test_perfect_speed_scores_zero_rmse_and_overshoot():
-    m = rg.route_metrics('b', msgs_for('straight'), 'straight', STRAIGHT)
-    assert m.speed_rmse == pytest.approx(0.0, abs=0.01)
+def test_perfect_speed_scores_zero_errors_and_overshoot():
+    m = metrics()
+    assert m.speed_rmse_straight == pytest.approx(0.0, abs=0.01)
+    assert m.speed_rmse_turn == pytest.approx(0.0, abs=0.01)
     assert m.overshoot == pytest.approx(0.0, abs=0.01)
+    assert m.path_dev_max == pytest.approx(0.0, abs=0.01)
+    assert not m.gate_failures
+
+
+def test_samples_split_into_straight_and_turn_by_arc_length():
+    m = metrics(turn_dip=0.1)
+    assert m.speed_rmse_turn == pytest.approx(0.1, abs=0.005)
+    # the straight keeps only the window's first samples, still on the start ramp
+    assert m.speed_rmse_straight == pytest.approx(metrics().speed_rmse_straight, abs=1e-6)
+    assert m.speed_rmse_straight < 0.01
+    (s0, s1), = UTURN.turns
+    # 10 Hz samples over the arc at about 0.8 m/s
+    assert m.samples_turn == pytest.approx((s1 - s0) / 0.8 / 0.1, rel=0.1)
+    assert m.samples_straight > 2 * m.samples_turn
+
+
+def test_the_turn_is_read_from_the_course():
+    from autosdv_waypoint_lab import uturn
+    (s0, s1), = UTURN.turns
+    assert (s0, s1) == pytest.approx((10.0, 10.0 + 1.5 * math.pi), abs=0.02)
+    for radius, leg in ((1.0, 6.0), (2.5, 14.0)):
+        geo = rg.geometry_from_points('uturn', *uturn.route_polyline(radius, leg))
+        assert geo.turns == [pytest.approx((leg, leg + radius * math.pi), abs=0.02)]
+        m = rg.route_metrics('b', msgs_for(turn_dip=0.1, geo=geo, t_ramp=(2 * leg + math.pi * radius) / 0.8 - 1.0,
+                                           t_stop=(2 * leg + math.pi * radius) / 0.8 + 3.0), 'uturn', geo)
+        assert m.speed_rmse_turn == pytest.approx(0.1, abs=0.005)
+        assert m.speed_rmse_straight < 0.01
 
 
 def test_start_overshoot_is_the_peak_above_the_target():
-    m = rg.route_metrics('b', msgs_for('straight', overshoot=0.15), 'straight', STRAIGHT)
+    m = metrics(overshoot=0.15)
     assert m.overshoot == pytest.approx(0.15, abs=0.03)
 
 
 def test_slow_speed_gives_rmse_of_the_gap():
-    ms = msgs_for('straight')
+    ms = msgs_for()
     ms[g.VELOCITY] = [(t, NS(longitudinal_velocity=min(v.longitudinal_velocity, 0.74)))
                       for t, v in ms[g.VELOCITY]]
-    m = rg.route_metrics('b', ms, 'straight', STRAIGHT)
-    assert m.speed_rmse == pytest.approx(0.06, abs=0.01)
+    m = rg.route_metrics('b', ms, 'uturn', UTURN)
+    assert m.speed_rmse_straight == pytest.approx(0.06, abs=0.01)
+    assert m.speed_rmse_turn == pytest.approx(0.06, abs=0.01)
 
 
 def test_stop_error_short_and_past():
-    short = rg.route_metrics('b', msgs_for('straight', x_stop=0.2), 'straight', STRAIGHT)
+    short = metrics(stop_off=-0.2)
     assert short.stop_signed == pytest.approx(-0.2, abs=0.01)     # 0.2 m short of the stop point
     assert short.stop_error == pytest.approx(0.2, abs=0.01)
-    past = rg.route_metrics('b', msgs_for('straight', x_stop=-0.2), 'straight', STRAIGHT)
+    past = metrics(stop_off=0.2)
     assert past.stop_signed == pytest.approx(0.2, abs=0.01)
     assert past.stop_error == pytest.approx(0.4, abs=0.02)        # past counts double
 
 
 def test_stop_error_when_the_car_never_stops():
-    ms = msgs_for('straight')
+    ms = msgs_for()
     ms[g.VELOCITY] = [(t, NS(longitudinal_velocity=max(v.longitudinal_velocity, 0.1)))
                       for t, v in ms[g.VELOCITY]]
-    m = rg.route_metrics('b', ms, 'straight', STRAIGHT)
+    m = rg.route_metrics('b', ms, 'uturn', UTURN)
     assert any('never came to rest' in n for n in m.notes)
 
 
-def test_circle_radius_error_and_gate():
-    ok = rg.route_metrics('b', msgs_for('circle_cw', radius_off=0.1), 'circle_cw', circle_geo(1.5))
-    assert ok.radius_rms == pytest.approx(0.1, abs=1e-6) and ok.radius_max == pytest.approx(0.1, abs=1e-6)
-    assert not ok.gate_failures
-    bad = rg.route_metrics('b', msgs_for('circle_ccw', radius_off=0.4), 'circle_ccw', circle_geo(2.5))
-    assert any('radius RMS' in f for f in bad.gate_failures)
-    assert any('radius max' in f for f in bad.gate_failures)
-    assert rg.score_route(bad).total == 0.0
-
-
-def test_laps_gate():
-    m = rg.route_metrics('b', msgs_for('circle_cw', laps=2), 'circle_cw', circle_geo(1.5))
-    assert any('lap' in f for f in m.gate_failures)
+def test_off_the_path_is_invalid():
+    ok = metrics(lateral=0.2)
+    assert ok.path_dev_max == pytest.approx(0.2, abs=0.01) and not ok.gate_failures
+    bad = metrics(lateral=0.35)
+    assert any('off the path' in f for f in bad.gate_failures)
+    s = rg.score_route(bad, bad)
+    assert s.invalid and s.total == 0.0
+    assert 'INVALID' in rg.format_route(bad, s)
 
 
 def test_mrm_before_finish_zeroes_the_bag():
-    m = rg.route_metrics('b', msgs_for('straight', mrm=True), 'straight', STRAIGHT)
+    m = metrics(mrm=True)
     assert m.mrm == 1
-    assert rg.score_route(m).total == 0.0
+    assert rg.score_route(m).total == 0.0 and rg.score_route(m).invalid
 
 
 def test_not_engaged_and_unfinished():
-    m = rg.route_metrics('b', msgs_for('straight', engaged=False), 'straight', STRAIGHT)
+    m = metrics(engaged=False)
     assert not m.engaged and rg.score_route(m).total == 0.0
-    m = rg.route_metrics('b', msgs_for('straight', finished=False), 'straight', STRAIGHT)
+    m = metrics(finished=False)
     assert any('did not finish' in f for f in m.gate_failures)
+    assert rg.score_route(m).total == 0.0
 
 
 def test_fraction_curve_against_a_reference():
@@ -171,54 +203,45 @@ def test_reference_floor_and_absolute_fallback():
 
 
 def test_scoring_reference_gets_full_marks_and_degraded_less():
-    ref = rg.route_metrics('ref', msgs_for('straight', wobble=0.03, x_stop=0.05), 'straight', STRAIGHT)
+    ref = metrics(wobble=0.03, stop_off=0.05)
     s_ref = rg.score_route(ref, ref)
-    assert s_ref.total == pytest.approx(20.0)
-    bad = rg.route_metrics('bad', msgs_for('straight', wobble=0.12, overshoot=0.2, x_stop=0.4),
-                           'straight', STRAIGHT)
+    assert s_ref.total == pytest.approx(45.0) and s_ref.max_total == 45.0
+    assert set(s_ref.points) == {'speed_rmse_straight', 'speed_rmse_turn', 'overshoot', 'stop_error'}
+    bad = metrics(wobble=0.12, overshoot=0.2, stop_off=0.4)
     s_bad = rg.score_route(bad, ref)
-    assert s_bad.total < 12.0
-    assert s_bad.points['speed_rmse'] < s_ref.points['speed_rmse']
+    assert s_bad.total < 25.0
+    assert s_bad.points['speed_rmse_straight'] < s_ref.points['speed_rmse_straight']
+    # a slow turn costs only the turn's marks
+    slow = rg.score_route(metrics(wobble=0.03, stop_off=0.05, turn_dip=0.15), ref)
+    assert slow.points['speed_rmse_turn'] == 0.0
+    assert slow.points['speed_rmse_straight'] == pytest.approx(15.0)
+    assert rg.team_total([s_ref]) == (pytest.approx(45.0), 45.0)
+    assert rg.team_total([]) == (0.0, 45.0)                       # no bag scores 0
 
 
-def test_circle_points_and_team_total():
-    ref = rg.route_metrics('r', msgs_for('circle_cw', wobble=0.03), 'circle_cw', circle_geo(1.5))
-    s1 = rg.score_route(ref, ref)
-    assert s1.total == pytest.approx(12.5)
-    ref2 = rg.route_metrics('r', msgs_for('circle_ccw', wobble=0.03), 'circle_ccw', circle_geo(2.5))
-    s2 = rg.score_route(ref2, ref2)
-    refs = rg.route_metrics('r', msgs_for('straight'), 'straight', STRAIGHT)
-    s3 = rg.score_route(refs, refs)
-    assert rg.team_total([s1, s2, s3]) == (pytest.approx(45.0), 45.0)
-    assert rg.team_total([s1, s2]) == (pytest.approx(25.0), 45.0)      # a missing bag scores 0
-
-
-def test_geometry_from_templates():
-    for route in bm.ROUTES:
-        d = rg.template_dir(route)
-        assert d, route
-        geo = rg.geometry_from_course(d, route)
-        if route == 'straight':
-            assert math.hypot(geo.dir_x, geo.dir_y) == pytest.approx(1.0)
-        else:
-            assert geo.radius == pytest.approx(1.5 if route == 'circle_cw' else 2.5, abs=0.02)
-        assert bm.classify_route(d) == route
+def test_geometry_from_the_template():
+    d = rg.template_dir('uturn')
+    assert d and bm.ROUTES == ('uturn',)
+    geo = rg.geometry_from_course(d, 'uturn')
+    assert (geo.dir_x, geo.dir_y) == pytest.approx((1.0, 0.0))
+    assert bm.classify_route(d) == 'uturn'
+    assert bm.classify_route(rg.template_dir('uturn').replace('lab2_uturn', 'hall_demo')) is None
 
 
 # ----------------------------------------------------------- the bag checker
 
-def good_meta(route='straight'):
+def good_meta(route='uturn'):
     d = rg.template_dir(route)
     return bm.build_meta(d, 'A', '3', 'abc123')
 
 
-def topics_all(rate=10.0, dur=25.0):
+def topics_all(rate=10.0, dur=40.0):
     t = {name: [100, 0.0, dur] for name in bm.REQUIRED_TOPICS + bm.OPTIONAL_TOPICS}
     t[bm.CAMERA_TOPIC] = [int(rate * dur) + 1, 0.0, dur]
     return t
 
 
-def check(msgs=None, topics=None, meta='default', route='straight', **kw):
+def check(msgs=None, topics=None, meta='default', route='uturn', **kw):
     msgs = msgs if msgs is not None else msgs_for(route)
     return cb.check_messages('bag', topics if topics is not None else topics_all(),
                              msgs, good_meta(route) if meta == 'default' else meta, **kw)
@@ -227,7 +250,7 @@ def check(msgs=None, topics=None, meta='default', route='straight', **kw):
 def test_good_bag_is_accepted():
     v = check()
     assert v.ok, v.reasons
-    assert v.route == 'straight'
+    assert v.route == 'uturn'
 
 
 def test_missing_topic():
@@ -257,7 +280,7 @@ def test_modified_course_hash():
 
 def test_survey_may_change_markers_but_not_the_route(tmp_path):
     import shutil
-    src = rg.template_dir('straight')
+    src = rg.template_dir('uturn')
     d = tmp_path / 'surveyed'
     shutil.copytree(src, d)
     text = (d / 'course.yaml').read_text()
@@ -285,22 +308,41 @@ def test_wrong_speed():
     m['route'] = dict(m['route'], v_ref=1.2)
     v = check(meta=m)
     assert any('v_ref' in r for r in v.reasons)
-    ms = msgs_for('straight')
+    ms = msgs_for()
     ms[g.CONTROL] = [(t, NS(longitudinal=NS(velocity=c.longitudinal.velocity * 1.5)))
                      for t, c in ms[g.CONTROL]]
     v = check(msgs=ms)
     assert any('commanded speed peaks' in r for r in v.reasons)
 
 
-def test_too_few_laps_mrm_not_engaged():
-    v = check(msgs=msgs_for('circle_cw', laps=2), route='circle_cw')
-    assert any('lap' in r for r in v.reasons)
-    v = check(msgs=msgs_for('straight', mrm=True))
+def test_laps_mrm_not_engaged_unfinished():
+    v = check(msgs=msgs_for(laps=3))
+    assert any('course set to 3 lap(s)' in r for r in v.reasons)
+    v = check(msgs=msgs_for(mrm=True))
     assert any('MRM' in r for r in v.reasons)
-    v = check(msgs=msgs_for('straight', engaged=False))
+    v = check(msgs=msgs_for(engaged=False))
     assert any('never engaged' in r for r in v.reasons)
-    v = check(msgs=msgs_for('straight', finished=False))
+    v = check(msgs=msgs_for(finished=False))
     assert any('did not finish' in r for r in v.reasons)
+
+
+def test_checker_rejects_off_the_path():
+    v = check(msgs=msgs_for(lateral=0.4))
+    assert any('off the path' in r for r in v.reasons)
+    assert check(msgs=msgs_for(lateral=0.1)).ok
+
+
+def test_checker_rejects_the_old_routes():
+    # a bag of the first draft's straight or circles is not a graded route
+    for kind, name in (('straight', 'lab2_straight'), ('circle_cw', 'lab2_circle_cw')):
+        m = good_meta()
+        m['route_kind'], m['course_name'] = kind, name
+        v = check(meta=m)
+        assert v.route is None
+        assert any('not graded' in r for r in v.reasons), v.reasons
+    m = good_meta()
+    m['route_kind'] = None          # an old recorder: the course name decides
+    assert bm.route_from_meta(m) == 'uturn'
 
 
 def test_no_metadata_and_missing_ids():
@@ -313,12 +355,12 @@ def test_no_metadata_and_missing_ids():
 
 
 def test_set_checks():
-    a = cb.Verdict('a', 'straight', 'A', '3')
-    b = cb.Verdict('b', 'circle_cw', 'A', '3')
-    c = cb.Verdict('c', 'circle_cw', 'B', '4')
-    assert cb.check_set([a, b, c]) != []
-    d = cb.Verdict('d', 'circle_ccw', 'A', '3')
-    assert cb.check_set([a, b, d]) == []
+    a = cb.Verdict('a', 'uturn', 'A', '3')
+    b = cb.Verdict('b', 'uturn', 'A', '3')
+    c = cb.Verdict('c', None, 'B', '4')
+    assert any('2 times' in p for p in cb.check_set([a, b]))
+    assert any('different cars' in p for p in cb.check_set([a, c]))
+    assert cb.check_set([a]) == []
 
 
 def test_meta_from_topic_then_sidecar(tmp_path):
@@ -327,26 +369,3 @@ def test_meta_from_topic_then_sidecar(tmp_path):
     assert bm.meta_from_messages({bm.META_TOPIC: [(0, NS(data=json.dumps(meta)))]}) == meta
     (tmp_path / bm.SIDECAR).write_text(json.dumps({'car_id': 'B'}))
     assert bm.meta_from_messages({}, str(tmp_path)) == {'car_id': 'B'}
-
-
-def test_failed_circle_gate_is_invalid_not_penalised():
-    bad = rg.route_metrics('b', msgs_for('circle_ccw', radius_off=0.4), 'circle_ccw', circle_geo(2.5))
-    s = rg.score_route(bad)
-    assert s.invalid and s.total == 0.0
-    assert 'INVALID' in rg.format_route(bad, s)
-    st = rg.route_metrics('b', msgs_for('straight', mrm=True), 'straight', STRAIGHT)
-    assert not rg.score_route(st).invalid
-
-
-def _centred(ms, route):
-    geo = rg.geometry_from_course(rg.template_dir(route), route)
-    ms[g.KINEMATIC] = [(t, kin(k.pose.pose.position.x + geo.cx, k.pose.pose.position.y + geo.cy))
-                       for t, k in ms[g.KINEMATIC]]
-    return ms
-
-
-def test_checker_rejects_circle_radius_gate():
-    ms = _centred(msgs_for('circle_cw', radius_off=0.5), 'circle_cw')
-    v = check(msgs=ms, route='circle_cw')
-    assert any('radius error' in r for r in v.reasons)
-    assert check(msgs=_centred(msgs_for('circle_cw', radius_off=0.05), 'circle_cw'), route='circle_cw').ok

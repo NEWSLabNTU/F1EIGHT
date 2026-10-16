@@ -13,12 +13,14 @@ Each bag is rejected, with the reasons printed, if it has:
     start pose; the markers are free, since a survey measures them,
   - a speed other than the target (metadata v_ref, and the speed actually
     commanded on the plateau),
-  - too few laps (circles: 3) or a run that did not finish,
+  - a route other than the graded one (lab2_uturn),
+  - other than 1 lap, or a run that did not finish,
   - an MRM or a disengage before the finish,
+  - the localized pose more than route_grade.PATH_DEV_MAX from the path,
   - no AUTONOMOUS period at all.
 
-With several bags it also checks that they are the three routes, from one
-car and one team. Exit status 1 if any bag is rejected.
+With several bags it also checks that no route is submitted twice and that
+they come from one car and one team. Exit status 1 if any bag is rejected.
 """
 
 import argparse
@@ -114,7 +116,9 @@ def check_messages(name: str, topics: Dict[str, list], msgs: Dict[str, list], me
         if meta.get('git_dirty'):
             v.warnings.append('recorded from a modified git tree')
         if route is None:
-            v.reasons.append('cannot tell which route this bag drove')
+            label = bm.route_label(meta)
+            v.reasons.append(f'route {label!r} is not graded (graded: {", ".join(bm.ROUTE_BY_NAME)})'
+                             if label else 'cannot tell which route this bag drove')
         else:
             allowed = []
             for d in course_dirs:
@@ -149,22 +153,21 @@ def check_messages(name: str, topics: Dict[str, list], msgs: Dict[str, list], me
             v.reasons.append('left autonomous mode before the finish')
         if not m.finished:
             v.reasons.append('the run did not finish')
-        if route in ('circle_cw', 'circle_ccw') and m.laps < rg.LAPS_REQUIRED:
+        if route in bm.ROUTES and m.laps < rg.LAPS_REQUIRED:
             v.reasons.append(f'{m.laps} lap(s) completed, {rg.LAPS_REQUIRED} required')
-        if route in ('circle_cw', 'circle_ccw') and m.laps_planned and m.laps_planned < rg.LAPS_REQUIRED:
+        if route in bm.ROUTES and m.laps_planned and m.laps_planned != rg.LAPS_REQUIRED:
             v.reasons.append(f'course set to {m.laps_planned} lap(s), {rg.LAPS_REQUIRED} required')
-        # circle gate: localized radius error (INVALID bag, re-run)
-        if route in ('circle_cw', 'circle_ccw') and msgs.get(g.KINEMATIC) and msgs.get(g.VELOCITY):
+        # validity: the localized pose stays on the path
+        if route in bm.ROUTES and msgs.get(g.KINEMATIC) and msgs.get(g.VELOCITY):
             td = (course_dirs[0] if len(course_dirs) == 1 else None) or rg.template_dir(route)
             geo = rg.geometry_from_course(td, route) if td else None
             rm = rg.route_metrics(name, msgs, route, geo)
-            if geo and not math.isnan(rm.radius_rms):
-                if rm.radius_rms > rg.RADIUS_RMS_MAX:
-                    v.reasons.append(f'radius error RMS {rm.radius_rms:.3f} m > {rg.RADIUS_RMS_MAX} m')
-                if rm.radius_max > rg.RADIUS_MAX:
-                    v.reasons.append(f'radius error max {rm.radius_max:.3f} m > {rg.RADIUS_MAX} m')
+            if geo and not math.isnan(rm.path_dev_max):
+                if rm.path_dev_max > rg.PATH_DEV_MAX:
+                    v.reasons.append(f'off the path: localized pose {rm.path_dev_max:.3f} m from it, '
+                                     f'{rg.PATH_DEV_MAX} m allowed')
             elif geo:
-                v.reasons.append('radius error not measurable (no steady window)')
+                v.reasons.append('path deviation not measurable (no steady window)')
         # commanded plateau
         t0 = eng.spans[0][0]
         cmd = sorted(c.longitudinal.velocity for t, c in msgs.get(g.CONTROL, []) if eng.contains(t))
@@ -207,12 +210,10 @@ def check_bag(path: str, course_dirs=(), expect_car=None, expect_team=None) -> V
 
 
 def check_set(verdicts: List[Verdict]) -> List[str]:
-    """Problems with the bags as a set of three."""
+    """Problems with several bags as one submission."""
     out = []
     routes = [v.route for v in verdicts if v.route]
     for r in bm.ROUTES:
-        if len(verdicts) >= 3 and routes.count(r) == 0:
-            out.append(f'no bag for route {r}')
         if routes.count(r) > 1:
             out.append(f'route {r} submitted {routes.count(r)} times')
     if len({v.car for v in verdicts if v.car}) > 1:
@@ -227,7 +228,7 @@ def main(argv=None):
     ap.add_argument('bags', nargs='+')
     ap.add_argument('--course', action='append', default=[], metavar='DIR',
                     help='the template or surveyed course directory the bags must match '
-                         '(repeat for several routes); default: the packaged templates')
+                         '(repeatable); default: the packaged template')
     ap.add_argument('--car', default=None, help='the car ID the bags must carry')
     ap.add_argument('--team', default=None, help='the team ID the bags must carry')
     args = ap.parse_args(argv)

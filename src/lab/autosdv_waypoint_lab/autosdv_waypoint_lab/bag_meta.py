@@ -135,9 +135,10 @@ def meta_from_messages(msgs: Dict[str, list], bag_dir: Optional[str] = None) -> 
 
 # --------------------------------------------------------------- the route
 
-ROUTES = ('straight', 'circle_cw', 'circle_ccw')
-ROUTE_BY_NAME = {'lab2_straight': 'straight', 'lab2_circle_cw': 'circle_cw',
-                 'lab2_circle_ccw': 'circle_ccw'}
+# The graded route. (The straight and the two circles of the first draft are gone;
+# a bag of one of those is reported as an ungraded route.)
+ROUTES = ('uturn',)
+ROUTE_BY_NAME = {'lab2_uturn': 'uturn'}
 
 
 def load_xy(course_dir: str):
@@ -155,34 +156,36 @@ def load_xy(course_dir: str):
     return xs, ys, bool(d.get('closed', True))
 
 
-def circle_fit(xs: Sequence[float], ys: Sequence[float]):
-    """(cx, cy, R, ccw) of a closed, roughly circular path."""
-    n = len(xs)
-    cx, cy = sum(xs) / n, sum(ys) / n
-    r = sum(math.hypot(x - cx, y - cy) for x, y in zip(xs, ys)) / n
-    area = sum(xs[i] * ys[(i + 1) % n] - xs[(i + 1) % n] * ys[i] for i in range(n))
-    return cx, cy, r, area > 0
-
-
 def classify_route(course_dir: str) -> Optional[str]:
-    """straight / circle_cw / circle_ccw from the path's geometry, so a
-    surveyed copy under any name is still recognised."""
+    """'uturn' for an open path that turns once through about 180 degrees, from
+    the path's geometry, so a surveyed copy under any name is still recognised;
+    None for anything else."""
+    from autosdv_waypoint_lab.path import turn_spans
     xs, ys, closed = load_xy(course_dir)
-    if not closed:
-        return 'straight'
-    _, _, _, ccw = circle_fit(xs, ys)
-    return 'circle_ccw' if ccw else 'circle_cw'
+    if closed or len(xs) < 3:
+        return None
+    if len(turn_spans(xs, ys)) != 1:
+        return None
+    h0 = math.atan2(ys[1] - ys[0], xs[1] - xs[0])
+    h1 = math.atan2(ys[-1] - ys[-2], xs[-1] - xs[-2])
+    turned = abs(math.atan2(math.sin(h1 - h0), math.cos(h1 - h0)))
+    return 'uturn' if turned > math.radians(170.0) else None
+
+
+def route_label(meta: Optional[dict]) -> Optional[str]:
+    """What the bag says it drove, graded or not: route_kind, else the course name."""
+    if not meta:
+        return None
+    return meta.get('route_kind') or meta.get('course_name') or None
 
 
 def route_from_meta(meta: Optional[dict]) -> Optional[str]:
+    """The graded route a bag drove, or None (no metadata, or not a graded route)."""
     if not meta:
         return None
     if meta.get('route_kind') in ROUTES:
         return meta['route_kind']
     name = str(meta.get('course_name', ''))
-    if name in ROUTE_BY_NAME:
+    if name in ROUTE_BY_NAME and not meta.get('route_kind'):
         return ROUTE_BY_NAME[name]
-    r = meta.get('route') or {}
-    if r.get('closed') is False:
-        return 'straight'
     return None

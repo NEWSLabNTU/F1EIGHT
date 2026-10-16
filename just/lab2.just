@@ -5,7 +5,7 @@
 #   just lab2 bench tracker_class:=my_lab2.path_tracker:PathTracker
 #   just lab2 vehicle route:=hall_demo
 #   just lab2 gate submission:=~/lab2/B12345678_lab_2_1     a student's SpeedPID and calibration
-#   just lab2 vehicle route:=lab2_straight team:=~/lab2/team3   Part 2: the team's controller and lookahead
+#   just lab2 vehicle route:=lab2_uturn team:=~/lab2/team3   Part 2: the team's controller and lookahead
 #   just lab2 vehicle course_dir:=$PWD/courses/my_hall 'speed_controller_params:={kp: 15.0}'
 #
 # Each argument reaches play_launch as one word, so quote a value that
@@ -58,12 +58,12 @@ vehicle *ARGS:
     printf '\033[2m%s\033[0m\n' "${cmd[*]}"
     exec "${cmd[@]}"
 
-# Gate before car time: your SpeedPID on the three graded routes, full stack; PASS/FAIL per route
+# Gate before car time: your SpeedPID on the graded route (lab2_uturn), full stack; PASS/FAIL
 #   just lab2 gate submission:=DIR     DIR = your <student_id>_lab_2_1 (or lab2_waypoint) directory:
 #       its speed_pid.py, config/speed_pid.yaml and config/calibration.yaml are loaded for you
 #       (same for `bench` and `vehicle`; scripts/testing/lab2/submission.py shows what is passed)
 #   just lab2 gate speed_controller_class:=lab2_waypoint.speed_pid:SpeedPID "speed_controller_params:={kp: 15.0}"
-#   just lab2 gate --only lab2_straight ...
+#   just lab2 gate --only hall_demo ...        another course instead of lab2_uturn
 [positional-arguments]
 gate *ARGS:
     #!/usr/bin/env bash
@@ -114,7 +114,7 @@ reinit:
         std_srvs/srv/Trigger {}
 
 # Record the submission bag: the fixed topic list, the compressed camera, course hash, car and team
-#   just lab2 record --car A --team 3 [--name straight_1]
+#   just lab2 record --car A --team 3 [--name uturn_1]
 # Start it after `just lab2 vehicle`, before `just lab2 engage`; Ctrl-C ends it. The course is read
 # from the running stack. Writes rosbags/lab2_<name>; check it with `just lab2 check-bags`.
 [positional-arguments]
@@ -123,8 +123,8 @@ record *ARGS:
     source scripts/env.sh
     exec ros2 run autosdv_waypoint_lab lab2_record "$@"
 
-# Would the grader accept these bags? Missing topic, modified course, wrong speed, laps, MRM
-#   just lab2 check-bags rosbags/lab2_straight rosbags/lab2_cw rosbags/lab2_ccw --car A --team 3
+# Would the grader accept these bags? Missing topic, modified course, wrong speed, laps, MRM, off the path
+#   just lab2 check-bags rosbags/lab2_uturn_1 --car A --team 3
 [positional-arguments]
 check-bags *ARGS:
     #!/usr/bin/env bash
@@ -133,7 +133,7 @@ check-bags *ARGS:
 
 # Run metrics of recorded runs: laps, cross-track, speed tracking, MRM
 #   just lab2 grade BAG...                                        the engineering metrics
-#   just lab2 grade --score BAG... --reference REFBAG...          TA scoring of the route bags
+#   just lab2 grade --score BAG --reference REFBAG                TA scoring of the lab2_uturn bag
 [positional-arguments]
 grade *ARGS:
     #!/usr/bin/env bash
@@ -147,6 +147,16 @@ course-map *DIRS:
     source scripts/env.sh
     [ $# -gt 0 ] || set -- src/lab/autosdv_waypoint_lab/config/courses/*/
     exec ros2 run autosdv_waypoint_lab make_course_map "$@"
+
+#   just lab2 make-uturn 1.5                    summary, the spec's paste block, a diff
+#   just lab2 make-uturn 2.0 --leg 8 --write    a new radius and legs: path, boards, map, header
+# The boards come from the coverage search; a layout that misses a goal is not written.
+# Regenerate the graded course lab2_uturn from its U-turn radius and leg length (dry run without --write)
+[positional-arguments]
+make-uturn RADIUS *ARGS:
+    #!/usr/bin/env bash
+    shift
+    exec python3 scripts/testing/lab2/make_uturn.py --radius '{{ RADIUS }}' "$@"
 
 # Car in the start box, stack up, not engaged: fix quality and per-marker survey check
 camera-check COURSE="src/lab/autosdv_waypoint_lab/config/courses/hall_demo" SECONDS="20":
@@ -282,7 +292,7 @@ survey-solve *ARGS:
     source scripts/env.sh
     exec ros2 run autosdv_marker_survey lab2_marker_survey_solve "$dir/survey_data.npz" --course "$dir" "$@"
 
-#   just lab2 plot rosbags/lab2_straight_1
+#   just lab2 plot rosbags/lab2_uturn_1
 # PlotJuggler asks which topics to load: select all (Ctrl+A), then OK.
 # Open a bag in PlotJuggler: target vs measured speed, motor PWM, EKF path vs marker fixes
 plot BAG:
