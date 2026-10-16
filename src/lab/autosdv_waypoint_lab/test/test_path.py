@@ -63,6 +63,28 @@ def test_window_stops_at_the_end_of_the_run():
         assert v_i <= math.sqrt(2 * 0.3 * max(remaining, 0.0)) + 0.05
 
 
+def test_window_is_all_stop_once_finished():
+    # an open 10 m straight; the car reaches the end, then its localized
+    # pose settles 0.1 m short (the EKF pulling back an overshoot)
+    cp = CoursePath([0.0, 10.0], [0.0, 0.0], [0.8, 0.8], closed=False, decel=0.3)
+    cp.update_progress(0.0, 0.0)
+    for k in range(1, 101):
+        cp.update_progress(k * 0.1, 0.0)
+    assert cp.finished
+    cp.update_progress(9.9, 0.0)
+    assert cp.finished
+    w = cp.window(1.0, 6.0)
+    assert max(w.v) == 0.0
+    # before the finish the ramp short of the end is not zero
+    fresh = CoursePath([0.0, 10.0], [0.0, 0.0], [0.8, 0.8], closed=False, decel=0.3)
+    fresh.update_progress(9.9 - 2.0, 0.0)
+    for k in range(21):
+        fresh.update_progress(7.9 + k * 0.1, 0.0)
+    assert not fresh.finished
+    w = fresh.window(1.0, 6.0)
+    assert w.speed_at(w.project(9.9, 0.0).s) > 0.1
+
+
 def test_progress_does_not_jump_across_a_crossing():
     # a figure-8 through the origin: the car on one lobe must not be matched
     # to the other lobe's segment through the same point

@@ -427,6 +427,9 @@ def fit(rec: Recording, prior: Optional[MotorPlantParams] = None,
     prior = prior or MotorPlantParams()
     start, exc = first_pass(rec, prior)
     ident = exc.identified()
+    # Too little of a regime to identify its constant: hold it at the prior,
+    # not at whatever first_pass read off a fraction of a second of it
+    start = replace(start, **{k: getattr(prior, k) for k in CONTINUOUS if not ident[k]})
     evals = [0]
 
     def make(db: int, names, x: np.ndarray, base: MotorPlantParams) -> MotorPlantParams:

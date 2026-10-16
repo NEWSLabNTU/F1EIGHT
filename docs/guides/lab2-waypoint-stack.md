@@ -391,7 +391,9 @@ under 5 cm worst).
 One graded bag, one course: straight 10 m, a **right U-turn of radius 1.5 m**
 (legs 3 m apart, centre to centre), straight 10 m back in the other lane, one
 run at 0.8 m/s. The path publisher's end ramp stops the car on the last
-waypoint, the stop line, level with the start box. The template is already in
+waypoint, the stop line, level with the start box; once the run is finished
+the whole trajectory reads 0 m/s, so the car stays stopped even when the
+localized pose settles a little short of the line. The template is already in
 the frame the survey writes (origin on the floor below the origin board's
 marker, x the way it faces), so the TA lays the boards out as `course.yaml`'s
 header says, surveys a copy of the directory with that board as the origin,
