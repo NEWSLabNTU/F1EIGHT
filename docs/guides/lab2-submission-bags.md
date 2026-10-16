@@ -8,9 +8,13 @@ Instructor-facing. Code: `autosdv_waypoint_lab` (`record.py`, `bag_meta.py`,
 ```bash
 just lab2 vehicle route:=lab2_uturn ...          # the stack first
 just lab2 record --car A --team 3 --name uturn_1  # then engage; Ctrl-C ends
+just lab2 record                                  # the same, from ~/lab2/lab2.yaml
 ```
 
-Writes `rosbags/lab2_<name>`. The course is read from the running path
+Writes `rosbags/lab2_<name>`. Without `--name` the name is the route's minus
+`lab2_` and one past the highest number already there (`uturn_1`, `uturn_2`,
+...); car, team and the bag directory come from the settings file
+(`lab2-waypoint-stack.md`, "Settings"). The course is read from the running path
 publisher, not from an argument. Topics: `bag_meta.RECORD_TOPICS` (localized
 state, marker fixes, velocity status, tracker and gate commands, the actuator's
 `pwm_values`/`pid_values`/`control_values`, progress, MRM, operation mode,
@@ -28,7 +32,8 @@ and a doctored path, speed or lap count does not.
 
 ## Check
 
-`just lab2 check-bags BAG... [--course DIR ...] [--car A] [--team 3]` rejects a
+`just lab2 check-bags [BAG...] [--course DIR ...] [--car A] [--team 3]` (no bag:
+the latest; car and team from the settings file when set) rejects a
 bag for: a missing required topic, no metadata, camera under 8 Hz / not
 960x600 / not covering the run, route hash differing from the template (or the
 surveyed copies given with `--course`), `v_ref` or commanded speed not
@@ -39,7 +44,8 @@ twice, one car, one team. Exit 1 on any rejection.
 
 ## Grade
 
-`just lab2 grade --score BAG [--reference REFBAG]`. Definitions, the points
+`just lab2 grade --score BAG [--reference REFBAG]`, or `just lab2 grade` for the
+latest bag against the settings file's `reference`. Definitions, the points
 curve and every constant are in the `route_grade.py` docstring and header.
 Summary: steady window = first 90 % of 0.8 m/s to the start of the stop ramp;
 each window sample is put on the straight legs or in the U-turn by projecting

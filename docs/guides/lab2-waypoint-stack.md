@@ -13,6 +13,54 @@ localized pose and the path) and the `SpeedPID` (the actuator's inner loop).
 | `just lab2 preflight` | (reads the running stack) | before engaging: nodes, rates, marker fixes, start box, TF, availability, MRM, graph |
 | `just lab2 gate` | (starts a bench) | a team's SpeedPID drives `lab2_uturn`, PASS/FAIL before car time |
 | `just lab2 make-uturn R [--leg L]` | (no ROS) | regenerate the graded course from its radius and leg length |
+| `just lab2 record` | (reads the running stack) | the submission bag, `rosbags/lab2_uturn_<next>` |
+| `just lab2 check-bags` | (no stack) | would the grader accept the latest bag? |
+| `just lab2 grade` | (no stack) | score the latest bag against the car's reference bag |
+| `just lab2 plot` | (no stack) | the latest bag in PlotJuggler |
+| `just lab2 config` / `init` | (no ROS) | show the settings and their sources / write `~/lab2/lab2.yaml` |
+
+## Settings (`~/lab2/lab2.yaml`)
+
+The student recipes take their car, team and directories from one file instead
+of the command line, so the whole run is short:
+
+```bash
+just lab2 init car:=A team:=3     # once: writes ~/lab2/lab2.yaml, then fill in the paths
+just lab2 gate                    # workstation, before car time: `submission` on the graded route
+just lab2 vehicle                 # car, terminal 1: `route` with the controller in `team_dir`
+just lab2 preflight               # terminal 2
+just lab2 record                  # terminal 2: rosbags/lab2_uturn_1, then _2, ...
+just lab2 engage                  # terminal 3; Ctrl-C the recording when the car has stopped
+just lab2 check-bags              # the latest bag, with car and team
+just lab2 grade                   # the latest bag against `reference`
+just lab2 plot                    # the latest bag
+```
+
+| Key | Used by | Default |
+| --- | --- | --- |
+| `car` | `record`, `check-bags` | none (required by `record`) |
+| `team` | `record`, `check-bags` (the team number) | none (required by `record`) |
+| `team_dir` | `vehicle`: the team's controller and `path_tracker.param.yaml` (what `team:=DIR` passes) | none (required by `vehicle`) |
+| `submission` | `gate`: the controller to gate (what `submission:=DIR` passes) | none (required by `gate`) |
+| `route` | `vehicle`, and the bag name (`lab2_uturn` -> `uturn_N`) | `lab2_uturn` |
+| `reference` | `grade`: the car's TA reference bag | `~/lab2/reference/uturn` |
+| `bag_dir` | where `record` writes and `grade`/`check-bags`/`plot` look | `rosbags` |
+
+Precedence, highest first: `key:=value` on the command line (and the tools' own
+`--car`, `--team`, `--name`, `--reference`), the user's file (`~/lab2/lab2.yaml`,
+or `config:=FILE`), then the built-in defaults in
+`src/lab/autosdv_waypoint_lab/config/lab2_defaults.yaml`. A missing user file is
+fine while nothing required is missing; a missing required key is one error line
+naming the key and the file to add it to. `~` is expanded, and a relative path
+in the user's file is relative to that file. In `vehicle` and `gate`, `team:=`
+is the team directory as before; elsewhere it is the team number. Every explicit
+argument of the older commands still works and wins over the file.
+
+The latest bag is the `bag_dir/lab2_*` whose `metadata.yaml` was written last;
+with no `reference` bag on disk, `grade` warns and scores against the fixed
+absolute pass lines. `just lab2 config` prints every value and where it came
+from; each recipe prints one dim line with the values it used. The resolution is
+`scripts/testing/lab2/lab2_config.py`.
 
 The design and the decisions behind it are in the course repository,
 `2026/labs/Lab2/lab2-system-design.md`. The coach-board lab this replaced is
@@ -263,7 +311,7 @@ One argument loads a team's `SpeedPID` and calibration into `gate`, `bench` and
 `vehicle`:
 
 ```bash
-just lab2 gate    submission:=~/lab2/B12345678_lab_2_1
+just lab2 gate    submission:=~/lab2/B12345678_lab_2_1     # or `submission:` in ~/lab2/lab2.yaml
 just lab2 vehicle submission:=~/lab2/B12345678_lab_2_1 course_dir:=...
 python3 scripts/testing/lab2/submission.py DIR     # shows what it passes
 ```
