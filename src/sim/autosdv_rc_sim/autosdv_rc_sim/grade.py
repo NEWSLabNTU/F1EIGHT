@@ -15,6 +15,8 @@ import json
 import math
 import os
 from pathlib import Path
+import signal
+import subprocess
 import sys
 from typing import Dict
 
@@ -281,6 +283,49 @@ def _failures(result: Dict[str, dict]) -> str:
     return ', '.join(out)
 
 
+def write_violations(report: dict, profile: TrackProfile, variant: str, path) -> int:
+    """Where on the straight each failed check of `variant` happened, for the replay."""
+    holds = {f'{seg.v0:g}': seg.s0 for seg in profile.segments if seg.kind == 'hold'}
+    marks = []
+    for name, c in report['variants'][variant]['checks'].items():
+        if c['pass']:
+            continue
+        head, _, speed = name.rpartition('_')
+        if head in ('hold_rmse', 'overshoot', 'reach'):
+            s = holds[speed]
+        elif name.startswith('launch_'):
+            s = 0.5
+        elif name in ('stop_error', 'brake_lock'):
+            s = profile.stop_line_s
+        else:
+            s = EstopScenario(profile).trigger_s
+        value = 'none' if c['value'] is None else f"{c['value']:.3g}"
+        marks.append({'s': float(s), 'text': f"{name}: {value} (limit {c['limit']:.3g})"})
+    Path(path).write_text(yaml.safe_dump(marks, sort_keys=False))
+    return len(marks)
+
+
+def view(trace_csv, track_dir, violations) -> int:
+    """Replay a trace in Autoware's RViz until Ctrl-C; stops the stack by process group."""
+    cmd = ['play_launch', 'launch', '--web-addr', os.environ.get('RC_SIM_WEB_ADDR', '127.0.0.1:8094'),
+           'autosdv_rc_sim', 'rc_sim_replay.launch.xml', f'trace:={Path(trace_csv).resolve()}',
+           f'track_dir:={Path(track_dir).resolve()}', f'violations:={Path(violations).resolve()}']
+    proc = subprocess.Popen(cmd, start_new_session=True)
+    try:
+        return proc.wait()
+    except KeyboardInterrupt:
+        for sig in (signal.SIGINT, signal.SIGTERM, signal.SIGKILL):
+            try:
+                os.killpg(proc.pid, sig)
+                proc.wait(timeout=10.0)
+                break
+            except subprocess.TimeoutExpired:
+                continue
+            except ProcessLookupError:
+                break
+        return 0
+
+
 def main(argv=None) -> int:
     ap = argparse.ArgumentParser(description='Grade a speed-controller submission (Lab 2 Part 1).')
     ap.add_argument('submission', help=f'directory holding {SUBMISSION_FILE}, or the file')
@@ -290,6 +335,9 @@ def main(argv=None) -> int:
     ap.add_argument('--track', default='', help='track directory (default: the packaged straight)')
     ap.add_argument('--points', type=float, default=15.0)
     ap.add_argument('--print-params', action='store_true', help='print the mapping and exit')
+    ap.add_argument('--view', action='store_true', help='then replay the graded run in RViz')
+    ap.add_argument('--view-variant', default='nominal')
+    ap.add_argument('--view-scenario', choices=SCENARIOS, default='profile')
     args = ap.parse_args(argv)
     try:
         params = load_submission(args.submission)
@@ -308,6 +356,12 @@ def main(argv=None) -> int:
         print(f'  {v:<14} {n_pass:>2}/{len(r["checks"])}  {_failures(r["checks"])}')
     print(f"score {report['score']:.3f}  marks {report['marks']:.2f} / {report['points']:g}")
     print(f'traces and marks.json: {out}')
+    if args.view:
+        track_dir = args.track or str(default_track_dir())
+        violations = out / f'violations_{args.view_variant}.yaml'
+        n = write_violations(report, load_track(track_dir), args.view_variant, violations)
+        print(f'replaying {args.view_variant}/{args.view_scenario} ({n} violations marked); Ctrl-C to stop')
+        return view(out / 'traces' / f'{args.view_variant}_{args.view_scenario}.csv', track_dir, violations)
     return 0
 
 

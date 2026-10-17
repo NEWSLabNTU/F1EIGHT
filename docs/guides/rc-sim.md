@@ -113,3 +113,17 @@ the graded run.
 
 `just sim make-track --speeds 2,6,11 --hold 3 --accel 2.5 --decel 2.5` prints
 the segment table and writes a track for `track:=`.
+
+## Seeing a graded run
+
+```bash
+just sim grade ~/lab2/<student_id>_lab_2_1 --view                     # nominal profile run
+just sim grade DIR --view --view-variant low_mu --view-scenario estop
+```
+
+Grades first (headless), then replays the chosen run at real time in
+Autoware's RViz: the straight's lanelet map, the vehicle model moving along
+it, and every failed check marked where it happened. The replay publishes
+the trace itself, so what you see is exactly what was graded. Target,
+measured and true speed, PWM and slip are on `/rc_sim/replay/values` (plot
+them in PlotJuggler).

@@ -1,0 +1,40 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<!--
+  Replay a graded rc_sim run in Autoware's RViz (just sim grade DIR, with the view flag): the
+  track's map, the vehicle model, and the trace on the topics RViz reads. No
+  planning, control or physics.
+-->
+<launch>
+  <arg name="trace" description="a trace CSV written by rc_sim_grade (traces/VARIANT_SCENARIO.csv)"/>
+  <arg name="violations" default="" description="violations_VARIANT.yaml written by rc_sim_grade"/>
+  <arg name="track_dir" default="$(find-pkg-share autosdv_rc_sim)/tracks/straight_2_6_11"/>
+  <arg name="rate" default="1.0"/>
+  <arg name="loop" default="false"/>
+  <arg name="vehicle_model" default="autosdv_vehicle"/>
+  <arg name="sensor_model" default="autosdv_sensor_kit"/>
+
+  <include file="$(find-pkg-share autoware_launch)/launch/autoware.launch.xml">
+    <arg name="map_path" value="$(var track_dir)"/>
+    <arg name="vehicle_model" value="$(var vehicle_model)"/>
+    <arg name="sensor_model" value="$(var sensor_model)"/>
+    <arg name="launch_vehicle" value="true"/>
+    <arg name="launch_vehicle_interface" value="false"/>
+    <arg name="launch_map" value="true"/>
+    <arg name="launch_system" value="false"/>
+    <arg name="launch_sensing" value="false"/>
+    <arg name="launch_localization" value="false"/>
+    <arg name="launch_perception" value="false"/>
+    <arg name="launch_planning" value="false"/>
+    <arg name="launch_control" value="false"/>
+    <arg name="launch_api" value="false"/>
+    <arg name="is_simulation" value="true"/>
+    <arg name="rviz" value="true"/>
+  </include>
+
+  <node pkg="autosdv_rc_sim" exec="rc_sim_replay" name="rc_sim_replay" output="screen">
+    <param name="trace" value="$(var trace)"/>
+    <param name="violations" value="$(var violations)"/>
+    <param name="rate" value="$(var rate)"/>
+    <param name="loop" value="$(var loop)"/>
+  </node>
+</launch>
