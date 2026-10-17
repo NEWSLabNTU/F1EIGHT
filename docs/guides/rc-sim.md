@@ -219,8 +219,17 @@ measurements in the order the notes in that file give them:
 1. Weigh the car: `mass`.
 2. Find its balance point: `lf`.
 3. Do a coast-down at neutral on the flat, log `t,v` to a CSV (for example from
-   a bag's `velocity_status`), and run `just sim fit-coastdown run.csv`. It
-   prints the implied `rolling_resistance` and `aero_drag`.
+   a bag's `velocity_status`), and run `just sim fit-coastdown run.csv`
+   (options: `--variant`, `--v-min`, default 0.5 m/s, which drops slow and
+   standstill samples). It fits three terms, `m_eff * decel = a0 + a1 v + a2
+   v^2`, and prints them as **lumped estimates**: `a0` is rolling resistance plus
+   the drivetrain's Coulomb drag, `a1` is the drivetrain's viscous drag
+   (compare the model's `drivetrain_viscous / r^2`), `a2` is `aero_drag`.
+   `rolling_resistance` is `(a0 - Coulomb / r) / (m g)`, which subtracts the
+   model's Coulomb term. Coast from top speed to below 1 m/s on the flat, in
+   both directions, and average them. Smooth the 20 Hz hall speed (low-pass it,
+   or fit over windows of at least 0.2 s) before differencing, or the
+   deceleration is noise. A warning is printed if any term comes out negative.
 4. Run a skidpad or tilt test for `mu`; `autosdv_rc_sim.fit.skidpad_mu(radius,
    speed)` gives it from the speed at which the car starts to slide on a circle.
 5. Fit the motor with `just coach fit-motor` to replace the **mock**
