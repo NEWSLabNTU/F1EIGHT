@@ -19,7 +19,10 @@ different core count.
 | Planning simulation | **2.5 GiB** | 19 cores, briefly | ~2 cores |
 | Logging simulation, CPU path | **3.4 GiB** | 21 cores, briefly | ~3 cores |
 | Logging simulation, GPU path | 3.4 GiB + ~1 GiB VRAM | same | ~3 cores |
+| RC simulator (`just sim rc`), no RViz, pinned to 4 CPUs | **2.6 GiB** | ~2 cores, briefly | ~1.8 cores |
 | RViz, added to any of them | ~1.4 GiB | — | ~1 core |
+
+The RC simulator is planning-simulator mode with the real vehicle interface and the rc_sim plant (pure Python, 1 kHz) in place of simple_planning_simulator; measured with `scripts/testing/rc_sim/smoke.py --taskset 0-3 --resources`. Figures are the stack's own processes (56 of them, memory as RSS, CPU as whole cores), sampled from localization initialization through the engage, the drive and the stop; the machine had a load average of about 15 on 32 cores and the plant took 0.19 core (spec: under 0.2). On the same stack a second and third run while neighbours pushed the load to 40-55 measured the same 2.6 GiB but 3.0 cores steady and 0.30 core for the plant: CPU time inflates when four pinned CPUs are shared, so read ~1.8 cores as the quiet-machine figure and ~3 cores as the ceiling under contention. Nothing needed trimming: the budget (under 3 cores, 4 GB) holds, and the `clock_period` lever was tried and rejected (see the rc-sim guide).
 
 **The build peak is the largest, and it is adjustable.** 11.3 GiB is colcon
 compiling 31 packages with 24 jobs in parallel; the trace spends about twelve

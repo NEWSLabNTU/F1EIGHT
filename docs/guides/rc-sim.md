@@ -127,3 +127,23 @@ it, and every failed check marked where it happened. The replay publishes
 the trace itself, so what you see is exactly what was graded. Target,
 measured and true speed, PWM and slip are on `/rc_sim/replay/values` (plot
 them in PlotJuggler).
+
+## What it costs
+
+Measured for `just sim rc` without RViz, pinned to four CPUs
+(`smoke.py --taskset 0-3 --resources`), against the 4-core, 8 GB, no-GPU
+laptop the simulator is sized for (budget: under 3 cores and 4 GB):
+
+| | measured | budget |
+|---|---|---|
+| Peak memory | 2.6 GiB | 4 GB |
+| CPU, steady | ~1.8 cores on a quiet host, ~3.0 with the host's load at 40-55 | 3 cores |
+| `rc_sim_plant` alone | 0.19 core (0.30 under that load) | 0.2 core |
+
+Raising `clock_period` from 0.005 to 0.01 to save `/clock` traffic was tried and
+is not worth it: the interactive run then crept at about 0.15 m/s and never
+engaged properly in two of two attempts, so the default stays.
+
+Grading needs only Python: one variant takes about 4 s on one core (all eight in
+32 s); `--jobs` runs variants in parallel with identical results (`--jobs 4`:
+9 s, byte-identical `marks.json`).
