@@ -23,8 +23,10 @@ def test_full_steer_pwm_reaches_lock():
 def test_dead_time_then_rate_limit():
     s = Servo(P)
     out = [s.step(439, 0.001) for _ in range(60)]
-    assert out[18] == 0.0                         # inside the 20 ms dead time
-    assert out[59] == pytest.approx(5.0 * 0.001 * (60 - 20), abs=0.006)
+    assert out[19] == 0.0                         # inside the 20 ms dead time
+    assert out[20] > 0.0                          # and out of it on the 21st step: a 19-step lag fails
+    assert out[20] == pytest.approx(5.0 * 0.001, abs=1e-12)
+    assert out[59] == pytest.approx(5.0 * 0.001 * (60 - 20), abs=1e-9)
 
 
 def test_twelve_edges_per_revolution_both_directions():

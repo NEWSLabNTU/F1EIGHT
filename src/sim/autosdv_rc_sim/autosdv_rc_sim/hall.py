@@ -14,6 +14,9 @@ import math
 from typing import List
 
 
+_BELOW_ONE = 0.9999999999999998   # the largest double under 1: keeps the phase inside [0, spacing)
+
+
 class HallSensor:
     def __init__(self, markers: int):
         self.spacing = 2.0 * math.pi / markers
@@ -38,7 +41,7 @@ class HallSensor:
                 edges.append(self._time(t0_ns, dt_ns, p0, d, m * s))
         self.phase = p1 - k * s
         if not 0.0 <= self.phase < s:       # rounding at the boundary
-            self.phase = min(max(self.phase, 0.0), s * (1.0 - 2.0 ** -52))
+            self.phase = min(max(self.phase, 0.0), s * _BELOW_ONE)
         return edges
 
     @staticmethod

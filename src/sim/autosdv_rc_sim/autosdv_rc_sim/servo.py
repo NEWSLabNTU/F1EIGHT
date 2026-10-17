@@ -13,10 +13,11 @@ class Servo:
     def __init__(self, p: VehicleParams):
         self.p = p
         self._n = max(1, int(round(p.servo_dead_time / p.physics_dt)))
+        self._len = self._n + 1       # the new target is appended before the oldest is read
         self.reset()
 
     def reset(self) -> None:
-        self.line = deque([0.0] * self._n, maxlen=self._n)
+        self.line = deque([0.0] * self._len, maxlen=self._len)
         self.delta = 0.0
 
     def target_from_pwm(self, pwm: int) -> float:
