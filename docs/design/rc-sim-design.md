@@ -35,6 +35,9 @@ not the geometry, decide the motion.
 | Map | A generated lanelet2 track sized for 40 km/h; the Lab 2 U-turn also loads |
 | Steering limit | The physical lock, `max_steer_angle` 0.349 rad from `vehicle_info.param.yaml`. The 0.05 rad servo saturation (`docs/known-config-defects.md` §8) is a configuration defect to be measured on the car, not a property to simulate |
 | Where | AutoSDV, a new package `src/sim/autosdv_rc_sim` |
+| Duality | The real vehicle interface runs in simulation unchanged; only its two hardware touchpoints get simulated backends (`hardware:=real\|sim`) |
+| Grading | Deterministic and independent of CPU speed: a lockstep simulation clock in one process, running the same logic classes as the ROS nodes |
+| Track | Sized from speeds and hold times, not drawn |
 
 Alternatives considered: forking `simple_planning_simulator` with a C++ slip
 model (students would have to publish Autoware's actuation command instead of
@@ -44,37 +47,85 @@ debug; kept as a possible cross-check of this model).
 
 ## Architecture
 
+### The simulation as a dual of the car
+
+The vehicle interface touches hardware in exactly two places, and the simulator
+replaces those and nothing else:
+
+- `actuator.py` (and `safety.py`) write PWM through an `Adafruit_PCA9685`
+  object, using only `set_pwm_freq()` and `set_pwm(channel, 0, value)`
+  (channel 0 motor, channel 1 steering).
+- `velocity_report.py` uses `Jetson.GPIO` (`setmode`, `setup`,
+  `add_event_detect(pin, RISING, callback)`) and times the hall-sensor edges
+  itself.
+
+```
+car:        actuator ─set_pwm→ PCA9685 (I2C) → ESC/servo → chassis → magnet → GPIO edge → velocity_report
+simulation: actuator ─set_pwm→ SimPCA9685 ───→ rc_sim plant (physics) → hall edge → SimGPIO → velocity_report
+```
+
+A `hardware:=real|sim` parameter (beside today's `dry_run`) selects the backend.
+`SimPCA9685` exposes the same two methods and hands the raw counts per channel to
+the plant; `SimGPIO` exposes the same three calls and delivers each hall edge to
+the same callback, with the edge's true time (an optional argument the real path
+does not use, so message latency does not become speed noise). The plant tracks
+the wheel angle and emits an edge whenever one of the 12 markers passes, so the
+real edge-timing arithmetic, its filter and its timeout produce the speed. The
+`Jetson.GPIO` import moves behind the backend selection, so the package imports on
+a laptop. The IMU comes from the plant on the topic the ZED wrapper uses, and the
+real `imu_corrector` runs downstream.
+
+Everything else in the vehicle interface (the steering status, the gear and
+control-mode managers, the safety shell, the speed-controller plug-in) has no
+hardware and runs as it is. The student's `SpeedPID` is the class the car's
+actuator loads, inside the same code around it. The lab bench plants that read
+the actuator's debug PWM topic, and their copy of the hall model, retire.
+
+### Two modes, one set of logic classes
+
+**Headless grading (lockstep, deterministic).** One Python process steps the
+whole loop in a fixed order on a simulated clock (1 ms physics, 10 ms control):
+
+    plant → hall edges → speed estimate → safety shell + SpeedPID → path tracker → plant
+
+No ROS messages and no wall clock are involved, so a submission gives
+bit-identical results on any machine, and runs as fast as the CPU allows. For
+this to stay the car's code, the vehicle interface's logic lives in plain classes
+that the ROS nodes only wrap: `longitudinal.py` already does; the edge-timing
+speed estimate moves out of `velocity_report.py` into a `VelocityEstimator` class
+used by both. A test feeds the node and the harness the same edges and requires
+the same output.
+
+**Full stack, interactive (ROS, simulation clock).** Autoware in
+planning-simulator mode, the real vehicle-interface nodes with `hardware:=sim`,
+and the plant, which publishes `/clock`; every node runs with `use_sim_time`. It
+runs at real time or slower, for watching and debugging in RViz. Results from
+this mode are not graded: separate processes on a simulated clock still race
+within a tick (which of the speed report and the actuator acts first depends on
+CPU and delivery), so they are reproducible only approximately.
+
 ```
 Autoware, planning-simulator mode
   map (lanelet2), planning, control (trajectory follower, vehicle_cmd_gate),
   system / MRM, ADAPI, RViz            -- no sensing, perception, NDT, CUDA
         │ /control/command/control_cmd  (target speed, steering angle)
         ▼
-autosdv_vehicle_interface actuator      -- unchanged: safety shell,
-  speed controller plug-in = the student's SpeedPID, dry run (no PCA9685)
-        │ /autosdv/actuator_node/debug/pwm_values  (motor, steering PWM)
-        ▼
-autosdv_rc_sim plant  (new)             -- 1 kHz physics, 5 substeps per 200 Hz tick
-        │ /vehicle/status/velocity_status   (hall-sensor speed)
-        │ /vehicle/status/steering_status
-        │ /sensing/imu/imu_data             (IMU with bias and noise)
-        │ /localization/kinematic_state, /localization/acceleration
-        │ TF map → base_link                (true pose, optional noise)
-        ▼  back to Autoware and the actuator
+autosdv_vehicle_interface, hardware:=sim  -- unchanged nodes
+  actuator (safety shell, the student's SpeedPID) ─set_pwm→ SimPCA9685
+  velocity_report ←edges─ SimGPIO
+        ▲                         │ PWM counts
+        │ hall edges              ▼
+autosdv_rc_sim plant  (1 kHz physics, publishes /clock)
+        │ /sensing/imu/imu_data, /localization/kinematic_state,
+        │ /localization/acceleration, TF map → base_link (true pose)
+        ▼  back to Autoware
 ```
 
-The plant takes exactly the PWM the actuator would write to the PCA9685, so the
-student's class, the actuator's modes (emergency brake, full stop, coast,
-deadband hold, active control), the watchdogs and the fault handling are all in
-the loop, as on the car. Localization is the simulator's true pose; position
-noise and dropouts are options for tests, not defaults.
+One command starts each mode: `just sim rc [map:=…] [submission:=DIR]` and
+`just sim grade DIR`.
 
-One command starts it: `just sim rc [map:=…] [submission:=DIR]`.
-
-A headless mode runs the plant and the actuator logic without Autoware, faster
-than real time and deterministic (fixed seed, fixed step), for grading and for
-`selfcheck.py`. It replays a speed profile (or Autoware's planned profile
-recorded once per track) instead of the planner.
+**Proof of determinism.** A test grades one submission twice, once with the CPU
+loaded by a stress job, and requires identical marks and identical traces.
 
 ## The vehicle model
 
@@ -157,11 +208,34 @@ racing of 1:43 scale RC cars" (drivetrain form), Karnopp (1985) for stiction.
 
 ## The track
 
-A generated lanelet2 loop of about 150–200 m, produced like `make-uturn` by a
-generator (`just sim make-track`), with two long straights where 11 m/s is
-reachable, curves of about 20 m, 8 m and 4 m radius, and one hairpin. The
-generator writes the lanelet2 map, a start pose and a speed-limit profile. The
-Lab 2 U-turn loads too, for the low-speed case.
+The track is sized from the speeds to be tested and how long each must be held,
+not drawn. A straight must let the car accelerate to v, hold it for T seconds
+(the steady window that is measured) and brake:
+
+    L_straight = v² / (2a) + v·T + v² / (2d)
+
+and a curve of radius R is driven at v_curve = √(a_lat · R). With the planner's
+limits a = 2.5 m/s², d = 3.5 m/s² and a_lat = 3 m/s² (well under μg ≈ 7.8):
+
+| Top speed of the straight | Hold T | Length |
+|---|---|---|
+| 11 m/s (40 km/h) | 3 s | 24 + 33 + 17 = 75 m |
+| 11 m/s | 5 s | 97 m |
+| 6 m/s | 3 s | 7 + 18 + 5 = 31 m |
+
+| Curve radius | Curve speed |
+|---|---|
+| 20 m | 7.7 m/s |
+| 8 m | 4.9 m/s |
+| 4 m | 3.5 m/s |
+
+Default loop (holds of 3 s): a 75 m straight at 11 m/s, a 180° turn of 20 m
+radius (63 m), a 31 m straight at 6 m/s, an 8 m curve, a 4 m hairpin, and a
+return straight closing the loop; about 380 m, a lap of about 60 s. The
+generator (`just sim make-track`) takes v, T, a, d, a_lat and the radii, prints
+every segment's length and the lap, refuses a segment too short to reach its
+speed, and writes the lanelet2 map, the start pose and the speed-limit profile.
+The Lab 2 U-turn also loads, for the low-speed case.
 
 ## What students do (Part 1)
 
@@ -204,8 +278,8 @@ off. The headless grading mode needs only Python.
 
 1. Keep the feed-forward (students fit it from a simulator speed-step run) or a
    plain PID?
-2. Grading: headless only (fast, deterministic), or also a run with Autoware in
-   the loop?
+2. Grading is headless and deterministic (decided); a full-stack run is for
+   debugging only. Should a full-stack lap still be required as a smoke test?
 3. Rear-wheel or all-wheel drive on the AutoSDV chassis; the motor and gear
    ratio; the battery voltage (the drive battery is 3S, 11.1 V nominal).
 4. Track size: does a 150–200 m loop fit the planner's defaults (lane width,
