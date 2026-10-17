@@ -272,6 +272,7 @@ and the actuator already read):
 | `enable_conditional_integration` | freeze the integral while the output saturates | true |
 | `derivative_filter_alpha` | the derivative's low-pass filter | 0.15 |
 | `pwm_output_alpha` | the actuator's output filter | 0.25 |
+| `max_pwm_offset` | the controller's output limit around `init_pwm` [counts] (new) | 55, today's `(max_pwm − min_pwm) // 2`; at most `max_pwm − init_pwm` = 100 |
 
 Anything outside this list is refused, as the Lab 2 tracker file is today. The
 simulation replaces the car recordings and the per-car models: no car CSV, no
@@ -297,10 +298,11 @@ target, which is what Autoware's planner would command on it.
 throttle.** `AckermannSpeedPID` limits its output to `init_pwm ±
 (max_pwm − min_pwm) // 2`, that is 370 ± 55, so at most PWM 425 against the ESC's
 470. If full duty gives about 11 m/s, the controller tops out near half of that,
-well short of 40 km/h. Either the output limit becomes a coefficient students
-may set (bounded by the actuator's own clamp), or the simulator's motor is
-scaled so that 425 reaches the top speed. The first matches the car's real
-hardware; it is an open question below.
+well short of 40 km/h. Decided: the output limit becomes a coefficient,
+`max_pwm_offset`, read by `AckermannSpeedPID` with today's value as its default
+(so the car's behaviour is unchanged until someone sets it), and bounded by the
+actuator's own clamp (at most `max_pwm − init_pwm`). This is a change to the
+vehicle interface (a submodule), made in its tracking branch first.
 
 ## Running on a laptop
 
@@ -325,9 +327,9 @@ off. The headless grading mode needs only Python.
 
 ## Open questions
 
-1. The output limit (above): make it a tunable coefficient bounded by the
-   actuator's clamp, or keep 370 ± 55 and accept a lower top speed? Decided:
-   no separate feed-forward; students tune the production controller.
+1. Decided (2026-10-17): no separate feed-forward; students tune the
+   production controller; its output limit becomes the coefficient
+   `max_pwm_offset`.
 2. The motor and gear ratio are mocked (K_v 3000 rpm/V, G 14.5:1, 3S) until
    someone reads them off the car; a full-throttle stall then gives about 160 N
    at the wheels, far above the rear tires' grip (about 15–20 N), so full
