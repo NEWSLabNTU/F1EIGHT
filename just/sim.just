@@ -75,3 +75,14 @@ make-track *ARGS:
     #!/usr/bin/env bash
     source scripts/env.sh
     exec ros2 run autosdv_rc_sim rc_sim_make_track "$@"
+
+#   just sim grade ~/lab2/B12345678_lab_2_1           every model variant; marks out of 15
+#   just sim grade DIR --variant nominal --jobs 4
+#   just sim grade DIR --view                         ... then watch the graded run in RViz
+# DIR holds speed_controller_params.yaml (the tunable keys only): docs/guides/rc-sim.md.
+# Grade a Lab 2 Part 1 submission in the deterministic simulator (headless, no GPU)
+[positional-arguments]
+grade *ARGS:
+    #!/usr/bin/env bash
+    source scripts/env.sh
+    exec ros2 run autosdv_rc_sim rc_sim_grade "$@"
