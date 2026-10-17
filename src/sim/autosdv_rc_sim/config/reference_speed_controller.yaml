@@ -1,0 +1,8 @@
+# Reference coefficients for the rc_sim grader (scripts/testing/rc_sim/calibrate.py).
+derivative_filter_alpha: 0.15
+enable_conditional_integration: true
+integral_limit: 100.0
+kd_speed: 1.5
+ki_speed: 43.0
+kp_speed: 7.0
+max_pwm_offset: 100

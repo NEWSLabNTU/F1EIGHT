@@ -63,3 +63,24 @@ Each line names the variant, how many checks passed, and each failure as
 `check (value vs limit)`. Traces (100 Hz CSV: target, measured and true
 speed, PWM, shell mode, slip) and `marks.json` are written to
 `tmp/rc_sim/grade/<dir name>/`.
+
+### Limits
+
+| metric | limit | kind |
+|---|---|---|
+| `hold_rmse_rel` | 0.05 m/s per m/s (floor `hold_rmse_floor` 0.10 m/s) | calibrated |
+| `overshoot_pct` | 11 % | calibrated |
+| `reach_s` | 1.0 s | calibrated |
+| `launch_accel` | 4.8 m/s^2 (over 50 ms) | calibrated |
+| `resume_overshoot_pct` | 10 % | calibrated |
+| `launch_slip` | 0.5 m/s | physical |
+| `brake_kappa` | -0.2 | physical |
+| `reverse_speed` | -0.05 m/s | physical |
+| `resume_slip` | 0.5 m/s | physical |
+| `stop_error` | 0.5 m | fixed |
+
+The reference coefficients (kp 7, ki 43, kd 1.5, integral limit 100, derivative
+alpha 0.15) are in `src/sim/autosdv_rc_sim/config/reference_speed_controller.yaml`;
+`python3 scripts/testing/rc_sim/calibrate.py --jobs 4` reproduces them and the table.
+
+Calibrated limits are 1.5 times the reference controller's worst case across the variants, never tighter than the design's targets; physical limits (wheel spin, wheel lock, reversing) and the 0.5 m stop error are not calibrated, and the reference passes each of them with at least 10 % to spare.
