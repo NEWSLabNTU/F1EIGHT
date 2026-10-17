@@ -210,7 +210,10 @@ republishes the command: the car has no steering feedback).
 | Cornering stiffness per axle | 90–100 N/rad | literature (F1TENTH: about 94 / 101) |
 | Friction coefficient μ | 0.8 | guess: depends on the floor; tilt or skidpad test |
 | Pacejka B, C, E | to fit μ and the stiffness | literature shape |
-| Motor K_t, K_e, R, gear G | to give 11 m/s at full duty | guess: fit from speed steps |
+| Wheel radius | 0.0525 m | config (`velocity_report.yaml` 10.5 cm diameter; `vehicle_info` 0.052) |
+| Battery | 3S LiPo, 11.1 V nominal, 0.03 Ω internal | guess |
+| Motor | brushless, K_v 3000 rpm/V, so K_t = K_e = 60/(2π·K_v) = 0.00318 N·m/A, winding + ESC resistance 0.03 Ω | **mock**: typical 1/10-scale motor, not measured |
+| Total gear ratio G (pinion/spur × differential) | 14.5 : 1 | **mock**: chosen so the no-load top speed is about 12.5 m/s and the loaded top speed about 11 m/s |
 | Rolling resistance, drag | from a coast-down | guess |
 
 Sources: F1TENTH gym defaults (`f110_env.py`), CommonRoad vehicle models
@@ -325,5 +328,8 @@ off. The headless grading mode needs only Python.
 1. The output limit (above): make it a tunable coefficient bounded by the
    actuator's clamp, or keep 370 ± 55 and accept a lower top speed? Decided:
    no separate feed-forward; students tune the production controller.
-2. The motor and gear ratio, and the drive battery's voltage (assumed 3S,
-   11.1 V nominal). Rear-wheel drive is decided.
+2. The motor and gear ratio are mocked (K_v 3000 rpm/V, G 14.5:1, 3S) until
+   someone reads them off the car; a full-throttle stall then gives about 160 N
+   at the wheels, far above the rear tires' grip (about 15–20 N), so full
+   throttle from rest spins the rear wheels, as RC cars do. Rear-wheel drive is
+   decided.
