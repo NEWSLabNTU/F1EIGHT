@@ -52,9 +52,12 @@ def match_processes(pattern, pgid=None):
     """RSS sum and CPU jiffies of the workload's processes.
 
     Selected either by a regex over the command line, or -- more reliably for a
-    launched stack -- by process group: play_launch puts every node and
-    container in its own group, and matching on names misses the ones whose
-    binary is named after neither the launcher nor the container.
+    launched stack -- by process group plus everything descended from the group
+    leader (pid == pgid): play_launch puts every node and container in a group
+    of its own, so the leader's group alone is only the launcher, and matching
+    on names misses nodes whose binary is named after neither the launcher nor
+    the container. Descendants are found through parent links, so a process
+    that double-forks and is re-parented to init escapes the count.
 
     Tracking the workload itself, rather than the machine, is what makes a
     number usable on a box that is also doing something else -- which is the
@@ -135,8 +138,9 @@ def main():
                     help="sample for this long; default is until the command exits")
     ap.add_argument("--label", default="")
     ap.add_argument("--pgid", type=int, default=0,
-                    help="track this process group instead of a name regex; a launched "
-                         "stack is one group, so nothing is missed and nothing else counted")
+                    help="track this process group leader's group and all its descendants "
+                         "instead of a name regex (a launcher puts each node in its own "
+                         "group); double-forked orphans re-parented to init are missed")
     ap.add_argument("--match", default="",
                     help="regex over cmdlines; reports those processes' own RSS and CPU "
                          "as well as the machine's, so a busy neighbour does not inflate it")

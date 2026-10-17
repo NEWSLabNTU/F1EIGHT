@@ -140,9 +140,27 @@ laptop the simulator is sized for (budget: under 3 cores and 4 GB):
 | CPU, steady | ~1.8 cores on a quiet host, ~3.0 with the host's load at 40-55 | 3 cores |
 | `rc_sim_plant` alone | 0.19 core (0.30 under that load) | 0.2 core |
 
-Raising `clock_period` from 0.005 to 0.01 to save `/clock` traffic was tried and
-is not worth it: the interactive run then crept at about 0.15 m/s and never
-engaged properly in two of two attempts, so the default stays.
+Raising `clock_period` from 0.005 to 0.01 to save `/clock` traffic was tried
+twice and the interactive run crept at about 0.15 m/s both times, but the
+unmodified stack crept the same way in one of three runs (host load about 19),
+so the lever's rejection is confounded and it stays at the default.
+
+### Open item: the interactive run sometimes creeps
+
+On a shared 32-core host, `smoke.py --taskset 0-3` failed intermittently: the
+car engaged but reached only about 0.15 m/s (stack up, no error). It did not
+track load monotonically (passes at load 15 and about 40, a failure at about
+19), so it is not simply oversubscription, and four pinned CPUs is the target
+laptop. The existing play_log of the failed runs did not show a cause: the
+logs are the same as in a passing run. What they do show, in every run
+including passing ones, is `vehicle_cmd_gate` raising `Emergency!` and the
+`mrm_handler` toggling EMERGENCY_STOP about once a second (the
+`autonomous` mode flapping between available and STALE on
+`/autoware/planning/routing/state`), which makes the actuator brake each time;
+whether that interacts with the creep is unknown. Commanded velocity, PID
+output and operation mode were not logged. Next step: on a creeping run record
+the target speed, PWM and the `/clock` rate, to tell sim-time starvation (the
+plant not keeping real-time pace) from the PWM sitting in the deadband.
 
 Grading needs only Python: one variant takes about 4 s on one core (all eight in
 32 s); `--jobs` runs variants in parallel with identical results (`--jobs 4`:
