@@ -19,7 +19,7 @@ different core count.
 | Planning simulation | **2.5 GiB** | 19 cores, briefly | ~2 cores |
 | Logging simulation, CPU path | **3.4 GiB** | 21 cores, briefly | ~3 cores |
 | Logging simulation, GPU path | 3.4 GiB + ~1 GiB VRAM | same | ~3 cores |
-| RC simulator (`just sim rc`), no RViz, pinned to 4 CPUs | **2.6 GiB** | not captured | ~1.8 cores |
+| RC simulator (`just sim rc`), no RViz, pinned to 4 CPUs | **2.6 GiB** | not captured | ~1.6 cores |
 | RViz, added to any of them | ~1.4 GiB | — | ~1 core |
 
 The RC simulator is planning-simulator mode with the real vehicle interface and
@@ -28,16 +28,18 @@ measured with `scripts/testing/rc_sim/smoke.py --taskset 0-3 --resources`.
 Figures are the stack's own processes (56 of them, memory as RSS, CPU as whole
 cores), sampled from localization initialization through the engage, the drive
 and the stop, so the startup burst is not captured (the quietest run's 1.95-core
-maximum is a steady-state maximum). On a quiet host (load average about 15 on 32
-cores) the stack used about 1.8 cores steady and the plant 0.19 core (spec:
-under 0.2). Two passing runs while neighbours held the load at 22 to 37 measured
-the same 2.6 GiB but 3.0 to 3.4 cores and 0.30 core for the plant: CPU time
-inflates when four pinned CPUs are shared, so the budget of 3 cores is met on a
-quiet machine and only reached, not beaten, on a busy one. The smoke test is not
-fully reliable under load: one of three runs of the unmodified stack, and both
-runs with `clock_period` 0.01, crept at about 0.15 m/s instead of driving the
-straight, cause not found (open item in the rc-sim guide), so the `clock_period`
-lever is neither adopted nor cleared. No lever was applied.
+maximum is a steady-state maximum). On a quiet host (load average 12 to 21 on 32
+cores) three runs of the fixed stack (Task 18b) used a median 1.6 cores steady
+(maximum 1.9) and 2.5 GiB peak; Task 20's quietest run measured 1.8 cores and the
+plant 0.19 core (spec: under 0.2). Two passing runs of that task while neighbours
+held the load at 22 to 37 measured the same 2.6 GiB but 3.0 to 3.4 cores and 0.30
+core for the plant: CPU time inflates when four pinned CPUs are shared, so the
+budget of 3 cores is met on a quiet machine and only reached, not beaten, on a
+busy one. The plant was not re-measured in Task 18b. The smoke test's earlier
+unreliability (the car creeping at about 0.15 m/s in one of three unmodified runs
+and both `clock_period` 0.01 runs) was the MRM flap, not load or `clock_period`:
+see the emergency flap in the rc-sim guide. After the fix `smoke.py --taskset 0-3`
+passed three of three at load 12 to 21. No lever was applied.
 
 **The build peak is the largest, and it is adjustable.** 11.3 GiB is colcon
 compiling 31 packages with 24 jobs in parallel; the trace spends about twelve

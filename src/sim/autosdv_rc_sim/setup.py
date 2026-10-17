@@ -26,7 +26,7 @@ setup(
         ('share/' + package_name, ['package.xml']),
         (os.path.join('share', package_name, 'launch'), glob('launch/*.launch.xml')),
         (os.path.join('share', package_name, 'config'), glob('config/*.yaml') + glob('config/*.rviz')),
-    ] + share_tree('tracks'),
+    ] + share_tree('tracks') + share_tree('config/diagnostics'),
     install_requires=['setuptools'],
     zip_safe=True,
     maintainer='aeon',

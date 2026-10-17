@@ -137,30 +137,47 @@ laptop the simulator is sized for (budget: under 3 cores and 4 GB):
 | | measured | budget |
 |---|---|---|
 | Peak memory | 2.6 GiB | 4 GB |
-| CPU, steady | ~1.8 cores on a quiet host, ~3.0 with the host's load at 40-55 | 3 cores |
+| CPU, steady | ~1.6 cores on a quiet host (load 12-21; max 1.9), 3.0-3.4 with the host's load at 22-37 | 3 cores |
 | `rc_sim_plant` alone | 0.19 core (0.30 under that load) | 0.2 core |
 
 Raising `clock_period` from 0.005 to 0.01 to save `/clock` traffic was tried
-twice and the interactive run crept at about 0.15 m/s both times, but the
-unmodified stack crept the same way in one of three runs (host load about 19),
-so the lever's rejection is confounded and it stays at the default.
+twice and the interactive run crept at about 0.15 m/s both times. The cause
+turned out to be the emergency flap below, which crept the unmodified stack too,
+so that rejection was not about `clock_period`; the lever was not re-measured and
+stays at the default.
 
-### Open item: the interactive run sometimes creeps
+### The emergency flap (fixed) and the creep
 
-On a shared 32-core host, `smoke.py --taskset 0-3` failed intermittently: the
-car engaged but reached only about 0.15 m/s (stack up, no error). It did not
-track load monotonically (passes at load 15 and about 40, a failure at about
-19), so it is not simply oversubscription, and four pinned CPUs is the target
-laptop. The existing play_log of the failed runs did not show a cause: the
-logs are the same as in a passing run. What they do show, in every run
-including passing ones, is `vehicle_cmd_gate` raising `Emergency!` and the
-`mrm_handler` toggling EMERGENCY_STOP about once a second (the
-`autonomous` mode flapping between available and STALE on
-`/autoware/planning/routing/state`), which makes the actuator brake each time;
-whether that interacts with the creep is unknown. Commanded velocity, PID
-output and operation mode were not logged. Next step: on a creeping run record
-the target speed, PWM and the `/clock` rate, to tell sim-time starvation (the
-plant not keeping real-time pace) from the PWM sitting in the deadband.
+Until Task 18b every `just sim rc` run, passing ones included, logged
+`vehicle_cmd_gate: Emergency!` about once a second and `mrm_handler` toggled
+EMERGENCY_STOP for 0.1 s each time, braking the actuator. The cause: the
+diagnostic graph (`autoware-main.yaml`) gives `/autoware/localization/state`,
+`/autoware/planning/routing/state` and `/adapi/mrm_request/delegate` the default
+1.0 s timeout, and the `/adapi` nodes publish them every 1.0 s. On the plant's
+simulated clock each publish is stamped on a whole second and the aggregator's
+10 Hz tick falls on the same simulated instant, so every second the tick reads
+the previous stamp at exactly age 1.0 s before the new one arrives, the unit
+reads STALE for one tick, `autonomous` drops out of the graph and the MRM
+handler stops the car. Upstream's CARLA graph carries the same remedy
+(`timeout: 3.0` on these units). rc_sim now passes its own graph,
+`config/diagnostics/rc_sim_diagnostics.yaml` (autoware-main.yaml with the three
+timeouts at 3.0; `localization.yaml` and `planning.yaml` are copies of
+upstream's with the one line added; re-diff after an Autoware upgrade). The car's
+own launch is untouched. After the change a run shows no MRM state change and no
+loss of autonomous availability, and `smoke.py` asserts both (before: 48 MRM
+changes and 46 availability drops in one run; after: 0 and 0, three runs of
+three).
+
+The flap had been hiding something: its braking stopped the car at the line
+(`x` 105.2) in passing runs. Without it the speed PID, whose integrator is wound
+up by the climb to 11 m/s (the planner gives no cruise hold to settle it), keeps
+the throttle on for about 2 s into the braking and the car stops 4-5 m past the
+line with the smoke's coefficients (8-20 m with `integral_limit` 100). The
+creep, the car engaged but reaching only 0.15 m/s, was the flap, which
+reproduced it on demand (`vmax` 0.14 on the first run of this task with the old
+stack and default coefficients). `smoke.py` therefore uses the grader's
+reference coefficients with `integral_limit` 60 and accepts a stop up to 8 m
+past the line; the 0.5 m stop is what `just sim grade` grades.
 
 Grading needs only Python: one variant takes about 4 s on one core (all eight in
 32 s); `--jobs` runs variants in parallel with identical results (`--jobs 4`:

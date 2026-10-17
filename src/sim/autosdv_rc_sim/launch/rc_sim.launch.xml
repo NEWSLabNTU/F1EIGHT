@@ -50,7 +50,7 @@
     <arg name="launch_system_monitor" value="false"/>
     <arg name="launch_dummy_diag_publisher" value="true"/>
     <arg name="diagnostic_graph_aggregator_graph_path"
-         value="$(find-pkg-share autoware_launch)/config/system/diagnostics/autoware-main.yaml"/>
+         value="$(find-pkg-share autosdv_rc_sim)/config/diagnostics/rc_sim_diagnostics.yaml"/>   <!-- autoware-main.yaml + 3 s timeouts on the 1 Hz /adapi diags -->
     <arg name="is_simulation" value="true"/>
     <arg name="use_sim_time" value="true"/>
     <arg name="rviz" value="$(var rviz)"/>
