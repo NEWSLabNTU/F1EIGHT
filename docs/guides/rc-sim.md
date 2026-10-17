@@ -210,3 +210,21 @@ reorder it, and the symptom would be the same overshoot.
 Grading needs only Python: one variant takes about 4 s on one core (all eight in
 32 s); `--jobs` runs variants in parallel with identical results (`--jobs 4`:
 9 s, byte-identical `marks.json`).
+
+## Calibrating the model against the car
+
+Most of `vehicle.yaml` is a guess until the car has been measured. Take the
+measurements in the order the notes in that file give them:
+
+1. Weigh the car: `mass`.
+2. Find its balance point: `lf`.
+3. Do a coast-down at neutral on the flat, log `t,v` to a CSV (for example from
+   a bag's `velocity_status`), and run `just sim fit-coastdown run.csv`. It
+   prints the implied `rolling_resistance` and `aero_drag`.
+4. Run a skidpad or tilt test for `mu`; `autosdv_rc_sim.fit.skidpad_mu(radius,
+   speed)` gives it from the speed at which the car starts to slide on a circle.
+5. Fit the motor with `just coach fit-motor` to replace the **mock**
+   `motor_kv` and `gear_ratio`.
+
+Each refitted value changes its tag to `measured` and gets a `note` with the
+date and the car.

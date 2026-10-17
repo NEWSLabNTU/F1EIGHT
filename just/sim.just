@@ -111,3 +111,11 @@ rc *ARGS:
     cmd=(play_launch launch --web-addr '{{ web_addr }}' autosdv_rc_sim rc_sim.launch.xml "${args[@]}")
     printf '\033[2m%s\033[0m\n' "${cmd[*]}"
     exec "${cmd[@]}"
+
+# CSV columns t,v from a coast-down at neutral on the flat (e.g. exported from a bag's velocity_status)
+# Refit the RC simulator's rolling resistance and drag from a coast-down
+[positional-arguments]
+fit-coastdown CSV *ARGS:
+    #!/usr/bin/env bash
+    source scripts/env.sh
+    exec ros2 run autosdv_rc_sim rc_sim_fit coastdown "$@"
