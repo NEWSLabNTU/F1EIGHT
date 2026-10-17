@@ -84,3 +84,24 @@ alpha 0.15) are in `src/sim/autosdv_rc_sim/config/reference_speed_controller.yam
 `python3 scripts/testing/rc_sim/calibrate.py --jobs 4` reproduces them and the table.
 
 Calibrated limits are 1.5 times the reference controller's worst case across the variants, never tighter than the design's targets; physical limits (wheel spin, wheel lock, reversing) and the 0.5 m stop error are not calibrated, and the reference passes each of them with at least 10 % to spare.
+
+## Interactive mode (not graded)
+
+```bash
+just sim rc                                          # production coefficients
+just sim rc submission:=~/lab2/<student_id>_lab_2_1  # yours
+just sim rc track:=tmp/rc_sim/tracks/mine variant:=low_mu
+```
+
+Autoware runs in planning-simulator mode (map, planning, control, system,
+API, RViz; no sensing, localization, perception or GPU). The car's vehicle
+interface runs unchanged with `hardware:=sim`: the actuator's PWM goes to the
+plant instead of the PCA9685, and `velocity_report` times the plant's hall
+edges instead of a GPIO pin. The plant publishes `/clock`; every other node
+uses simulated time. In RViz, put a 2D Goal Pose at the stop line and press
+Engage. Speeds here come from Autoware's velocity planner, and separate
+processes on a simulated clock race within a tick, so results are close to,
+but not exactly, the graded run.
+
+`just sim make-track --speeds 2,6,11 --hold 3 --accel 2.5 --decel 2.5` prints
+the segment table and writes a track for `track:=`.

@@ -86,3 +86,28 @@ grade *ARGS:
     #!/usr/bin/env bash
     source scripts/env.sh
     exec ros2 run autosdv_rc_sim rc_sim_grade "$@"
+
+#   just sim rc                                       the default straight, production coefficients
+#   just sim rc submission:=~/lab2/B12345678_lab_2_1  a student's speed_controller_params.yaml
+#   just sim rc track:=tmp/rc_sim/tracks/mine variant:=low_mu rviz:=false
+# In RViz: 2D Goal Pose at the stop line, then Engage (or run scripts/testing/rc_sim/smoke.py).
+# Not graded (the processes race within a tick); `just sim grade` is the grade.
+# Interactive RC simulator: Autoware planning-simulator mode + the real vehicle interface + the plant
+[positional-arguments]
+rc *ARGS:
+    #!/usr/bin/env bash
+    source scripts/env.sh
+    args=()
+    for a in "$@"; do
+        case "$a" in
+            submission:=*)
+                p=$(ros2 run autosdv_rc_sim rc_sim_grade "${a#submission:=}" --print-params) || exit 2
+                args+=("speed_controller_params:=$p") ;;
+            track:=*|map:=*) args+=("track_dir:=$(realpath "${a#*:=}")") ;;
+            *) args+=("$a") ;;
+        esac
+    done
+    [ -n "${DISPLAY:-}" ] || args+=(rviz:=false)
+    cmd=(play_launch launch --web-addr '{{ web_addr }}' autosdv_rc_sim rc_sim.launch.xml "${args[@]}")
+    printf '\033[2m%s\033[0m\n' "${cmd[*]}"
+    exec "${cmd[@]}"

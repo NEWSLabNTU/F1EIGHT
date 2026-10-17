@@ -334,6 +334,12 @@ just sim logging        # Logging simulation (rosbag replay)
 just sim coss-park      # Full COSS Park simulation scenario
 just bag download       # Download test rosbag (~2.8 GB)
 ```
+```bash
+just sim rc             # RC car simulator: Autoware + the real vehicle interface (hardware:=sim) + plant
+just sim grade DIR      # Lab 2 Part 1 grade: headless, deterministic (--view replays it in RViz)
+just sim make-track     # size the graded straight from the speed profile
+```
+The RC simulator's vehicle model, grader and limits: `docs/guides/rc-sim.md`.
 See `docs/guides/simulation_testing.md` for the full simulation guide
 (planning sim, rosbag replay, CARLA integration).
 
