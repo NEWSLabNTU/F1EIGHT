@@ -34,7 +34,7 @@
   <arg name="frame_id" default="map"
        description="frame the dead-reckoned pose claims; map is what the control chain assumes"/>
   <arg name="publish_tf" default="true"
-       description="component_state_monitor watches map to base_link at 1 Hz and marks autonomous unavailable without it"/>
+       description="map to base_link for the control chain and RViz; the diagnostic graph checks kinematic_state, published in the same callback"/>
   <arg name="use_sim_time" default="false"/>
 
   <!-- Wheel speed + IMU yaw rate integrated into /localization/kinematic_state. -->

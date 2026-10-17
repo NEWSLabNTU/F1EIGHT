@@ -60,7 +60,7 @@ COMMON_NODES = [
 ] + [f'/system/topic_state_monitor_{n}' for n in (
     'coach_board', 'coach_state', 'control_command_control_cmd', 'localization_kinematic_state',
     'scenario_planning_trajectory', 'system_emergency_control_cmd',
-    'trajectory_follower_control_cmd', 'transform_map_to_base_link',
+    'trajectory_follower_control_cmd',
     'vehicle_status_steering_status', 'vehicle_status_velocity_status')]
 CAR_NODES = [
     '/autosdv/actuator_node', '/autosdv/steering_status_node',

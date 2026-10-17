@@ -83,20 +83,13 @@
     error_rate: 1.0
     timeout: 1.0
 
-- module: localization
-  mode: [online, logging_simulation, planning_simulation]
-  type: autonomous
-  args:
-    node_name_suffix: transform_map_to_base_link
-    topic: /tf
-    frame_id: map
-    child_frame_id: base_link
-    best_effort: false
-    transient_local: false
-    warn_rate: 5.0
-    error_rate: 1.0
-    timeout: 1.0
-
+# No map -> base_link row. topic_state_monitor's /tf mode subscribes with a
+# depth-1 queue and counts only messages carrying that pair, so any other
+# frequent /tf publisher overwrites most of them before the callback runs (car
+# B, 2026-10-16: the ZED IMU transform at 100 Hz, measured ~1 Hz against a real
+# 20 Hz, engage refused). kinematic_state, below, is published in the same
+# callback as that transform, so it is the liveness check; preflight still
+# looks the transform up through tf2.
 # AutoSDV lab: dead reckoning (or the simulator) is the only source of the
 # odometry vehicle_cmd_gate waits for.
 - module: localization

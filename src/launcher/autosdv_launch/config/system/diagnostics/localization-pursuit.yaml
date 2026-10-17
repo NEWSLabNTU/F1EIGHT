@@ -2,19 +2,19 @@
 # reckoning (autosdv_dead_reckoning_component on the vehicle, the simulator's
 # own odometry in the planning sim). What the control chain needs is that
 # /localization/kinematic_state keeps arriving -- vehicle_cmd_gate withholds
-# all output until it has -- and that map -> base_link exists. Both are rate
-# checks from ../component_state_monitor/topics-pursuit.yaml.
+# all output until it has -- a rate check from
+# ../component_state_monitor/topics-pursuit.yaml.
+#
+# map -> base_link is not checked on /tf: wheel_imu_odom publishes it in the
+# same callback as kinematic_state (publish_tf is on for this lab), so the
+# odometry check already proves it alive, and topic_state_monitor's depth-1
+# /tf subscription under-counts it whenever another node publishes /tf often
+# (the ZED IMU transform, 100 Hz: measured ~1 Hz, engage refused).
 units:
   - path: /autoware/localization
     type: and
     list:
-      - { type: link, link: /autoware/localization/topic_rate_check/transform }
       - { type: link, link: /autoware/localization/topic_rate_check/kinematic_state }
-
-  - path: /autoware/localization/topic_rate_check/transform
-    type: diag
-    node: topic_state_monitor_transform_map_to_base_link
-    name: localization_topic_status
 
   - path: /autoware/localization/topic_rate_check/kinematic_state
     type: diag
