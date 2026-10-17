@@ -80,9 +80,17 @@ def load_submission(path) -> dict:
                 break
         else:
             raise SubmissionError(f'{path}: no {SUBMISSION_FILE} (or config/{SUBMISSION_FILE})')
-    data = yaml.safe_load(path.read_text()) or {}
+    try:
+        data = yaml.safe_load(path.read_text(encoding='utf-8')) or {}
+    except UnicodeDecodeError as e:
+        raise SubmissionError(f'{path}: not a UTF-8 text file ({e.reason})')
+    except yaml.YAMLError as e:
+        raise SubmissionError(f'{path}: not valid YAML: {e}')
     if not isinstance(data, dict):
         raise SubmissionError(f'{path}: expected a mapping of coefficients')
+    bad = [k for k in data if not isinstance(k, str)]
+    if bad:
+        raise SubmissionError(f'{path}: keys must be names, got {bad!r}')
     unknown = sorted(set(data) - set(ALLOWED_KEYS))
     if unknown:
         raise SubmissionError(f'{path}: not tunable: {unknown}. Allowed: {sorted(ALLOWED_KEYS)}')
@@ -96,9 +104,14 @@ def load_submission(path) -> dict:
             if isinstance(value, bool) or not isinstance(value, int):
                 raise SubmissionError(f'{key} must be an integer, got {value!r}')
         else:
-            if isinstance(value, bool) or not isinstance(value, (int, float)) or not math.isfinite(value):
+            if isinstance(value, bool) or not isinstance(value, (int, float)):
+                raise SubmissionError(f'{key} must be a number, got {value!r}')
+            try:
+                value = float(value)
+            except OverflowError:
+                raise SubmissionError(f'{key} is too large to be a number the car could use')
+            if not math.isfinite(value):
                 raise SubmissionError(f'{key} must be a finite number, got {value!r}')
-            value = float(value)
         if key in RANGES:
             low, high = RANGES[key]
             too_low = value <= low if key in _EXCLUSIVE_LOW else value < low
@@ -280,7 +293,7 @@ def main(argv=None) -> int:
     args = ap.parse_args(argv)
     try:
         params = load_submission(args.submission)
-    except (SubmissionError, OSError, yaml.YAMLError) as e:
+    except (SubmissionError, OSError, ValueError) as e:
         print(f'error: {e}', file=sys.stderr)
         return 2
     if args.print_params:

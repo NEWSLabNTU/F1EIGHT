@@ -108,3 +108,27 @@ def test_print_params(tmp_path, capsys):
 
 def test_bad_submission_exits_2(tmp_path, capsys):
     assert grade.main([str(write(tmp_path, {'min_pwm': 1}))]) == 2
+
+
+def test_non_string_key_is_refused(tmp_path):
+    with pytest.raises(grade.SubmissionError, match='keys must be names'):
+        grade.load_submission(write(tmp_path, {1: 2, 'kp_speed': 3.0}))
+
+
+def test_huge_integer_is_refused(tmp_path):
+    (tmp_path / grade.SUBMISSION_FILE).write_text('kp_speed: 1' + '0' * 400 + '\n')
+    with pytest.raises(grade.SubmissionError, match='too large'):
+        grade.load_submission(tmp_path)
+    assert grade.main([str(tmp_path)]) == 2
+
+
+def test_non_utf8_file_exits_2(tmp_path, capsys):
+    (tmp_path / grade.SUBMISSION_FILE).write_bytes(b'kp_speed: \xff\xfe\n')
+    with pytest.raises(grade.SubmissionError, match='UTF-8'):
+        grade.load_submission(tmp_path)
+    assert grade.main([str(tmp_path)]) == 2
+    assert 'error:' in capsys.readouterr().err
+
+
+def test_non_string_key_exits_2(tmp_path):
+    assert grade.main([str(write(tmp_path, {1: 2}))]) == 2
