@@ -80,8 +80,21 @@ def test_dt_convergence():
         for _ in range(int(round(4.0 / p.physics_dt))):
             plant.step(p.physics_dt, 450, 489)
         results.append(plant.state)
-    assert results[0].vx == pytest.approx(results[1].vx, rel=0.005)
-    assert results[0].x == pytest.approx(results[1].x, rel=0.01)
+    # Measured at the default dt: vx 5e-6, x 5e-4 relative; a 4 ms step gives x 4e-3.
+    assert results[0].vx == pytest.approx(results[1].vx, rel=1e-4)
+    assert results[0].x == pytest.approx(results[1].x, rel=2e-3)
+
+
+def test_dt_convergence_steered():
+    """Lateral dynamics and the stiff front path: 1 ms against 0.25 ms, +8-count cruise."""
+    results = []
+    for dt in (0.001, 0.00025):
+        p = load_vehicle(physics_dt=dt)
+        results.append(_cruise(p, 2.0, p.init_steer + 8, int(round(4.0 / dt))).state)
+    # Measured: yaw rate agrees to 1e-12, y to 7e-4 relative (a 4 ms step gives 3e-3).
+    assert results[0].yaw_rate == pytest.approx(results[1].yaw_rate, rel=1e-4)
+    assert results[0].y == pytest.approx(results[1].y, rel=2e-3)
+    assert results[0].vx == pytest.approx(results[1].vx, rel=1e-4)
 
 
 def test_standstill_at_full_lock_does_not_drift():
