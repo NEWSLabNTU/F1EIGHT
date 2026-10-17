@@ -62,3 +62,16 @@ coss-park:
         "just coss logging-sim" \
         "sleep 40 && ros2 bag play data/rosbags/outdoor_20251226_153115/ --clock -l -r 1.0" \
         "sleep 45 && ./scripts/rosbag/record_localization.sh"
+
+# The web UI address. Override for a shared host: RC_SIM_WEB_ADDR=127.0.0.1:8092 just sim rc
+web_addr := env_var_or_default('RC_SIM_WEB_ADDR', '0.0.0.0:8081')
+
+#   just sim make-track                                  2,6,11 m/s, 3 s holds, a 2.5, d 2.5
+#   just sim make-track --speeds 2,6,11 --hold 3 --accel 2.5 --decel 2.5 --out tmp/rc_sim/tracks/mine
+# Prints the segment table; refuses a profile the model cannot drive.
+# Size and write a straight track (lanelet2 map, point cloud, track.yaml) from a speed profile
+[positional-arguments]
+make-track *ARGS:
+    #!/usr/bin/env bash
+    source scripts/env.sh
+    exec ros2 run autosdv_rc_sim rc_sim_make_track "$@"
