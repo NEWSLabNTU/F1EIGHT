@@ -1,0 +1,89 @@
+# The RC simulator's vehicle model. Design: docs/design/rc-sim-design.md.
+#
+# Every value says where it comes from, so the file says how far to trust it
+# and what to measure next:
+#   measured    on the car
+#   config      copied from an AutoSDV file (`from: pkg/path:key`, times `scale`);
+#               test_params.py fails if the two drift
+#   literature  a published value for a similar car
+#   guess       an informed guess
+#   mock        a stand-in until someone reads it off the car
+#   numerical   a solver setting, not physics
+vehicle:
+  # --- chassis
+  mass:               {value: 3.5,    source: guess,      note: "to be weighed"}
+  yaw_inertia:        {value: 0.045,  source: literature, note: "F1TENTH Traxxas: 0.0471 kg m^2"}
+  wheel_base:         {value: 0.319,  source: config, from: "autosdv_vehicle_description/config/vehicle_info.param.yaml:wheel_base"}
+  lf:                 {value: 0.15,   source: literature, note: "CoM to front axle; lr = wheel_base - lf = 0.169. Measure: balance point"}
+  cg_height:          {value: 0.07,   source: literature}
+  wheel_radius:       {value: 0.0525, source: config, from: "autosdv_vehicle_interface/params/velocity_report.yaml:wheel_diameter", scale: 0.005, note: "10.5 cm diameter; vehicle_info says 0.052"}
+  wheel_axle_inertia: {value: 1.4e-4, source: guess,      note: "per axle: two 50 g wheels, 0.5 m r^2 each"}
+  rotor_inertia:      {value: 1.0e-6, source: literature, note: "540-size brushless rotor; reflected x G^2 onto the rear axle"}
+  # --- tyres
+  mu:                 {value: 0.8,    source: guess,      note: "depends on the floor; tilt or skidpad test (just sim fit-coastdown, fit.skidpad_mu)"}
+  pacejka_c:          {value: 1.5,    source: literature, note: "shape: sliding force about 0.7-0.8 of the peak"}
+  pacejka_e:          {value: 0.1,    source: literature}
+  cornering_stiffness_front: {value: 94.0,  source: literature, note: "F1TENTH, N/rad per axle"}
+  cornering_stiffness_rear:  {value: 101.0, source: literature, note: "F1TENTH, N/rad per axle"}
+  longitudinal_stiffness_per_load: {value: 15.0, source: guess, note: "C_kappa / Fz"}
+  # --- resistances
+  rolling_resistance: {value: 0.05,   source: guess,      note: "C_r0; soft RC tyres on a hard floor are 0.03-0.06; refit from a coast-down. Raised from 0.02: it is also the margin that lets every variant follow the 2.5 m/s^2 braking ramp"}
+  aero_drag:          {value: 0.0126, source: guess,      note: "0.5 rho Cd A = 0.5 * 1.2 * 0.6 * 0.035 m^2 [N/(m/s)^2]"}
+  drivetrain_coulomb: {value: 0.07,   source: guess,      note: "rear axle [N m]; about G Kt I0 with a no-load current of 1.5 A"}
+  drivetrain_breakaway: {value: 0.25, source: guess,      note: "rear axle static friction incl. motor cogging [N m]"}
+  drivetrain_viscous: {value: 1.0e-4, source: guess,      note: "rear axle [N m s/rad]"}
+  front_bearing_coulomb: {value: 0.02,   source: guess,   note: "front axle [N m]; raised from 0.002 with the rolling resistance"}
+  # --- motor and battery
+  motor_kv:           {value: 3000.0, source: mock,       note: "typical 1/10 brushless; Kt = Ke = 60/(2 pi Kv)"}
+  motor_resistance:   {value: 0.03,   source: mock,       note: "winding + ESC [ohm]"}
+  gear_ratio:         {value: 14.5,   source: mock,       note: "pinion/spur x differential; no-load top speed 12.6 m/s"}
+  battery_voltage:    {value: 11.1,   source: guess,      note: "3S LiPo nominal"}
+  battery_resistance: {value: 0.03,   source: guess,      note: "internal [ohm]"}
+  # --- ESC
+  pwm_freq:           {value: 60.0,   source: config, from: "autosdv_vehicle_interface/params/actuator.yaml:pwm_freq"}
+  init_pwm:           {value: 370,    source: config, from: "autosdv_vehicle_interface/params/actuator.yaml:init_pwm"}
+  min_pwm:            {value: 360,    source: config, from: "autosdv_vehicle_interface/params/actuator.yaml:min_pwm", note: "the ESC's full-brake / full-reverse endpoint (actuator.yaml: 'drives backward at max speed')"}
+  max_pwm:            {value: 470,    source: config, from: "autosdv_vehicle_interface/params/actuator.yaml:max_pwm", note: "full forward"}
+  brake_pwm:          {value: 340,    source: config, from: "autosdv_vehicle_interface/params/actuator.yaml:brake_pwm", note: "below min_pwm: full brake"}
+  esc_deadband:       {value: 5,      source: guess,      note: "counts either side of init_pwm"}
+  throttle_ramp:      {value: 10.0,   source: guess,      note: "largest rise of |duty| per second ('punch')"}
+  drag_brake:         {value: 0.0,    source: guess,      note: "dynamic-braking fraction at neutral"}
+  brake_torque_max:   {value: 0.40,   source: guess,      note: "rear axle at full brake [N m]: with the road load, the rear tyre force stays 10 % under the nominal rear grip at mu 0.8 at 1, 6 and 11 m/s (test_drivetrain.py)"}
+  esc_current_limit:  {value: 120.0,  source: guess,      note: "motoring current limit [A]; typical 1/10 sensorless ESC. The motor would draw 185 A at stall"}
+  esc_regen_current_limit: {value: 8.65, source: guess,   note: "regeneration limit [A]: forward duty below the back-EMF brakes the car, as a synchronous-rectifying ESC does. 0.399 N m at the rear axle, no more than brake_torque_max, so motor braking loads the rear tyres no more than the ESC brake (test_drivetrain.py). Refit from car data"}
+  reverse_scale:      {value: 0.5,    source: guess}
+  rearm_time:         {value: 0.1,    source: guess,      note: "neutral at standstill before reverse is armed [s]"}
+  # --- steering servo
+  init_steer:         {value: 489,    source: config, from: "autosdv_vehicle_interface/params/actuator.yaml:init_steer"}
+  min_steer:          {value: 439,    source: config, from: "autosdv_vehicle_interface/params/actuator.yaml:min_steer"}
+  max_steer:          {value: 539,    source: config, from: "autosdv_vehicle_interface/params/actuator.yaml:max_steer"}
+  tire_angle_to_steer_ratio: {value: -143.0, source: config, from: "autosdv_rc_sim/config/actuator_rc_sim.param.yaml:tire_angle_to_steer_ratio"}
+  max_steer_angle:    {value: 0.349,  source: config, from: "autosdv_vehicle_description/config/vehicle_info.param.yaml:max_steer_angle"}
+  servo_dead_time:    {value: 0.02,   source: guess,      note: "[s]"}
+  servo_rate_limit:   {value: 5.0,    source: guess,      note: "tyre angle [rad/s]"}
+  # --- sensors
+  markers_per_rotation: {value: 12,   source: config, from: "autosdv_vehicle_interface/params/velocity_report.yaml:markers_per_rotation", note: "on a rear (driven) wheel: docs/guides/lab2-waypoint-stack.md"}
+  gyro_noise_std:     {value: 0.002,  source: guess}
+  accel_noise_std:    {value: 0.02,   source: guess}
+  gyro_bias_z:        {value: 0.0,    source: guess}
+  # --- numerics
+  physics_dt:         {value: 0.001,  source: numerical}
+  v_switch:           {value: 0.3,    source: numerical,  note: "STD -> kinematic blend centre [m/s]"}
+  v_blend:            {value: 0.05,   source: numerical,  note: "blend width [m/s]"}
+  v_min:              {value: 0.15,   source: numerical,  note: "slip denominator floor = v_switch / 2 (CommonRoad)"}
+  stick_band:         {value: 2.0,    source: numerical,  note: "Karnopp band [rad/s]: above the largest friction step per dt (0.49 N m / 3.5e-4 * 1 ms = 1.4)"}
+
+# Model variants for grading: coefficients tuned to one exact model lose marks.
+# Each must reach 11.4 m/s, launch at 2.5 m/s^2 and brake at 2.5 m/s^2 (test_drivetrain.py), and
+# the ESC's full brake must stay under its rear grip: light and low_mu are as light and as slippery
+# as the brake torque (sized to the nominal grip) allows, and deadband_wide as wide as the
+# resume-from-rest check allows.
+variants:
+  nominal: {}
+  heavy: {mass: 3.6}
+  light: {mass: 3.3}
+  low_mu: {mu: 0.75}
+  high_mu: {mu: 1.0}
+  low_batt: {battery_voltage: 10.8}
+  kv_low: {motor_kv: 2850.0}
+  deadband_wide: {esc_deadband: 7}
