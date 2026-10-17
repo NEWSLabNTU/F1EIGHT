@@ -9,8 +9,8 @@ Starts `play_launch launch autosdv_rc_sim rc_sim.launch.xml rviz:=false` in its 
 session (output in tmp/rc_sim_smoke_stack.log), waits until sim_pose_init has
 initialized the localization, sets the route to the track's goal (the stop line),
 waits until autonomous mode is available, engages, and watches /rc_sim/state.
-PASS: the car exceeded 1.5 m/s, then came to rest (|v| < 0.05 m/s for 2 s of
-simulated time) in the lane (|y| < 0.5 m) before the end of the run-out. Everything
+PASS: the car exceeded 9 m/s (the lab profile peaks at 11), then came to rest
+(|v| < 0.05 m/s for 2 s of simulated time) within 0.5 m of the stop line, in the lane (|y| < 0.5 m). Everything
 is stopped by process group: SIGINT, SIGTERM, SIGKILL. Refuses ROS_DOMAIN_ID 0.
 """
 import argparse
@@ -76,6 +76,9 @@ def drive(track, timeout, on_ready, stack):
 
     def call(client, request, what):
         while time.monotonic() < deadline:
+            if stack.poll() is not None:
+                print(f'FAIL  the launch exited ({stack.returncode}) during {what}')
+                return False
             if client.wait_for_service(timeout_sec=2.0):
                 future = client.call_async(request)
                 rclpy.spin_until_future_complete(node, future, timeout_sec=10.0)
@@ -108,12 +111,15 @@ def drive(track, timeout, on_ready, stack):
         vmax, still_since, last = 0.0, None, None
         while time.monotonic() < deadline:
             rclpy.spin_once(node, timeout_sec=0.1)
+            if stack.poll() is not None:
+                print(f'FAIL  the launch exited ({stack.returncode}) while driving')
+                return 1
             if seen['state'] is None:
                 continue
             last = seen['state']
             t, vx = last[0], last[4]
             vmax = max(vmax, vx)
-            if vmax > 1.5 and abs(vx) < 0.05:
+            if vmax >= 9.0 and abs(vx) < 0.05:
                 still_since = t if still_since is None else still_since
                 if t - still_since >= 2.0:
                     break
@@ -123,7 +129,8 @@ def drive(track, timeout, on_ready, stack):
             print('FAIL  no /rc_sim/state')
             return 1
         x, y = last[1], last[2]
-        ok = vmax > 1.5 and still_since is not None and x <= track['length'] and abs(y) < 0.5
+        ok = (vmax >= 9.0 and still_since is not None and abs(x - track['stop_line_s']) <= 0.5
+              and abs(y) < 0.5)
         print(f"{'PASS' if ok else 'FAIL'}  vmax {vmax:.2f} m/s, at rest at x {x:.2f} m "
               f"(stop line {track['stop_line_s']:.2f}), y {y:+.2f} m")
         return 0 if ok else 1

@@ -13,7 +13,9 @@
   planning_simulator.launch.xml cannot drop simple_planning_simulator (only
   scenario_simulation does), so this file composes autoware.launch.xml with
   tier4_simulator_component.launch.xml and launch_dummy_vehicle:=false.
-  Results here are not graded: separate processes on a simulated clock still race
+  What it reproduces: the lab's 11 m/s straight (planning caps raised from the car's
+  4.17 m/s / 1.0 m/s^2 to 11.5 / 2.5 for this run only; the car's launch is untouched),
+  Autoware's own velocity planner deciding the profile. Results here are not graded: separate processes on a simulated clock still race
   within a tick. `just sim grade` is the grade.
 -->
 <launch>
@@ -42,6 +44,7 @@
     <arg name="launch_sensing" value="false"/>
     <arg name="launch_localization" value="false"/>
     <arg name="launch_perception" value="false"/>
+    <arg name="launch_planning" value="false"/>   <!-- composed below, with the raised caps -->
     <arg name="launch_vehicle_interface" value="false"/>
     <arg name="system_run_mode" value="planning_simulation"/>
     <arg name="launch_system_monitor" value="false"/>
@@ -52,6 +55,19 @@
     <arg name="use_sim_time" value="true"/>
     <arg name="rviz" value="$(var rviz)"/>
   </include>
+
+  <!-- planning: upstream's component with common.param.yaml swapped (max_vel 4.17 -> 11.5, acc 1.0 -> 2.5) -->
+  <include file="$(find-pkg-share autosdv_rc_sim)/launch/rc_sim_planning_component.launch.xml">
+    <arg name="module_preset" value="default"/>
+    <arg name="enable_all_modules_auto_mode" value="false"/>
+    <arg name="is_simulation" value="true"/>
+    <arg name="use_sim_time" value="true"/>
+    <arg name="vehicle_model" value="$(var vehicle_model)"/>
+  </include>
+  <node pkg="topic_tools" exec="relay" name="trajectory_relay">
+    <param name="input_topic" value="/planning/trajectory"/>
+    <param name="output_topic" value="/planning/scenario_planning/trajectory"/>
+  </node>
 
   <!-- pose initializer (localization_sim_mode api) and dummy perception; no vehicle simulator -->
   <include file="$(find-pkg-share autoware_launch)/launch/components/tier4_simulator_component.launch.xml">

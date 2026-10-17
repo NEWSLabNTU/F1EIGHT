@@ -76,6 +76,7 @@ class RcSimPlant(Node):
         self.gyro_offset = tuple(float(gp(f'angular_velocity_offset_{a}')) for a in 'xyz')
         self.base_frame, self.map_frame, self.imu_frame = gp('base_frame'), gp('map_frame'), gp('imu_frame')
         self.dt = self.p.physics_dt
+        self.dt_ns = int(round(self.dt * 1e9))
         self.steps_clock = max(1, int(round(gp('clock_period') / self.dt)))
         self.steps_imu = max(1, int(round(1.0 / gp('imu_rate') / self.dt)))
         self.steps_odom = max(1, int(round(1.0 / gp('odom_rate') / self.dt)))
@@ -131,6 +132,11 @@ class RcSimPlant(Node):
                 pose, self.pending_pose = self.pending_pose, None
             if pose is not None:
                 self.plant.reset_pose(*pose)
+            # /clock first, at the batch's END time: no IMU, odometry or TF message of this
+            # batch is stamped later than the clock the other nodes have already seen.
+            clock = Clock()
+            clock.clock = stamp(self.plant.t_ns + self.steps_clock * self.dt_ns)
+            self.pub_clock.publish(clock)
             for _ in range(self.steps_clock):
                 edges.extend(self.plant.step(self.dt, motor, steer).edges)
                 k += 1
@@ -141,9 +147,6 @@ class RcSimPlant(Node):
             if edges:
                 self.pub_edges.publish(Int64MultiArray(data=edges))
                 edges = []
-            clock = Clock()
-            clock.clock = stamp(self.plant.t_ns)
-            self.pub_clock.publish(clock)
             next_wall += self.wall_per_batch
             delay = next_wall - time.monotonic()
             if delay > 0.0:

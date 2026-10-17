@@ -99,9 +99,17 @@ interface runs unchanged with `hardware:=sim`: the actuator's PWM goes to the
 plant instead of the PCA9685, and `velocity_report` times the plant's hall
 edges instead of a GPIO pin. The plant publishes `/clock`; every other node
 uses simulated time. In RViz, put a 2D Goal Pose at the stop line and press
-Engage. Speeds here come from Autoware's velocity planner, and separate
-processes on a simulated clock race within a tick, so results are close to,
-but not exactly, the graded run.
+Engage. Autoware's velocity planner decides the speeds, as on the car, but
+with the planning caps raised for this run only: `max_vel` 4.17 -> 11.5 m/s and
+acceleration/deceleration 1.0 -> 2.5 m/s^2 (jerk 1.0 -> 5.0), from the package's
+`config/common.param.yaml`, a copy of upstream's `common.param.yaml`.
+`rc_sim.launch.xml` composes planning through `rc_sim_planning_component.launch.xml`
+(upstream's component with that one path changed), because `autoware.launch.xml`
+exposes no argument for it; the car's own launch keeps 4.17 and 1.0. So the run
+reproduces the lab's 11 m/s straight (the smoke test requires a peak of at least
+9 m/s and a stop within 0.5 m of the stop line). Separate processes on a
+simulated clock race within a tick, so results are close to, but not exactly,
+the graded run.
 
 `just sim make-track --speeds 2,6,11 --hold 3 --accel 2.5 --decel 2.5` prints
 the segment table and writes a track for `track:=`.
