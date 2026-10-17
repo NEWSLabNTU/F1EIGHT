@@ -122,7 +122,7 @@ class VehicleParams:
         return self.longitudinal_stiffness_per_load / (self.pacejka_c * self.mu)
 
 
-_INT_FIELDS = {f.name for f in fields(VehicleParams) if f.type is int}
+_INT_FIELDS = {f.name for f in fields(VehicleParams) if f.type in (int, 'int')}  # 'int' under postponed annotations
 _NAMES = [f.name for f in fields(VehicleParams)]
 
 

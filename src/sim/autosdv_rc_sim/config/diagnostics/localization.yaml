@@ -1,5 +1,5 @@
 # COPY of autoware_launch config/system/diagnostics/localization.yaml (Autoware 1.5.0) with ONE change: timeout: 3.0 on /autoware/localization/state
-# Re-diff against upstream after an Autoware upgrade. See rc_sim_diagnostics.yaml.
+# Re-diff against upstream after an Autoware upgrade (test_diagnostics_graph.py fails until you do). See rc_sim_diagnostics.yaml.
 units:
   - path: /autoware/localization
     type: and

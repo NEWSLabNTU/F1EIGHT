@@ -99,7 +99,8 @@ def worst(report):
 
 def main(argv=None) -> int:
     ap = argparse.ArgumentParser()
-    ap.add_argument('--jobs', type=int, default=multiprocessing.cpu_count())
+    ap.add_argument('--jobs', type=int, default=min(4, multiprocessing.cpu_count()),
+                    help='worker processes (default min(4, CPUs): the host is shared)')
     args = ap.parse_args(argv)
     with multiprocessing.get_context('spawn').Pool(args.jobs) as pool:
         scored = pool.map(score, list(candidates()))

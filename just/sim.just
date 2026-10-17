@@ -99,7 +99,12 @@ rc *ARGS:
     source scripts/env.sh
     args=()
     for a in "$@"; do
-        v="${a#*:=}"; v="${v/#\~/$HOME}"   # no shell expands a ~ after name:=
+        v="${a#*:=}"   # no shell expands a ~ after name:=, so do it here: ~, ~/x, ~user/x
+        case "$v" in
+            "~" | "~/"*) v="$HOME${v#\~}" ;;
+            "~"*) u="${v%%/*}"; u="${u#\~}"; h=$(getent passwd "$u" | cut -d: -f6)
+                  [ -z "$h" ] || v="$h${v#\~"$u"}" ;;
+        esac
         case "$a" in
             submission:=*)
                 p=$(ros2 run autosdv_rc_sim rc_sim_grade "$v" --print-params) || exit 2

@@ -69,6 +69,7 @@ def test_publish_order_edges_before_the_clock_that_covers_them(ros, monkeypatch)
     older invariant: never stamped later than the /clock already published.
     """
     log = []     # ('clock', t) / ('edges', [stamps]) / ('data', t), in publication order
+    data_topics = set()
 
     class Recorder:
         def __init__(self, inner, kind):
@@ -80,15 +81,19 @@ def test_publish_order_edges_before_the_clock_that_covers_them(ros, monkeypatch)
             elif self.kind == 'edges':
                 log.append(('edges', list(msg.data)))
             else:
-                log.append(('data', msg.header.stamp.sec * 10**9 + msg.header.stamp.nanosec))
+                headers = [t.header for t in msg.transforms] if self.kind == 'tf' else [msg.header]
+                for h in headers:
+                    log.append(('data', h.stamp.sec * 10**9 + h.stamp.nanosec))
             self.inner.publish(msg)
 
     real = RcSimPlant.create_publisher
 
     def spy(self, msg_type, topic, *args, **kwargs):
         pub = real(self, msg_type, topic, *args, **kwargs)
-        kind = {'/clock': 'clock', EDGE_TOPIC: 'edges',
-                '/localization/kinematic_state': 'data'}.get(topic)
+        kind = {'/clock': 'clock', EDGE_TOPIC: 'edges', '/tf': 'tf'}.get(topic)
+        if kind is None and hasattr(msg_type(), 'header'):   # every stamped message
+            kind = 'data'
+            data_topics.add(topic)
         return Recorder(pub, kind) if kind else pub
 
     monkeypatch.setattr(RcSimPlant, 'create_publisher', spy)
@@ -120,3 +125,24 @@ def test_publish_order_edges_before_the_clock_that_covers_them(ros, monkeypatch)
             latest = max((ct for ci, ct in clocks if ci < i), default=0)
             assert v <= latest, 'data stamped later than the /clock already published'
     assert n_edges > 20
+    assert {'/localization/kinematic_state', '/localization/acceleration'} <= data_topics
+    assert len(data_topics) >= 3, data_topics   # IMU too, whatever its topic parameter says
+
+
+def test_why_the_order_matters_the_estimators_gap_cap():
+    """velocity_report's gap cap: a /clock ahead of the edges it covers clips the speed.
+
+    The plant publishes in batches of 5 ms. At 11 m/s an edge arrives every 2.5 ms; if the
+    receiver's clock already reads the end of the batch when it computes, the time since the
+    last edge it knows of is up to 5 ms and the estimate is capped at 1.5 * 0.0275 / 0.005 =
+    8.25 m/s, below the 11 m/s it is driving (Task 18c).
+    """
+    from autosdv_vehicle_interface.velocity_estimator import VelocityEstimator
+    spacing, v = 0.0275, 11.0
+    period = round(spacing / v * 1e9)
+    est = VelocityEstimator(spacing)
+    for k in range(200):
+        est.on_edge(k * period)
+    last = 199 * period
+    assert est.report(last) == pytest.approx(v, rel=1e-6)
+    assert est.report(last + 5_000_000) == pytest.approx(1.5 * spacing / 0.005)   # 8.25 m/s

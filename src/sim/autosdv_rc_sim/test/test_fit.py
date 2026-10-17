@@ -40,6 +40,14 @@ def test_bad_input_raises():
         fit_coastdown([0, 1, 1, 2, 3, 4, 5], [6, 5, 4, 3, 2, 1, 1], 1.0)
     with pytest.raises(ValueError, match='cannot separate'):
         fit_coastdown(list(range(10)), [3.0] * 10, 1.0)
+    noisy = [3.0 + 0.01 * ((k * 7) % 5 - 2) for k in range(40)]
+    with pytest.raises(ValueError, match='span 0.04 m/s'):
+        fit_coastdown([0.05 * k for k in range(40)], noisy, 1.0)
+    for bad in (float('nan'), float('inf')):
+        with pytest.raises(ValueError, match='finite'):
+            fit_coastdown(list(range(10)), [9, 8, 7, bad, 5, 4, 3, 2, 1.5, 1.2], 1.0)
+    with pytest.raises(ValueError, match='finite'):
+        fit_coastdown([0, 1, float('nan'), 3, 4, 5, 6], [7, 6, 5, 4, 3, 2, 1], 1.0)
 
 
 def test_v_min_drops_standstill():

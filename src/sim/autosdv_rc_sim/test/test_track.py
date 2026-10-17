@@ -40,6 +40,9 @@ def test_position_based_target():
     (dict(speeds=(2.0, 12.5)), 'hold'),
     (dict(speeds=(2.0, 6.0), accel=4.0), 'grip'),
     (dict(speeds=(2.0,), hold=0.0), 'positive'),
+    (dict(speeds=(2.0, float('inf'))), 'finite'),
+    (dict(speeds=(2.0,), hold=float('nan')), 'finite'),
+    (dict(speeds=(2.0,), runout=float('inf')), 'finite'),
 ])
 def test_refusals(kwargs, match):
     with pytest.raises(ProfileError, match=match):

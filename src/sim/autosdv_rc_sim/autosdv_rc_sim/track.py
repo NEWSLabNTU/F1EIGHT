@@ -18,6 +18,7 @@ it).
 """
 import argparse
 from dataclasses import dataclass
+import math
 from pathlib import Path
 import sys
 from typing import List, Tuple
@@ -114,6 +115,8 @@ def make_profile(speeds, hold: float = 3.0, accel: float = 2.5, decel: float = 2
     speeds = tuple(float(v) for v in speeds)
     if not speeds:
         raise ProfileError('need at least one speed')
+    if not all(math.isfinite(x) for x in speeds + (hold, accel, decel, runout, engage_velocity)):
+        raise ProfileError('speeds, hold, accel, decel, runout and engage_velocity must be finite')
     previous = 0.0
     for v in speeds:
         if v <= previous:

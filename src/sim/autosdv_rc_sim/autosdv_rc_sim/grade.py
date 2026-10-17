@@ -336,7 +336,7 @@ def write_violations(report: dict, profile: TrackProfile, variant: str, path,
 
 
 def view(trace_csv, track_dir, violations) -> int:
-    """Replay a trace in Autoware's RViz until Ctrl-C; stops the stack by process group."""
+    """Replay a trace in RViz until Ctrl-C, SIGTERM or SIGHUP; stops the stack by process group."""
     cmd = ['play_launch', 'launch', '--web-addr', os.environ.get('RC_SIM_WEB_ADDR', '127.0.0.1:8094'),
            'autosdv_rc_sim', 'rc_sim_replay.launch.xml', f'trace:={Path(trace_csv).resolve()}',
            f'track_dir:={Path(track_dir).resolve()}', f'violations:={Path(violations).resolve()}']
@@ -346,6 +346,10 @@ def view(trace_csv, track_dir, violations) -> int:
         print('error: play_launch not found on PATH (see CLAUDE.md, ROS 2 Launch Testing)',
               file=sys.stderr)
         return 2
+    def _stop(signum, frame):
+        raise KeyboardInterrupt   # SIGTERM or a closed terminal stops the stack like Ctrl-C
+
+    previous = {sig: signal.signal(sig, _stop) for sig in (signal.SIGTERM, signal.SIGHUP)}
     try:
         return proc.wait()
     except KeyboardInterrupt:
@@ -364,6 +368,8 @@ def view(trace_csv, track_dir, violations) -> int:
             os.killpg(proc.pid, signal.SIGKILL)   # nothing the group left behind survives
         except ProcessLookupError:
             pass
+        for sig, handler in previous.items():
+            signal.signal(sig, handler)
 
 
 def main(argv=None) -> int:

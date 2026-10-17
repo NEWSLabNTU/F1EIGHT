@@ -162,3 +162,42 @@ def test_view_without_play_launch(tmp_path, monkeypatch, capsys):
     monkeypatch.setenv('PATH', str(tmp_path))
     assert grade.view('t.csv', '.', 'v.yaml') == 2
     assert 'play_launch not found' in capsys.readouterr().err
+
+
+@pytest.mark.parametrize('sig', ['SIGTERM', 'SIGHUP'])
+def test_view_stops_its_stack_when_grade_is_signalled(tmp_path, sig):
+    import signal
+    import subprocess
+    import sys
+    fake = tmp_path / 'play_launch'
+    child = tmp_path / 'child.pid'
+    # a launcher with a child of its own; without the handler grade dies and leaves both running
+    fake.write_text(f"#!/bin/sh\nsleep 300 &\necho $! > {child}\nwait\n")
+    fake.chmod(0o755)
+    env = dict(os.environ, PATH=f"{tmp_path}{os.pathsep}{os.environ['PATH']}",
+               PYTHONPATH=os.pathsep.join(sys.path))   # the checkout conftest put first
+    code = 'import sys; from autosdv_rc_sim import grade; sys.exit(grade.view("t.csv", ".", "v.yaml"))'
+    proc = subprocess.Popen([sys.executable, '-c', code], env=env)
+    try:
+        deadline = time.monotonic() + 10.0
+        while not (child.exists() and child.read_text().strip()):
+            assert proc.poll() is None and time.monotonic() < deadline, 'fake play_launch never started'
+            time.sleep(0.05)
+        pid = int(child.read_text())
+        proc.send_signal(getattr(signal, sig))
+        assert proc.wait(timeout=60.0) == 0
+        deadline = time.monotonic() + 5.0
+        while True:
+            try:
+                os.kill(pid, 0)
+            except ProcessLookupError:
+                break
+            assert time.monotonic() < deadline, f'{sig} left the replay stack running'
+            time.sleep(0.05)
+    finally:
+        proc.kill()
+        if child.exists() and child.read_text().strip():
+            try:
+                os.killpg(os.getpgid(int(child.read_text())), signal.SIGKILL)  # a failed run's stack
+            except ProcessLookupError:
+                pass

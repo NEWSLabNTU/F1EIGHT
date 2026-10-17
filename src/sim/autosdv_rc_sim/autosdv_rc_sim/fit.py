@@ -10,20 +10,26 @@ resistance plus the drivetrain's Coulomb drag at the ground, a1 is the
 drivetrain's viscous drag at the ground (model: drivetrain_viscous / r^2), a2 is
 the aerodynamic coefficient. rolling_resistance is (a0 - Coulomb/r) / (m g),
 which subtracts the model's Coulomb term (the only model value subtracted).
-Samples below --v-min, and those next to one, are dropped. For a usable fit coast from top speed to
-below 1 m/s on the flat, in both directions averaged, and smooth the 20 Hz hall
-speed (low-pass, or fit over windows of at least 0.2 s) before differencing.
+Samples below --v-min, and those next to one, are dropped; the samples left must
+span at least MIN_SPAN m/s, or the three terms cannot be told apart. For a
+usable fit coast from top speed to below 1 m/s on the flat, in both directions
+averaged, and smooth the 20 Hz hall speed (low-pass, or fit over windows of at
+least 0.2 s) before differencing.
 Skidpad: on a circle of radius R at the speed where the car starts to slide,
 mu = v^2 / (g R). The motor and gear: `just coach fit-motor`.
 """
 import argparse
 import csv
+import math
 import sys
 from typing import Sequence, Tuple
 
 from autosdv_rc_sim.params import GRAVITY, load_vehicle
 
 MIN_SAMPLES = 5
+# Below this speed span a near-constant, noisy trace still solves, but the three terms
+# trade against each other freely and the fit means nothing.
+MIN_SPAN = 1.0  # m/s
 
 
 def _solve3(a, b):
@@ -48,9 +54,15 @@ def _solve3(a, b):
 
 def fit_coastdown(t: Sequence[float], v: Sequence[float], effective_mass: float,
                   v_min: float = 0.5) -> Tuple[float, float, float]:
-    """Return (a0, a1, a2) of m_eff (-dv/dt) = a0 + a1 v + a2 v^2. Raises ValueError on bad data."""
+    """Return (a0, a1, a2) of m_eff (-dv/dt) = a0 + a1 v + a2 v^2.
+
+    Raises ValueError on bad data.
+    """
     if len(t) != len(v):
         raise ValueError('t and v have different lengths')
+    for i in range(len(t)):
+        if not (math.isfinite(t[i]) and math.isfinite(v[i])):
+            raise ValueError(f't and v must be finite (row {i + 1})')
     for i in range(1, len(t)):
         if not t[i] > t[i - 1]:
             raise ValueError(f'time must be strictly increasing (row {i + 1})')
@@ -63,6 +75,10 @@ def fit_coastdown(t: Sequence[float], v: Sequence[float], effective_mass: float,
     if len(rows) < MIN_SAMPLES:
         raise ValueError(f'only {len(rows)} usable samples with v >= {v_min} m/s; '
                          f'need at least {MIN_SAMPLES}')
+    span = max(r[0] for r in rows) - min(r[0] for r in rows)
+    if span < MIN_SPAN:
+        raise ValueError(f'coast-down data cannot separate a0, a1 and a2: the usable samples '
+                         f'span {span:.2f} m/s, need at least {MIN_SPAN} m/s')
     # normal equations for the basis 1, v, v^2
     pw = [0.0] * 5
     rhs = [0.0, 0.0, 0.0]
@@ -85,7 +101,8 @@ def skidpad_mu(radius: float, speed: float) -> float:
 def _read_csv(path):
     with open(path, newline='') as f:
         reader = csv.DictReader(f)
-        if reader.fieldnames is None or 't' not in reader.fieldnames or 'v' not in reader.fieldnames:
+        names = reader.fieldnames or ()
+        if 't' not in names or 'v' not in names:
             raise ValueError(f'{path}: the CSV needs columns t and v')
         out = []
         for n, r in enumerate(reader, start=2):

@@ -16,6 +16,7 @@ with no MRM and no loss of autonomous availability after the engage (Task 18b). 
 is stopped by process group: SIGINT, SIGTERM, SIGKILL. Refuses ROS_DOMAIN_ID 0.
 """
 import argparse
+import collections
 import math
 import os
 from pathlib import Path
@@ -27,6 +28,7 @@ import time
 import yaml
 
 REPO = Path(__file__).resolve().parents[3]
+DIAG_LEVELS = {0: 'OK', 1: 'WARN', 2: 'ERROR', 3: 'STALE'}
 
 def reference_params():
     """The grader's reference coefficients, read from the package so they cannot drift."""
@@ -66,13 +68,15 @@ def drive(track, timeout, on_ready, stack):
     from rclpy.node import Node
     from rclpy.qos import DurabilityPolicy, QoSProfile
     from std_msgs.msg import Float64MultiArray
-    from tier4_system_msgs.msg import OperationModeAvailability
+    from tier4_system_msgs.msg import DiagGraphStatus, DiagGraphStruct, OperationModeAvailability
 
     rclpy.init()
     node = Node('rc_sim_smoke')
     seen = {'loc': None, 'op': None, 'state': None}
     # Task 18b: from the engage on, any MRM or loss of autonomous availability is a failure
-    flaps = {'armed': False, 'mrm': 0, 'unavailable': 0, 'last_mrm': None}
+    flaps = {'armed': False, 'mrm': 0, 'unavailable': 0, 'last_mrm': None,
+             'culprits': collections.Counter()}
+    graph = {'names': None, 'status': None}   # the diagnostic graph, to name what went bad
     latched = QoSProfile(depth=1, durability=DurabilityPolicy.TRANSIENT_LOCAL)
     node.create_subscription(LocalizationInitializationState, '/api/localization/initialization_state',
                              lambda m: seen.__setitem__('loc', m.state), latched)
@@ -85,6 +89,15 @@ def drive(track, timeout, on_ready, stack):
             if x < track['stop_line_s'] - 3.0:   # the route legitimately ends at the goal
                 flaps['unavailable'] += 1
                 flaps.setdefault('first_x', x)
+                flaps['culprits'].update(bad_diags())
+
+    def bad_diags():
+        # leaf diagnostics not OK in the latest graph status, as 'name (LEVEL)'
+        names, status = graph['names'], graph['status']
+        if names is None or status is None or len(names) != len(status.diags):
+            return ['(diagnostic graph not seen)']
+        return [f'{n} ({DIAG_LEVELS.get(d.level, d.level)})'
+                for n, d in zip(names, status.diags) if d.level != 0]
 
     def on_mrm(m):
         if flaps['armed'] and m.state != MrmState.NORMAL:
@@ -95,6 +108,10 @@ def drive(track, timeout, on_ready, stack):
                              lambda m: seen.__setitem__('op', m), latched)
     node.create_subscription(OperationModeAvailability, '/system/operation_mode/availability', on_avail, 10)
     node.create_subscription(MrmState, '/api/fail_safe/mrm_state', on_mrm, latched)
+    node.create_subscription(DiagGraphStruct, '/diagnostics_graph/struct',
+                             lambda m: graph.__setitem__('names', [d.name for d in m.diags]), latched)
+    node.create_subscription(DiagGraphStatus, '/diagnostics_graph/status',
+                             lambda m: graph.__setitem__('status', m), 10)
     node.create_subscription(Float64MultiArray, '/rc_sim/state',
                              lambda m: seen.__setitem__('state', list(m.data)), 10)
     deadline = time.monotonic() + timeout
@@ -176,6 +193,8 @@ def drive(track, timeout, on_ready, stack):
             print(f"FAIL  after engage: {flaps['mrm']} MRM state changes (last {flaps['last_mrm']}), "
                   f"autonomous mode unavailable {flaps['unavailable']} times "
                   f"(first at x {flaps.get('first_x', 0.0):.1f} m)")
+            for name, n in flaps['culprits'].most_common(5):
+                print(f"      not OK at {n} of those: {name}")
         ok = ok and steady
         return 0 if ok else 1
     finally:

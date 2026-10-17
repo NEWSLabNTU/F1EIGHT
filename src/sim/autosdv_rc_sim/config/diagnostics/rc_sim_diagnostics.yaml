@@ -10,7 +10,7 @@
 # EMERGENCY_STOP. Upstream's autoware-carla.yaml also sets 3.0 on
 # localization/state and the MRM delegate (not routing/state), for network latency, not for
 # tick alignment. Whether the wall-clock `just sim planning` flaps was not measured.
-# Re-diff against upstream after an Autoware upgrade.
+# Re-diff against upstream after an Autoware upgrade (test_diagnostics_graph.py fails until you do).
 files:
   - { path: $(find-pkg-share autoware_launch)/config/system/diagnostics/control.yaml }
   - { path: $(find-pkg-share autoware_launch)/config/system/diagnostics/map.yaml }
