@@ -132,3 +132,64 @@ def test_non_utf8_file_exits_2(tmp_path, capsys):
 
 def test_non_string_key_exits_2(tmp_path):
     assert grade.main([str(write(tmp_path, {1: 2}))]) == 2
+
+
+def test_tilde_in_submission_is_expanded(tmp_path, monkeypatch, capsys):
+    home = tmp_path / 'home'
+    write(home, {'kp_speed': 15.0}, 'lab2/B1')
+    monkeypatch.setenv('HOME', str(home))
+    assert grade.load_submission('~/lab2/B1') == {'kp_speed': 15.0}
+    assert grade.main(['~/lab2/B1', '--print-params']) == 0
+    assert capsys.readouterr().out.strip() == '{kp_speed: 15.0}'
+
+
+def test_tilde_in_track_is_expanded(tmp_path, monkeypatch):
+    home = tmp_path / 'home'
+    home.mkdir()
+    monkeypatch.setenv('HOME', str(home))
+    seen = {}
+    monkeypatch.setattr(grade, 'evaluate', lambda *a, **k: seen.update(track=a[4]) or
+                        {'variants': {}, 'score': 0, 'marks': 0, 'points': 15})
+    grade.main([str(write(tmp_path, {'kp_speed': 7.0}, 'sub') / 'sub'), '--track', '~/mine'])
+    assert seen['track'] == str(home / 'mine')
+
+
+@pytest.mark.parametrize('value', [5e-05, 1e-300, 1e300, 1e16, 3.0, 0.0, 15.5, 1e-4])
+def test_flow_mapping_round_trips_floats(value):
+    text = grade.flow_mapping({'kd_speed': value, 'max_pwm_offset': 100, 'x': True})
+    back = yaml.safe_load(text)
+    assert back['kd_speed'] == value and isinstance(back['kd_speed'], float)
+    assert back['max_pwm_offset'] == 100 and back['x'] is True
+
+
+def test_range_message_matches_the_code(tmp_path):
+    with pytest.raises(grade.SubmissionError, match=r'\[1, 100\]'):
+        grade.load_submission(write(tmp_path, {'max_pwm_offset': 101}))
+    assert grade.load_submission(write(tmp_path, {'max_pwm_offset': 1})) == {'max_pwm_offset': 1}
+    with pytest.raises(grade.SubmissionError, match=r'\(0\.0, 1\.0\]'):
+        grade.load_submission(write(tmp_path, {'derivative_filter_alpha': 0.0}))
+
+
+def test_duplicate_keys_are_refused(tmp_path, capsys):
+    (tmp_path / grade.SUBMISSION_FILE).write_text('kp_speed: 7.0\nki_speed: 40.0\nkp_speed: 9.0\n')
+    with pytest.raises(grade.SubmissionError, match="duplicate key 'kp_speed'"):
+        grade.load_submission(tmp_path)
+    assert grade.main([str(tmp_path)]) == 2
+    assert "duplicate key 'kp_speed'" in capsys.readouterr().err
+
+
+def test_partial_run_is_labelled(tmp_path, capsys):
+    grade.main([str(write(tmp_path, {'kp_speed': 7.0}, 'sub') / 'sub'), '--variant', 'low_mu',
+                '--out', str(tmp_path / 'o')])
+    out = capsys.readouterr().out
+    assert 'PARTIAL' in [ln for ln in out.splitlines() if ln.startswith('score')][0]
+
+
+def test_estop_marks_only_on_the_estop_replay(tmp_path):
+    report = {'variants': {'nominal': {'checks': {
+        'hold_rmse_6': {'pass': False, 'value': 0.4, 'limit': 0.3},
+        'estop_no_reverse': {'pass': False, 'value': -1.0, 'limit': -0.05}}}}}
+    n = grade.write_violations(report, PROFILE, 'nominal', tmp_path / 'p.yaml')
+    assert n == 1 and 'hold_rmse_6' in (tmp_path / 'p.yaml').read_text()
+    n = grade.write_violations(report, PROFILE, 'nominal', tmp_path / 'e.yaml', 'estop')
+    assert n == 1 and 'estop_no_reverse' in (tmp_path / 'e.yaml').read_text()

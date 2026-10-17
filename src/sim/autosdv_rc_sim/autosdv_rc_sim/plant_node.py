@@ -141,7 +141,6 @@ class RcSimPlant(Node):
             #    clock_period made the car read at most ~8 m/s (Task 18c).
             #  - The /clock before the data: no message is stamped later than the clock the
             #    other nodes have already seen.
-            self.outbox = []
             for _ in range(self.steps_clock):
                 edges.extend(self.plant.step(self.dt, motor, steer).edges)
                 k += 1

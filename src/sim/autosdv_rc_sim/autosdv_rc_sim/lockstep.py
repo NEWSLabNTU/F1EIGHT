@@ -77,6 +77,21 @@ def load_velocity_report_params() -> dict:
     return read_ros_params(share_file('autosdv_vehicle_interface', 'params/velocity_report.yaml'))
 
 
+def check_timing(vehicle: VehicleParams, actuator_params: dict, velocity_report_params: dict) -> None:
+    """The harness's fixed step and periods must be the ones the car and the plant node use."""
+    problems = []
+    if int(round(vehicle.physics_dt * 1e9)) != DT_NS:
+        problems.append(f'physics_dt {vehicle.physics_dt} s != the harness step {DT_NS} ns')
+    if int(round(1e9 / float(actuator_params['rate']))) != CONTROL_NS:
+        problems.append(f"actuator rate {actuator_params['rate']} Hz != the harness control "
+                        f'period {CONTROL_NS} ns')
+    if int(round(1e9 / float(velocity_report_params['rate']))) != REPORT_NS:
+        problems.append(f"velocity_report rate {velocity_report_params['rate']} Hz != the "
+                        f'harness report period {REPORT_NS} ns')
+    if problems:
+        raise ValueError('lockstep timing disagrees with the car: ' + '; '.join(problems))
+
+
 class _QuietLogger:
     def _drop(self, *args, **kwargs):
         pass
@@ -216,6 +231,7 @@ class Lockstep:
         self.profile = profile
         self.variant = variant
         vr = load_velocity_report_params()
+        check_timing(vehicle, actuator_params, vr)
         # velocity_report's own expression, so the result is bit-identical to the node's
         self.distance_per_marker = vr['wheel_diameter'] / 100.0 * 3.141592653589793 / vr['markers_per_rotation']
 

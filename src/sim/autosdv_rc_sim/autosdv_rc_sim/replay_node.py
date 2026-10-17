@@ -22,9 +22,37 @@ from autosdv_rc_sim.detmath import cos, sin
 from autosdv_rc_sim.lockstep import Trace
 
 
+SPHERE_SIZE = 1.5   # m
+TEXT_SIZE = 1.0     # m
+
+
 def index_at(times, elapsed: float) -> int:
     """The last row whose time is <= elapsed (clamped to the trace)."""
     return max(0, min(len(times) - 1, bisect_right(times, elapsed) - 1))
+
+
+def mark_markers(marks) -> list:
+    """A red sphere and a text label per violation, sized to read on a 115 m straight at 10 px/m.
+
+    Labels at the same place are stacked so they do not overprint.
+    """
+    out, stacked = [], {}
+    for i, m in enumerate(marks):
+        level = stacked.get(m['s'], 0)
+        stacked[m['s']] = level + 1
+        for kind, size, z in ((Marker.SPHERE, SPHERE_SIZE, 0.0),
+                              (Marker.TEXT_VIEW_FACING, TEXT_SIZE,
+                               SPHERE_SIZE + TEXT_SIZE + 1.5 * TEXT_SIZE * level)):
+            mk = Marker()
+            mk.header.frame_id = 'map'
+            mk.ns, mk.id, mk.type = 'rc_sim_violations', 2 * i + (kind == Marker.TEXT_VIEW_FACING), kind
+            mk.pose.position.x, mk.pose.position.z = float(m['s']), z
+            mk.pose.orientation.w = 1.0
+            mk.scale.x = mk.scale.y = mk.scale.z = size
+            mk.color.r, mk.color.a = 1.0, 1.0
+            mk.text = m['text']
+            out.append(mk)
+    return out
 
 
 class Replay(Node):
@@ -57,17 +85,7 @@ class Replay(Node):
         with open(path) as f:
             marks = yaml.safe_load(f) or []
         array = MarkerArray()
-        for i, m in enumerate(marks):
-            for kind, offset in ((Marker.SPHERE, 0.0), (Marker.TEXT_VIEW_FACING, 0.6)):
-                mk = Marker()
-                mk.header.frame_id = 'map'
-                mk.ns, mk.id, mk.type = 'rc_sim_violations', 2 * i + (kind == Marker.TEXT_VIEW_FACING), kind
-                mk.pose.position.x, mk.pose.position.z = float(m['s']), offset
-                mk.pose.orientation.w = 1.0
-                mk.scale.x = mk.scale.y = mk.scale.z = 0.3
-                mk.color.r, mk.color.a = 1.0, 1.0
-                mk.text = m['text']
-                array.markers.append(mk)
+        array.markers.extend(mark_markers(marks))
         self.pub_marks.publish(array)
 
     def tick(self) -> None:

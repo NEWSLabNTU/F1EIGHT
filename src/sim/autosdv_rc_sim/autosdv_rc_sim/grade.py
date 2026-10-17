@@ -11,6 +11,7 @@ coefficients go to the car's AckermannSpeedPID exactly as the actuator's
 speed_controller_params would pass them. See docs/guides/rc-sim.md.
 """
 import argparse
+import collections.abc
 import json
 import math
 import os
@@ -39,7 +40,7 @@ ALLOWED_KEYS = {
     'pwm_output_alpha': float,   # read by the actuator but not applied (docs/guides/rc-sim.md)
     'max_pwm_offset': int,
 }
-# (low, high]: low exclusive for the alphas and the limits, inclusive elsewhere
+# low exclusive for integral_limit and the alphas (see _EXCLUSIVE_LOW), inclusive elsewhere; high inclusive
 RANGES = {
     'kp_speed': (0.0, 1000.0), 'ki_speed': (0.0, 1000.0), 'kd_speed': (0.0, 100.0),
     'integral_limit': (0.0, 1000.0), 'derivative_filter_alpha': (0.0, 1.0),
@@ -73,8 +74,24 @@ class SubmissionError(ValueError):
     """A submission the grader refuses."""
 
 
+class _UniqueKeyLoader(yaml.SafeLoader):
+    """SafeLoader that refuses a key written twice (PyYAML keeps the last, silently)."""
+
+    def construct_mapping(self, node, deep=False):
+        seen = set()
+        for key_node, _ in node.value:
+            key = self.construct_object(key_node, deep=True)
+            if isinstance(key, collections.abc.Hashable):
+                if key in seen:
+                    raise SubmissionError(
+                        f'duplicate key {key!r} (line {key_node.start_mark.line + 1}): '
+                        'write each coefficient once')
+                seen.add(key)
+        return super().construct_mapping(node, deep)
+
+
 def load_submission(path) -> dict:
-    path = Path(path)
+    path = Path(path).expanduser()
     if path.is_dir():
         for candidate in (path / SUBMISSION_FILE, path / 'config' / SUBMISSION_FILE):
             if candidate.is_file():
@@ -83,7 +100,7 @@ def load_submission(path) -> dict:
         else:
             raise SubmissionError(f'{path}: no {SUBMISSION_FILE} (or config/{SUBMISSION_FILE})')
     try:
-        data = yaml.safe_load(path.read_text(encoding='utf-8')) or {}
+        data = yaml.load(path.read_text(encoding='utf-8'), Loader=_UniqueKeyLoader) or {}
     except UnicodeDecodeError as e:
         raise SubmissionError(f'{path}: not a UTF-8 text file ({e.reason})')
     except yaml.YAMLError as e:
@@ -118,13 +135,25 @@ def load_submission(path) -> dict:
             low, high = RANGES[key]
             too_low = value <= low if key in _EXCLUSIVE_LOW else value < low
             if too_low or value > high:
-                raise SubmissionError(f'{key} = {value} is outside its range ({low}, {high}]')
+                bracket = '(' if key in _EXCLUSIVE_LOW else '['
+                raise SubmissionError(f'{key} = {value} is outside its range {bracket}{low}, {high}]')
         params[key] = value
     return params
 
 
+def _yaml_scalar(v) -> str:
+    """A float written so YAML 1.1 reads a float: str(5e-05) is a string to PyYAML."""
+    if isinstance(v, float):
+        text = repr(v)
+        mantissa, e, exponent = text.partition('e')
+        if e and '.' not in mantissa:
+            mantissa += '.0'
+        return mantissa + e + exponent
+    return str(v)
+
+
 def flow_mapping(params: dict) -> str:
-    return '{' + ', '.join(f'{k}: {v}' for k, v in params.items()) + '}'
+    return '{' + ', '.join(f'{k}: {_yaml_scalar(v)}' for k, v in params.items()) + '}'
 
 
 # ---------------------------------------------------------------- metrics
@@ -146,7 +175,7 @@ def hold_metrics(trace: Trace, profile: TrackProfile) -> Dict[str, dict]:
             continue
         t0 = t[idx[0]]
         steady = [v[i] - speed for i in idx if t[i] >= t0 + 1.0]
-        rmse = sqrt(sum(e * e for e in steady) / len(steady)) if steady else None
+        rmse = sqrt(math.fsum(e * e for e in steady) / len(steady)) if steady else None
         overshoot = max(0.0, (max(v[i] for i in idx) - speed) / (speed - previous) * 100.0)
         level = speed - 0.1 * (speed - previous)
         start = next(i for i, x in enumerate(s) if x >= acc.s0)
@@ -283,12 +312,13 @@ def _failures(result: Dict[str, dict]) -> str:
     return ', '.join(out)
 
 
-def write_violations(report: dict, profile: TrackProfile, variant: str, path) -> int:
-    """Where on the straight each failed check of `variant` happened, for the replay."""
+def write_violations(report: dict, profile: TrackProfile, variant: str, path,
+                     scenario: str = 'profile') -> int:
+    """Where on the straight each failed check of `variant` happened, for the replay of `scenario`."""
     holds = {f'{seg.v0:g}': seg.s0 for seg in profile.segments if seg.kind == 'hold'}
     marks = []
     for name, c in report['variants'][variant]['checks'].items():
-        if c['pass']:
+        if c['pass'] or name.startswith('estop_') != (scenario == 'estop'):
             continue
         head, _, speed = name.rpartition('_')
         if head in ('hold_rmse', 'overshoot', 'reach'):
@@ -350,6 +380,7 @@ def main(argv=None) -> int:
                     help='variant to replay (default: the first graded one)')
     ap.add_argument('--view-scenario', choices=SCENARIOS, default='profile')
     args = ap.parse_args(argv)
+    args.track = os.path.expanduser(args.track)
     try:
         params = load_submission(args.submission)
     except (SubmissionError, OSError, ValueError) as e:
@@ -358,14 +389,17 @@ def main(argv=None) -> int:
     if args.print_params:
         print(flow_mapping(params))
         return 0
-    name = Path(args.submission).resolve().name
-    out = Path(args.out or os.path.join('tmp', 'rc_sim', 'grade', name))
+    name = Path(args.submission).expanduser().resolve().name
+    out = Path(os.path.expanduser(args.out) if args.out else os.path.join('tmp', 'rc_sim', 'grade', name))
     report = evaluate(params, args.variant, args.jobs, out, args.track or None, args.points)
     print(f'rc_sim grade: {name} {flow_mapping(params)}')
     for v, r in report['variants'].items():
         n_pass = sum(1 for c in r['checks'].values() if c['pass'])
         print(f'  {v:<14} {n_pass:>2}/{len(r["checks"])}  {_failures(r["checks"])}')
-    print(f"score {report['score']:.3f}  marks {report['marks']:.2f} / {report['points']:g}")
+    partial = ''
+    if args.variant:
+        partial = f"  (PARTIAL: {', '.join(report['variants'])} only; not a grade)"
+    print(f"score {report['score']:.3f}  marks {report['marks']:.2f} / {report['points']:g}{partial}")
     print(f'traces and marks.json: {out}')
     if args.view:
         graded = list(report['variants'])
@@ -377,7 +411,8 @@ def main(argv=None) -> int:
         args.view_variant = variant
         track_dir = args.track or str(default_track_dir())
         violations = out / f'violations_{args.view_variant}.yaml'
-        n = write_violations(report, load_track(track_dir), args.view_variant, violations)
+        n = write_violations(report, load_track(track_dir), args.view_variant, violations,
+                             args.view_scenario)
         print(f'replaying {args.view_variant}/{args.view_scenario} ({n} violations marked); Ctrl-C to stop')
         return view(out / 'traces' / f'{args.view_variant}_{args.view_scenario}.csv', track_dir, violations)
     return 0

@@ -28,10 +28,15 @@ import yaml
 
 REPO = Path(__file__).resolve().parents[3]
 
-# The grader's reference coefficients (config/reference_speed_controller.yaml), verbatim.
-SPEED_CONTROLLER_PARAMS = ('{derivative_filter_alpha: 0.15, enable_conditional_integration: true, '
-                           'integral_limit: 100.0, kd_speed: 1.5, ki_speed: 43.0, kp_speed: 7.0, '
-                           'max_pwm_offset: 100}')
+def reference_params():
+    """The grader's reference coefficients, read from the package so they cannot drift."""
+    path = REPO / 'src/sim/autosdv_rc_sim/config/reference_speed_controller.yaml'
+    params = yaml.safe_load(path.read_text())
+    return '{' + ', '.join(f'{k}: {str(v).lower() if isinstance(v, bool) else v}'
+                           for k, v in sorted(params.items())) + '}'
+
+
+SPEED_CONTROLLER_PARAMS = reference_params()
 # How far from the stop line the interactive run may come to rest. The same controller stops
 # within 0.5 m in `just sim grade`; measured interactive: 0.02 m short (Task 18c), so 1.0 m
 # leaves room for simulated-clock races without hiding a regression (the hall-speed bug of

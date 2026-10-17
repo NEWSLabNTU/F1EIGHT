@@ -64,3 +64,19 @@ def test_csv_round_trip(tmp_path):
     trace.write_csv(tmp_path / 't.csv')
     again = type(trace).read_csv(tmp_path / 't.csv')
     assert again.rows == trace.rows and again.csv_text() == trace.csv_text()
+
+
+def test_timing_must_agree_with_the_car():
+    import dataclasses
+    import pytest
+    from autosdv_rc_sim.lockstep import check_timing, load_velocity_report_params
+    v, a, vr = load_vehicle(), load_actuator_params(), load_velocity_report_params()
+    check_timing(v, a, vr)
+    with pytest.raises(ValueError, match='physics_dt'):
+        check_timing(dataclasses.replace(v, physics_dt=0.002), a, vr)
+    with pytest.raises(ValueError, match='actuator rate'):
+        check_timing(v, dict(a, rate=50.0), vr)
+    with pytest.raises(ValueError, match='velocity_report rate'):
+        check_timing(v, a, dict(vr, rate=10.0))
+    with pytest.raises(ValueError, match='lockstep timing'):
+        Lockstep(dataclasses.replace(v, physics_dt=0.002), a, {}, PROFILE)

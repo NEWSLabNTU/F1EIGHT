@@ -99,11 +99,12 @@ rc *ARGS:
     source scripts/env.sh
     args=()
     for a in "$@"; do
+        v="${a#*:=}"; v="${v/#\~/$HOME}"   # no shell expands a ~ after name:=
         case "$a" in
             submission:=*)
-                p=$(ros2 run autosdv_rc_sim rc_sim_grade "${a#submission:=}" --print-params) || exit 2
+                p=$(ros2 run autosdv_rc_sim rc_sim_grade "$v" --print-params) || exit 2
                 args+=("speed_controller_params:=$p") ;;
-            track:=*|map:=*) args+=("track_dir:=$(realpath "${a#*:=}")") ;;
+            track:=*|map:=*) args+=("track_dir:=$(realpath "$v")") ;;
             *) args+=("$a") ;;
         esac
     done
