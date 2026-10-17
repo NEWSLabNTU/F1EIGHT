@@ -37,6 +37,8 @@ not the geometry, decide the motion.
 | Where | AutoSDV, a new package `src/sim/autosdv_rc_sim` |
 | Duality | The real vehicle interface runs in simulation unchanged; only its two hardware touchpoints get simulated backends (`hardware:=real\|sim`) |
 | Grading | Deterministic and independent of CPU speed: a lockstep simulation clock in one process, running the same logic classes as the ROS nodes |
+| Seeing the run | Grading is headless, but the graded run is shown in Autoware's RViz: the trace is replayed with the map and the vehicle model |
+| Drivetrain | Rear-wheel drive |
 | Track sizing | From the speeds to be held, the hold time and the planner's limits, not drawn; curves remain possible for demos, not graded |
 
 Alternatives considered: forking `simple_planning_simulator` with a C++ slip
@@ -124,6 +126,15 @@ autosdv_rc_sim plant  (1 kHz physics, publishes /clock)
 One command starts each mode: `just sim rc [map:=…] [submission:=DIR]` and
 `just sim grade DIR`.
 
+**Seeing a graded run.** `just sim grade DIR --view` grades headlessly, then
+replays the run in Autoware's RViz at real time: the straight's lanelet map, the
+vehicle model moving along it, the target and measured speed, the PWM, the
+wheel slip, and every violation marked. The replay publishes the recorded trace
+(pose, twist, the vehicle status topics) on the topics Autoware's RViz
+configuration reads, so what the student sees is exactly what was graded. It
+needs no planner and stays cheap on a laptop. The interactive mode remains for
+running Autoware live.
+
 **Proof of determinism.** A test grades one submission twice, once with the CPU
 loaded by a stress job, and requires identical marks and identical traces.
 
@@ -152,7 +163,7 @@ A DC motor through a fixed gear ratio G drives the wheels:
 
 The back-EMF term gives a natural top speed (about 11 m/s at full duty with the
 default parameters); the electrical time constant (under 1 ms) is dropped.
-Rear-wheel drive or all-wheel drive is a parameter (to be checked on the car).
+The AutoSDV chassis is rear-wheel drive: the motor drives the rear axle only; the front wheels roll freely.
 
 ### Wheels and friction
 
@@ -286,7 +297,5 @@ off. The headless grading mode needs only Python.
 
 1. Keep the feed-forward (students fit it from a simulator speed-step run) or a
    plain PID?
-2. Grading is headless and deterministic (decided); a full-stack run is for
-   debugging only. Should a full-stack lap still be required as a smoke test?
-3. Rear-wheel or all-wheel drive on the AutoSDV chassis; the motor and gear
-   ratio; the battery voltage (the drive battery is 3S, 11.1 V nominal).
+2. The motor and gear ratio, and the drive battery's voltage (assumed 3S,
+   11.1 V nominal). Rear-wheel drive is decided.
