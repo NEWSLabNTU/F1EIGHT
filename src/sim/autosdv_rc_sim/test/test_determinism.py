@@ -12,37 +12,54 @@ from autosdv_rc_sim import grade
 REFERENCE = PKG / 'config' / 'reference_speed_controller.yaml'
 GOLDEN = Path(__file__).resolve().parent / 'golden' / 'nominal_digests.json'
 
-LOCKSTEP_MODULES = [PKG / 'autosdv_rc_sim' / f for f in (
-    'params.py', 'esc.py', 'drivetrain.py', 'tires.py', 'wheels.py', 'servo.py', 'hall.py',
-    'chassis.py', 'plant.py', 'track.py', 'lockstep.py', 'grade.py')] + [
-    VEHICLE_INTERFACE / 'autosdv_vehicle_interface' / f for f in (
-        'actuator_core.py', 'longitudinal.py', 'speed_controller.py', 'safety.py',
-        'velocity_estimator.py')]
-FORBIDDEN_MATH = {'sin', 'cos', 'tan', 'asin', 'acos', 'atan', 'atan2', 'exp', 'expm1', 'log',
-                  'log1p', 'log2', 'log10', 'pow', 'sinh', 'cosh', 'tanh', 'hypot', 'erf', 'gamma'}
-# The one documented exception: ActuatorCore.run_steering_control is
-# production code, moved verbatim from the actuator. It calls math.tan/atan on the steering command, and
-# its result is truncated to an integer PWM; the straight track commands about zero steering, and the
-# golden digests and the CPU-stress test below catch a last-bit difference. Nothing else is allowed.
+PKG_DIR = PKG / 'autosdv_rc_sim'
+IFACE_DIR = VEHICLE_INTERFACE / 'autosdv_vehicle_interface'
+# imu.py imports random (seeded noise for the ROS-side IMU node); the lockstep harness never imports it.
+EXEMPT = {'imu.py', '__init__.py'}
+HARNESS_IFACE = ('actuator_core.py', 'longitudinal.py', 'safety.py', 'speed_controller.py',
+                 'velocity_estimator.py')
+LOCKSTEP_MODULES = sorted(p for p in PKG_DIR.glob('*.py') if p.name not in EXEMPT) + [
+    IFACE_DIR / f for f in HARNESS_IFACE]
+FORBIDDEN_MATH = {'sin', 'cos', 'tan', 'asin', 'acos', 'atan', 'atan2', 'exp', 'exp2', 'expm1',
+                  'log', 'log1p', 'log2', 'log10', 'pow', 'sinh', 'cosh', 'tanh', 'asinh',
+                  'acosh', 'atanh', 'hypot', 'erf', 'erfc', 'gamma', 'lgamma', 'cbrt'}
+# The one documented exception: ActuatorCore.run_steering_control is production code, moved verbatim
+# from the actuator. It calls math.tan/atan on the steering command; its result is truncated to an
+# integer PWM, so a last-bit libm difference almost never changes the output. That is NOT proof:
+# the single-CPU stress test below cannot see a cross-CPU libm difference. Only the golden digests,
+# run on a second machine, can. Nothing else is allowed.
 ALLOWED_MATH = {'actuator_core.py': {'tan', 'atan'}}
+# detmath.py is the deterministic replacement for libm, so it gets the narrowest list: it may touch
+# only correctly rounded or exact operations of math.
+DETMATH_ONLY = {'sqrt', 'ldexp', 'pi', 'inf'}
 
 
 def offences(path):
     tree = ast.parse(path.read_text())
+    allowed = ALLOWED_MATH.get(path.name, ())
     found = []
     for node in ast.walk(tree):
-        if isinstance(node, ast.BinOp) and isinstance(node.op, ast.Pow):
-            ints = all(isinstance(n, ast.Constant) and type(n.value) is int
-                       for n in (node.left, node.right))
+        if isinstance(node, (ast.BinOp, ast.AugAssign)) and isinstance(node.op, ast.Pow):
+            operands = ((node.left, node.right) if isinstance(node, ast.BinOp)
+                        else (node.target, node.value))
+            ints = all(isinstance(n, ast.Constant) and type(n.value) is int for n in operands)
             if not ints:
                 found.append(f'{path.name}:{node.lineno}: ** (libm pow)')
+        if isinstance(node, ast.Call) and isinstance(node.func, ast.Name) and node.func.id == 'pow':
+            found.append(f'{path.name}:{node.lineno}: builtin pow')
         if (isinstance(node, ast.Attribute) and isinstance(node.value, ast.Name)
-                and node.value.id == 'math' and node.attr in FORBIDDEN_MATH
-                and node.attr not in ALLOWED_MATH.get(path.name, ())):
-            found.append(f'{path.name}:{node.lineno}: math.{node.attr}')
+                and node.value.id == 'math' and node.attr not in allowed):
+            if node.attr in FORBIDDEN_MATH or (
+                    path.name == 'detmath.py' and node.attr not in DETMATH_ONLY):
+                found.append(f'{path.name}:{node.lineno}: math.{node.attr}')
+        if isinstance(node, ast.Import):
+            for a in node.names:
+                if a.name == 'math' and a.asname not in (None, 'math'):
+                    found.append(f'{path.name}:{node.lineno}: aliased math import')
         if isinstance(node, ast.ImportFrom) and node.module == 'math':
             bad = [a.name for a in node.names
-                   if a.name in FORBIDDEN_MATH and a.name not in ALLOWED_MATH.get(path.name, ())]
+                   if a.name == '*' or (a.name in FORBIDDEN_MATH and a.name not in allowed)
+                   or (path.name == 'detmath.py' and a.name not in DETMATH_ONLY)]
             if bad:
                 found.append(f'{path.name}:{node.lineno}: from math import {bad}')
         if isinstance(node, (ast.Import, ast.ImportFrom)):
@@ -52,6 +69,26 @@ def offences(path):
             if any(n.split('.')[0] in ('numpy', 'random') for n in names):
                 found.append(f'{path.name}:{node.lineno}: imports numpy/random')
     return found
+
+
+def test_every_module_is_linted_or_exempt():
+    on_disk = {p.name for p in PKG_DIR.glob('*.py')}
+    linted = {p.name for p in LOCKSTEP_MODULES}
+    assert on_disk == (linted & on_disk) | EXEMPT
+    assert 'detmath.py' in linted
+    assert set(HARNESS_IFACE) <= linted
+    assert all(p.exists() for p in LOCKSTEP_MODULES)
+
+
+def test_the_lint_catches_what_it_claims(tmp_path):
+    bad = tmp_path / 'detmath.py'
+    bad.write_text('import math as m\nfrom math import *\nfrom math import sin\n'
+                   'import math\nx = math.exp(1.0)\ny = math.sqrt(2.0) ** 0.5\ny **= z\n'
+                   'w = pow(2.0, 0.5)\nv = math.asinh(1.0)\nu = math.floor(1.5)\n')
+    found = '\n'.join(offences(bad))
+    for needle in ('aliased', "['*']", "['sin']", 'math.exp', '** (libm', 'builtin pow',
+                   'math.asinh', 'math.floor'):
+        assert needle in found, needle
 
 
 def test_lockstep_path_is_free_of_libm():
@@ -74,6 +111,7 @@ def test_bit_identical_under_cpu_load(tmp_path):
     for h in hogs:
         h.start()
     try:
+        assert all(h.is_alive() for h in hogs)
         loaded = grade.evaluate(params, variants=['nominal'], jobs=2, out_dir=tmp_path / 'loaded')
     finally:
         stop.set()
