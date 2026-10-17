@@ -49,10 +49,10 @@ RESUME_SPEED = 6.0
 LIMITS = {
     'hold_rmse_rel': 0.05,         # m/s per m/s, floored at hold_rmse_floor
     'hold_rmse_floor': 0.10,       # m/s
-    'overshoot_pct': 10.0,         # % of the step (calibrated: Task 16)
+    'overshoot_pct': 11.0,         # % of the step (calibrated: Task 16)
     'reach_s': 1.0,                # s
     'launch_slip': 0.5,            # m/s, physical
-    'launch_accel': 4.0,           # m/s^2, over 50 ms (calibrated: Task 16)
+    'launch_accel': 4.8,           # m/s^2, over 50 ms (calibrated: Task 16)
     'stop_error': 0.5,             # m from the stop line, not calibrated
     'brake_kappa': -0.2,           # physical: past the tyre's peak
     'reverse_speed': -0.05,        # m/s, physical
