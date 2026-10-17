@@ -107,7 +107,7 @@ acceleration/deceleration 1.0 -> 2.5 m/s^2 (jerk 1.0 -> 5.0), from the package's
 (upstream's component with that one path changed), because `autoware.launch.xml`
 exposes no argument for it; the car's own launch keeps 4.17 and 1.0. So the run
 reproduces the lab's 11 m/s straight (the smoke test requires a peak of at least
-9 m/s and a stop within 0.5 m of the stop line). Separate processes on a
+9 m/s and a stop within 1 m of the stop line; measured 0.02 m short). Separate processes on a
 simulated clock race within a tick, so results are close to, but not exactly,
 the graded run.
 
@@ -158,8 +158,11 @@ simulated clock each publish is stamped on a whole second and the aggregator's
 10 Hz tick falls on the same simulated instant, so every second the tick reads
 the previous stamp at exactly age 1.0 s before the new one arrives, the unit
 reads STALE for one tick, `autonomous` drops out of the graph and the MRM
-handler stops the car. Upstream's CARLA graph carries the same remedy
-(`timeout: 3.0` on these units). rc_sim now passes its own graph,
+handler stops the car. Upstream's CARLA graph (`autoware-carla.yaml`) sets
+`timeout: 3.0` on `localization/state` and the MRM delegate too, but drops
+`routing/state` altogether, and its stated reason is network latency and slow
+update rates, not tick alignment: a loose precedent for the remedy, not for the
+cause. rc_sim now passes its own graph,
 `config/diagnostics/rc_sim_diagnostics.yaml` (autoware-main.yaml with the three
 timeouts at 3.0; `localization.yaml` and `planning.yaml` are copies of
 upstream's with the one line added; re-diff after an Autoware upgrade). The car's
@@ -168,16 +171,41 @@ loss of autonomous availability, and `smoke.py` asserts both (before: 48 MRM
 changes and 46 availability drops in one run; after: 0 and 0, three runs of
 three).
 
-The flap had been hiding something: its braking stopped the car at the line
-(`x` 105.2) in passing runs. Without it the speed PID, whose integrator is wound
-up by the climb to 11 m/s (the planner gives no cruise hold to settle it), keeps
-the throttle on for about 2 s into the braking and the car stops 4-5 m past the
-line with the smoke's coefficients (8-20 m with `integral_limit` 100). The
-creep, the car engaged but reaching only 0.15 m/s, was the flap, which
+The creep, the car engaged but reaching only 0.15 m/s, was the flap, which
 reproduced it on demand (`vmax` 0.14 on the first run of this task with the old
-stack and default coefficients). `smoke.py` therefore uses the grader's
-reference coefficients with `integral_limit` 60 and accepts a stop up to 8 m
-past the line; the 0.5 m stop is what `just sim grade` grades.
+stack and default coefficients).
+
+Whether the stock `just sim planning` (wall clock) has the same flap was not
+measured. The lock needs the publisher and the aggregator on one stepped
+simulated clock, so each 1 Hz stamp and each 10 Hz tick fall on the same
+instant; on the wall clock their phases drift apart. Treat the 3.0 s timeouts
+as specific to rc_sim's clock until someone runs the planning simulator
+with the diagnostics logged.
+
+### The stop overshoot (fixed): the hall speed saturated
+
+With the flap gone the car overshot the stop line by 8-22 m (4-5 m with
+`integral_limit` 60), although the grader stops the same controller within
+0.5 m. It was not integrator windup. Recorded interactive run
+(`/control/command/control_cmd`, `/vehicle/status/velocity_status`, the true
+speed, `/rc_sim/pwm`): Autoware's profile matched the graded one (peak 11 m/s,
+falling at 2.5 m/s^2), but `velocity_status` read at most about 8 m/s while the
+car ran at 12, so the PID, seeing a car 4-6 m/s too slow, held PWM at 470
+through the braking.
+
+`VelocityEstimator` caps its estimate at `1.5 * marker_spacing / (now - last
+edge)`; at 0.0275 m per marker that is 8.3 m/s when the last edge is 5 ms old.
+The plant published `/clock` for a batch before the edges of that batch, so at
+speed the clock always led the newest edge it could see by up to `clock_period`
+(5 ms) and the cap cut in. The car has no such gap (it times an edge on arrival
+with the same clock), and the lockstep grader has none either.
+`rc_sim_plant` now steps the batch, then publishes the edges, then `/clock`, then
+the stamped data, so an edge reaches `velocity_report` before the tick that
+covers it. The same run stops at x 105.38 (line 105.40) with the reference
+coefficients (`integral_limit` 100), and `smoke.py` now uses exactly those
+and requires a stop within 1 m. Residual: the order is a publication order,
+not a delivery guarantee across topics; a loaded host could in principle
+reorder it, and the symptom would be the same overshoot.
 
 Grading needs only Python: one variant takes about 4 s on one core (all eight in
 32 s); `--jobs` runs variants in parallel with identical results (`--jobs 4`:

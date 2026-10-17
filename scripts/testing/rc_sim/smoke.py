@@ -10,7 +10,7 @@ session (output in tmp/rc_sim_smoke_stack.log), waits until sim_pose_init has
 initialized the localization, sets the route to the track's goal (the stop line),
 waits until autonomous mode is available, engages, and watches /rc_sim/state.
 PASS: the car exceeded 9 m/s (the lab profile peaks at 11), then came to rest
-(|v| < 0.05 m/s for 2 s of simulated time) at the stop line or up to STOP_OVERSHOOT (8 m) past it,
+(|v| < 0.05 m/s for 2 s of simulated time) within STOP_TOLERANCE (1 m) of the stop line,
 in the lane (|y| < 0.5 m),
 with no MRM and no loss of autonomous availability after the engage (Task 18b). Everything
 is stopped by process group: SIGINT, SIGTERM, SIGKILL. Refuses ROS_DOMAIN_ID 0.
@@ -28,16 +28,15 @@ import yaml
 
 REPO = Path(__file__).resolve().parents[3]
 
-# The grader's reference coefficients (config/reference_speed_controller.yaml) with
-# integral_limit 60: at 100 the integrator, wound up by the climb to 11 m/s (the planner
-# gives no cruise hold to settle it), keeps the throttle on for ~2 s into the braking and
-# the car runs 8-20 m past the stop line; at 40 the car stalls below 9 m/s.
+# The grader's reference coefficients (config/reference_speed_controller.yaml), verbatim.
 SPEED_CONTROLLER_PARAMS = ('{derivative_filter_alpha: 0.15, enable_conditional_integration: true, '
-                           'integral_limit: 60.0, kd_speed: 1.5, ki_speed: 43.0, kp_speed: 7.0, '
+                           'integral_limit: 100.0, kd_speed: 1.5, ki_speed: 43.0, kp_speed: 7.0, '
                            'max_pwm_offset: 100}')
-# How far past the stop line the interactive run may come to rest. Its stop accuracy is the
-# speed controller's, which `just sim grade` grades; this only proves Autoware stops the car.
-STOP_OVERSHOOT = 8.0
+# How far from the stop line the interactive run may come to rest. The same controller stops
+# within 0.5 m in `just sim grade`; measured interactive: 0.02 m short (Task 18c), so 1.0 m
+# leaves room for simulated-clock races without hiding a regression (the hall-speed bug of
+# Task 18c gave 28 m past).
+STOP_TOLERANCE = 1.0
 
 
 def stop_group(proc, label):
@@ -164,7 +163,7 @@ def drive(track, timeout, on_ready, stack):
             return 1
         x, y = last[1], last[2]
         ok = (vmax >= 9.0 and still_since is not None
-              and -0.5 <= x - track['stop_line_s'] <= STOP_OVERSHOOT and abs(y) < 0.5)
+              and abs(x - track['stop_line_s']) <= STOP_TOLERANCE and abs(y) < 0.5)
         steady = flaps['mrm'] == 0 and flaps['unavailable'] == 0
         print(f"{'PASS' if ok and steady else 'FAIL'}  vmax {vmax:.2f} m/s, at rest at x {x:.2f} m "
               f"(stop line {track['stop_line_s']:.2f}), y {y:+.2f} m")

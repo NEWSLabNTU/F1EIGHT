@@ -58,3 +58,65 @@ def test_drives_on_pwm_and_publishes_clock_edges_and_state(ros):
         plant.stop()
         probe.destroy_node()
         plant.destroy_node()
+
+
+def test_publish_order_edges_before_the_clock_that_covers_them(ros, monkeypatch):
+    """Task 18c: an edge reaches velocity_report before the /clock tick at or after its time.
+
+    velocity_report caps its estimate at 1.5 * marker_spacing / (clock - last edge): a /clock
+    published before the edges it covers makes the car read ~8 m/s at most, whatever its speed
+    (the hall estimate saturated and the speed PID held full throttle). Data messages keep the
+    older invariant: never stamped later than the /clock already published.
+    """
+    log = []     # ('clock', t) / ('edges', [stamps]) / ('data', t), in publication order
+
+    class Recorder:
+        def __init__(self, inner, kind):
+            self.inner, self.kind = inner, kind
+
+        def publish(self, msg):
+            if self.kind == 'clock':
+                log.append(('clock', msg.clock.sec * 10**9 + msg.clock.nanosec))
+            elif self.kind == 'edges':
+                log.append(('edges', list(msg.data)))
+            else:
+                log.append(('data', msg.header.stamp.sec * 10**9 + msg.header.stamp.nanosec))
+            self.inner.publish(msg)
+
+    real = RcSimPlant.create_publisher
+
+    def spy(self, msg_type, topic, *args, **kwargs):
+        pub = real(self, msg_type, topic, *args, **kwargs)
+        kind = {'/clock': 'clock', EDGE_TOPIC: 'edges',
+                '/localization/kinematic_state': 'data'}.get(topic)
+        return Recorder(pub, kind) if kind else pub
+
+    monkeypatch.setattr(RcSimPlant, 'create_publisher', spy)
+    plant = RcSimPlant()
+    probe = rclpy.create_node('rc_sim_probe_order')
+    pwm = probe.create_publisher(Int32MultiArray, PWM_TOPIC, 10)
+    executor = SingleThreadedExecutor()
+    executor.add_node(plant)
+    executor.add_node(probe)
+    try:
+        deadline = time.monotonic() + 4.0
+        while time.monotonic() < deadline:
+            pwm.publish(Int32MultiArray(data=[0, 440]))
+            executor.spin_once(timeout_sec=0.01)
+    finally:
+        plant.stop()
+        probe.destroy_node()
+        plant.destroy_node()
+    entries = list(log)
+    clocks = [(i, v) for i, (k, v) in enumerate(entries) if k == 'clock']
+    n_edges = 0
+    for i, (kind, v) in enumerate(entries):
+        if kind == 'edges':
+            for stamp in v:
+                n_edges += 1
+                covering = next((ci for ci, ct in clocks if ct >= stamp), None)
+                assert covering is None or covering > i, f'edge {stamp} published after the /clock covering it'
+        elif kind == 'data':
+            latest = max((ct for ci, ct in clocks if ci < i), default=0)
+            assert v <= latest, 'data stamped later than the /clock already published'
+    assert n_edges > 20

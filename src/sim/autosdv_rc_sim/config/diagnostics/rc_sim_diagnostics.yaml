@@ -7,7 +7,9 @@
 # the plant's simulated clock the publish and the aggregator's 10 Hz tick land on the
 # same simulated instant, the tick wins the wall-clock race every second, the unit
 # reads STALE for one tick, autonomous mode drops out, mrm_handler raises
-# EMERGENCY_STOP. Upstream's own CARLA graph carries the same fix (autoware-carla.yaml).
+# EMERGENCY_STOP. Upstream's autoware-carla.yaml also sets 3.0 on
+# localization/state and the MRM delegate (not routing/state), for network latency, not for
+# tick alignment. Whether the wall-clock `just sim planning` flaps was not measured.
 # Re-diff against upstream after an Autoware upgrade.
 files:
   - { path: $(find-pkg-share autoware_launch)/config/system/diagnostics/control.yaml }

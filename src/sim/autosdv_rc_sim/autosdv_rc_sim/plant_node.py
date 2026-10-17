@@ -99,6 +99,7 @@ class RcSimPlant(Node):
         self.tf_listener = tf2_ros.TransformListener(self.tf_buffer, self)
         self.q_base_imu = None
 
+        self.outbox = []
         self._stop = threading.Event()
         self.thread = threading.Thread(target=self.run, name='rc_sim_physics', daemon=True)
         self.thread.start()
@@ -132,11 +133,15 @@ class RcSimPlant(Node):
                 pose, self.pending_pose = self.pending_pose, None
             if pose is not None:
                 self.plant.reset_pose(*pose)
-            # /clock first, at the batch's END time: no IMU, odometry or TF message of this
-            # batch is stamped later than the clock the other nodes have already seen.
-            clock = Clock()
-            clock.clock = stamp(self.plant.t_ns + self.steps_clock * self.dt_ns)
-            self.pub_clock.publish(clock)
+            # Step the batch, holding the stamped data (IMU, odometry, TF, state) back. Then
+            # publish, in this order: the edges, the /clock at the batch's END time, the data.
+            #  - Edges before the /clock: an edge carries its true time, so it is never
+            #    "future", but velocity_report caps its estimate at 1.5 marker spacings per
+            #    (clock - last edge): a /clock that leads the edges of its own batch by up to
+            #    clock_period made the car read at most ~8 m/s (Task 18c).
+            #  - The /clock before the data: no message is stamped later than the clock the
+            #    other nodes have already seen.
+            self.outbox = []
             for _ in range(self.steps_clock):
                 edges.extend(self.plant.step(self.dt, motor, steer).edges)
                 k += 1
@@ -147,6 +152,12 @@ class RcSimPlant(Node):
             if edges:
                 self.pub_edges.publish(Int64MultiArray(data=edges))
                 edges = []
+            clock = Clock()
+            clock.clock = stamp(self.plant.t_ns)
+            self.pub_clock.publish(clock)
+            for publish, msg in self.outbox:
+                publish(msg)
+            self.outbox = []
             next_wall += self.wall_per_batch
             delay = next_wall - time.monotonic()
             if delay > 0.0:
@@ -190,7 +201,7 @@ class RcSimPlant(Node):
         msg.angular_velocity_covariance = [g, 0.0, 0.0, 0.0, g, 0.0, 0.0, 0.0, g]
         msg.linear_acceleration_covariance = [a, 0.0, 0.0, 0.0, a, 0.0, 0.0, 0.0, a]
         msg.orientation_covariance = [1e-3, 0.0, 0.0, 0.0, 1e-3, 0.0, 0.0, 0.0, 1e-3]
-        self.pub_imu.publish(msg)
+        self.outbox.append((self.pub_imu.publish, msg))
 
     def publish_odometry(self) -> None:
         s = self.plant.state
@@ -207,23 +218,23 @@ class RcSimPlant(Node):
         for i in (0, 7, 14, 21, 28, 35):
             odom.pose.covariance[i] = 1e-4
             odom.twist.covariance[i] = 1e-4
-        self.pub_odom.publish(odom)
+        self.outbox.append((self.pub_odom.publish, odom))
         accel = AccelWithCovarianceStamped()
         accel.header.stamp, accel.header.frame_id = t, self.base_frame
         accel.accel.accel.linear.x, accel.accel.accel.linear.y = s.ax, s.ay
         for i in (0, 7, 14, 21, 28, 35):
             accel.accel.covariance[i] = 1e-3
-        self.pub_accel.publish(accel)
+        self.outbox.append((self.pub_accel.publish, accel))
         tf = TransformStamped()
         tf.header.stamp, tf.header.frame_id = t, self.map_frame
         tf.child_frame_id = self.base_frame
         tf.transform.translation.x, tf.transform.translation.y = x, y
         tf.transform.rotation.z, tf.transform.rotation.w = qz, qw
-        self.tf.sendTransform(tf)
+        self.outbox.append((self.tf.sendTransform, tf))
         esc = self.plant.esc_out
-        self.pub_state.publish(Float64MultiArray(data=[
+        self.outbox.append((self.pub_state.publish, Float64MultiArray(data=[
             self.plant.t_ns * 1e-9, x, y, yaw, s.vx, s.vy, s.yaw_rate, s.omega_f, s.omega_r,
-            self.plant.delta, self.plant.kappa_rear, esc.duty, esc.brake]))
+            self.plant.delta, self.plant.kappa_rear, esc.duty, esc.brake])))
 
 
 def main(args=None):
