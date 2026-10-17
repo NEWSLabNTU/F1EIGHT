@@ -29,6 +29,7 @@
     <arg name="launch_api" value="false"/>
     <arg name="is_simulation" value="true"/>
     <arg name="rviz" value="true"/>
+    <arg name="rviz_config" value="$(find-pkg-share autosdv_rc_sim)/config/rc_sim_replay.rviz"/>
   </include>
 
   <node pkg="autosdv_rc_sim" exec="rc_sim_replay" name="rc_sim_replay" output="screen">

@@ -310,7 +310,12 @@ def view(trace_csv, track_dir, violations) -> int:
     cmd = ['play_launch', 'launch', '--web-addr', os.environ.get('RC_SIM_WEB_ADDR', '127.0.0.1:8094'),
            'autosdv_rc_sim', 'rc_sim_replay.launch.xml', f'trace:={Path(trace_csv).resolve()}',
            f'track_dir:={Path(track_dir).resolve()}', f'violations:={Path(violations).resolve()}']
-    proc = subprocess.Popen(cmd, start_new_session=True)
+    try:
+        proc = subprocess.Popen(cmd, start_new_session=True)
+    except FileNotFoundError:
+        print('error: play_launch not found on PATH (see CLAUDE.md, ROS 2 Launch Testing)',
+              file=sys.stderr)
+        return 2
     try:
         return proc.wait()
     except KeyboardInterrupt:
@@ -324,6 +329,11 @@ def view(trace_csv, track_dir, violations) -> int:
             except ProcessLookupError:
                 break
         return 0
+    finally:
+        try:
+            os.killpg(proc.pid, signal.SIGKILL)   # nothing the group left behind survives
+        except ProcessLookupError:
+            pass
 
 
 def main(argv=None) -> int:
@@ -336,7 +346,8 @@ def main(argv=None) -> int:
     ap.add_argument('--points', type=float, default=15.0)
     ap.add_argument('--print-params', action='store_true', help='print the mapping and exit')
     ap.add_argument('--view', action='store_true', help='then replay the graded run in RViz')
-    ap.add_argument('--view-variant', default='nominal')
+    ap.add_argument('--view-variant', default='',
+                    help='variant to replay (default: the first graded one)')
     ap.add_argument('--view-scenario', choices=SCENARIOS, default='profile')
     args = ap.parse_args(argv)
     try:
@@ -357,6 +368,13 @@ def main(argv=None) -> int:
     print(f"score {report['score']:.3f}  marks {report['marks']:.2f} / {report['points']:g}")
     print(f'traces and marks.json: {out}')
     if args.view:
+        graded = list(report['variants'])
+        variant = args.view_variant or graded[0]
+        if variant not in graded:
+            print(f"error: --view-variant {variant!r} was not graded (graded: {', '.join(graded)})",
+                  file=sys.stderr)
+            return 2
+        args.view_variant = variant
         track_dir = args.track or str(default_track_dir())
         violations = out / f'violations_{args.view_variant}.yaml'
         n = write_violations(report, load_track(track_dir), args.view_variant, violations)

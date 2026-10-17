@@ -68,3 +68,60 @@ def test_publishes_the_trace_pose(tmp_path):
         probe.destroy_node()
     finally:
         rclpy.try_shutdown()
+
+
+def test_markers_are_red_in_map_at_s(tmp_path):
+    rclpy = pytest.importorskip('rclpy')
+    from visualization_msgs.msg import Marker
+    from autosdv_rc_sim.replay_node import Replay
+    from rclpy.parameter import Parameter
+    rows = [tuple(dict(t=0.01 * i, s=0.0, y=0.0, yaw=0.0, target=0.0, measured=0.0, speed=0.0,
+                       pwm=370, steer_pwm=489, mode='active', kappa_r=0.0, slip_r=0.0, ax=0.0,
+                       delta=0.0, emergency=False, phase='run')[c] for c in COLUMNS)
+            for i in range(3)]
+    Trace('profile', 'nominal', rows).write_csv(tmp_path / 't.csv')
+    (tmp_path / 'v.yaml').write_text(yaml.safe_dump([{'s': 12.5, 'text': 'hold_rmse_6: 0.4 (limit 0.3)'}]))
+    os.environ.setdefault('ROS_DOMAIN_ID', '73')
+    rclpy.init()
+    try:
+        node = Replay(parameter_overrides=[Parameter('trace', value=str(tmp_path / 't.csv')),
+                                           Parameter('violations', value=str(tmp_path / 'v.yaml'))])
+        sent = []
+        node.pub_marks.publish = sent.append
+        node.publish_violations(str(tmp_path / 'v.yaml'))
+        marks = sent[0].markers
+        assert [m.id for m in marks] == [0, 1]
+        assert [m.type for m in marks] == [Marker.SPHERE, Marker.TEXT_VIEW_FACING]
+        assert all(m.header.frame_id == 'map' and m.pose.position.x == 12.5 for m in marks)
+        assert all(m.color.r == 1.0 and m.color.g == 0.0 and m.color.a == 1.0 for m in marks)
+        assert 'hold_rmse_6' in marks[1].text
+        node.destroy_node()
+    finally:
+        rclpy.try_shutdown()
+
+
+def _submission(tmp_path):
+    d = tmp_path / 'sub'
+    d.mkdir()
+    (d / 'speed_controller_params.yaml').write_text('kp_speed: 7.0\n')
+    return d
+
+
+def test_view_variant_defaults_to_first_graded(tmp_path, monkeypatch):
+    seen = {}
+    monkeypatch.setattr(grade, 'view', lambda csv, track, v: seen.update(csv=str(csv)) or 0)
+    rc = grade.main([str(_submission(tmp_path)), '--variant', 'low_mu', '--view',
+                     '--out', str(tmp_path / 'o')])
+    assert rc == 0 and seen['csv'].endswith('low_mu_profile.csv')
+
+
+def test_view_variant_not_graded_is_a_clear_error(tmp_path, capsys):
+    rc = grade.main([str(_submission(tmp_path)), '--variant', 'low_mu', '--view',
+                     '--view-variant', 'nominal', '--out', str(tmp_path / 'o')])
+    assert rc == 2 and 'was not graded' in capsys.readouterr().err
+
+
+def test_view_without_play_launch(tmp_path, monkeypatch, capsys):
+    monkeypatch.setenv('PATH', str(tmp_path))
+    assert grade.view('t.csv', '.', 'v.yaml') == 2
+    assert 'play_launch not found' in capsys.readouterr().err
