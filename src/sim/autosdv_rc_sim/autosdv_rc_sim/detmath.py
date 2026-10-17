@@ -7,10 +7,12 @@ non-FMA variants), so their last bit can differ between two laptops. Every
 module on the lockstep path takes its trigonometry from here instead;
 test_determinism.py refuses libm calls in those modules.
 
-Range reduction is Cody-Waite with fdlibm's split constants; the series have
-fixed term counts, so the result never depends on a convergence test. The
-accuracy is a few ulp over the ranges the model uses, far below any physical
-tolerance. Determinism is the point.
+Range reduction for sin/cos is Cody-Waite on pi/2, split (fdlibm) into pieces
+whose leading parts carry 33 bits, so q * piece is exact for |q| < 2**20,
+i.e. |x| <= ~1.6e6. Inside that range the absolute error stays near 1e-16
+independent of |x| (checked to 1e-14 up to |x| = 1e6); beyond it the error
+grows linearly and is not supported. The series have fixed term counts, so the
+result never depends on a convergence test. Determinism is the point.
 """
 import math
 
@@ -18,12 +20,12 @@ PI = math.pi
 HALF_PI = 0.5 * math.pi
 sqrt = math.sqrt
 
-_TWO_PI_HI = 6.28318530717958623200e+00
-_TWO_PI_LO = 2.44929359829470635445e-16
-_HALF_PI_HI = 1.57079632679489655800e+00
-_HALF_PI_LO = 6.12323399573676603587e-17
-_INV_TWO_PI = 1.0 / _TWO_PI_HI
-_INV_HALF_PI = 1.0 / _HALF_PI_HI
+# fdlibm pi/2 split: _PIO2_1 and _PIO2_2 have 33 significant bits, _PIO2_3 too.
+_PIO2_1 = 1.57079632673412561417e+00
+_PIO2_2 = 6.07710050630396597660e-11
+_PIO2_3 = 2.02226624871116645580e-21
+_PIO2_3T = 8.47842766036889956997e-32
+_INV_HALF_PI = 6.36619772367581382433e-01
 _LN2_HI = 6.93147180369123816490e-01
 _LN2_LO = 1.90821492927058770002e-10
 _INV_LN2 = 1.44269504088896338700e+00
@@ -55,11 +57,12 @@ def _cos_poly(r):
 
 
 def _reduce(x):
-    """x = 2 pi k + q pi/2 + r with |r| <= pi/4; return (r, q mod 4)."""
-    k = round(x * _INV_TWO_PI)
-    r = (x - k * _TWO_PI_HI) - k * _TWO_PI_LO
-    q = round(r * _INV_HALF_PI)
-    r = (r - q * _HALF_PI_HI) - q * _HALF_PI_LO
+    """x = q pi/2 + r with |r| <= ~pi/4; return (r, q mod 4)."""
+    q = round(x * _INV_HALF_PI)
+    r = x - q * _PIO2_1
+    r = r - q * _PIO2_2
+    r = r - q * _PIO2_3
+    r = r - q * _PIO2_3T
     return r, q & 3
 
 

@@ -36,3 +36,12 @@ def test_special_values():
     assert dm.exp(-800.0) == 0.0
     assert dm.tanh(30.0) == 1.0 and dm.tanh(-30.0) == -1.0
     assert math.isnan(dm.atan(float('nan')))
+
+
+@pytest.mark.parametrize('x0', [1e3, 4e3, 1e4, 1e5, 1e6])
+def test_sin_cos_large_arguments(x0):
+    for i in range(500):
+        x = x0 + i * 0.37319
+        for sgn in (1.0, -1.0):
+            assert abs(dm.sin(sgn * x) - math.sin(sgn * x)) <= 1e-14, x
+            assert abs(dm.cos(sgn * x) - math.cos(sgn * x)) <= 1e-14, x
