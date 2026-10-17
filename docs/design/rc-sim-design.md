@@ -228,7 +228,7 @@ hold it long enough to measure, and brake to a stop on a stop line:
 
     L = Σ_i (v_i² − v_{i−1}²) / (2a)  +  Σ_i v_i · T  +  v_top² / (2d)  +  L_runout
 
-With the planner's limits a = 2.5 m/s² and d = 3.5 m/s², holds of T = 3 s and
+With the planner's limits a = 2.5 m/s² and d = 2.5 m/s², holds of T = 3 s and
 the graded profile 0 → 2 → 6 → 11 m/s → stop:
 
 | Segment | Length | Time |
@@ -239,12 +239,12 @@ the graded profile 0 → 2 → 6 → 11 m/s → stop:
 | hold 6 m/s | 18.0 m | 3.0 s |
 | accelerate 6 → 11 m/s | 17.0 m | 2.0 s |
 | hold 11 m/s (40 km/h) | 33.0 m | 3.0 s |
-| brake 11 m/s → stop on the stop line | 17.3 m | 3.1 s |
+| brake 11 m/s → stop on the stop line | 24.2 m | 4.4 s |
 | run-out beyond the stop line | 10 m | — |
-| **total** | **about 110 m** | **about 17 s** |
+| **total** | **about 115 m** | **about 18 s** |
 
 The generator (`just sim make-track --speeds 2,6,11 --hold 3 --accel 2.5
---decel 3.5`) prints this table, writes the lanelet2 map (one straight lane,
+--decel 2.5`) prints this table, writes the lanelet2 map (one straight lane,
 the start pose, the stop line) and the speed-limit profile, and refuses a
 profile whose segments cannot reach their speed. Changing a speed or the hold
 time resizes the straight. Curves (a radius list) remain possible for
@@ -331,7 +331,7 @@ off. The headless grading mode needs only Python.
    production controller; its output limit becomes the coefficient
    `max_pwm_offset`.
 2. The motor and gear ratio are mocked (K_v 3000 rpm/V, G 14.5:1, 3S) until
-   someone reads them off the car; a full-throttle stall then gives about 160 N
-   at the wheels, far above the rear tires' grip (about 15–20 N), so full
+   someone reads them off the car; a full-throttle stall then gives about 105 N
+   at the wheels (the ESC limits the current to 120 A), far above the rear tires' grip (about 15–20 N), so full
    throttle from rest spins the rear wheels, as RC cars do. Rear-wheel drive is
    decided.
