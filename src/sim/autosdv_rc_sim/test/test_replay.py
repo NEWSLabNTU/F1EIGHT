@@ -113,6 +113,25 @@ def test_labels_do_not_overprint(tmp_path):
     assert len(set(ys)) == 3 and min(ys) > 2.0     # beside the lane, one row each
 
 
+def test_car_glyph_and_readout():
+    pytest.importorskip('rclpy')
+    from visualization_msgs.msg import Marker
+    from autosdv_rc_sim.replay_node import car_markers
+    arrow, text = car_markers(dict(speed=5.234, target=6.0, pwm=412, steer_pwm=489, slip_r=0.031))
+    assert arrow.type == Marker.ARROW and arrow.header.frame_id == 'base_link'
+    assert arrow.scale.x >= 2.0 and arrow.color.b == 1.0          # far larger than the 0.4 m model
+    assert text.type == Marker.TEXT_VIEW_FACING and text.header.frame_id == 'base_link'
+    assert abs(text.pose.position.y) >= 2.0                        # beside the lane
+    for part in ('5.23 m/s', 'cmd 6.00', 'PWM 412', 'steer PWM 489', 'slip 0.031'):
+        assert part in text.text
+
+
+def test_rviz_declutters_and_shows_the_lane():
+    cfg = (Path(__file__).parents[1] / 'config' / 'rc_sim_replay.rviz').read_text()
+    assert 'PolarGridDisplay' not in cfg          # the stock 10 m rings: removed, not just disabled
+    assert '/rc_sim/replay/car' in cfg and 'road_lanelets: true' in cfg
+
+
 def test_rviz_follows_the_car():
     cfg = yaml.safe_load((Path(__file__).parents[1] / 'config' / 'rc_sim_replay.rviz').read_text())
     assert cfg['Visualization Manager']['Views']['Current']['Target Frame'] == 'base_link'

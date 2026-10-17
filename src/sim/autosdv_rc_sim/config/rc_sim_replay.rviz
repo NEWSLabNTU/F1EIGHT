@@ -37,6 +37,18 @@ Visualization Manager:
         Reliability Policy: Reliable
         Value: /rc_sim/replay/violations
       Value: true
+    - Class: rviz_default_plugins/MarkerArray
+      Enabled: true
+      Name: rc_sim car
+      Namespaces:
+        {}
+      Topic:
+        Depth: 1
+        Durability Policy: Volatile
+        History Policy: Keep Last
+        Reliability Policy: Reliable
+        Value: /rc_sim/replay/car
+      Value: true
     - Class: rviz_common/Group
       Displays:
         - Class: rviz_default_plugins/TF
@@ -244,20 +256,6 @@ Visualization Manager:
               Update Interval: 0
               Value: true
               Visual Enabled: true
-            - Class: rviz_plugins/PolarGridDisplay
-              Color: 255; 255; 255
-              Delta Range: 10
-              Enabled: true
-              Max Alpha: 0.5
-              Max Range: 100
-              Max Wave Alpha: 0.5
-              Min Alpha: 0.01
-              Min Wave Alpha: 0.01
-              Name: PolarGridDisplay
-              Reference Frame: base_link
-              Value: true
-              Wave Color: 255; 255; 255
-              Wave Velocity: 40
             - Class: autoware_overlay_rviz_plugin/SignalDisplay
               Enabled: true
               Gear Topic Test: /vehicle/status/gear_status
@@ -353,7 +351,7 @@ Visualization Manager:
             parking_space: true
             pedestrian_marking: true
             right_lane_bound: true
-            road_lanelets: false
+            road_lanelets: true
             speed_bump: true
             stop_lines: true
             shoulder_center_lane_line: false
@@ -2597,7 +2595,6 @@ Visualization Manager:
                   TF: true
                   Value: false
                   Vehicle:
-                    PolarGridDisplay: true
                     Value: true
                     VehicleModel: true
                     SignalDisplay: true

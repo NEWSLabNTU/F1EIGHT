@@ -22,9 +22,36 @@ from autosdv_rc_sim.detmath import cos, sin
 from autosdv_rc_sim.lockstep import Trace
 
 
+GLYPH_LENGTH = 3.0  # m, the car's arrow; the real model is 0.4 m, 4 px at 10 px/m
+READOUT_Y = 4.0     # m beside the car
 SPHERE_SIZE = 1.5   # m
 TEXT_SIZE = 1.5     # m
 LABEL_Y0, LABEL_DY, LABEL_ROWS = 3.0, 2.0, 6   # label rows, m from the lane's centre line
+
+
+def car_markers(row: dict) -> list:
+    """The car glyph and live readout, in base_link, so they follow the car at any zoom.
+
+    `row` holds the replayed trace row: target, speed, pwm, steer_pwm, slip_r.
+    """
+    arrow = Marker()
+    arrow.header.frame_id = 'base_link'
+    arrow.ns, arrow.id, arrow.type = 'rc_sim_car', 0, Marker.ARROW
+    arrow.pose.position.z = 1.0
+    arrow.pose.orientation.w = 1.0
+    arrow.scale.x, arrow.scale.y, arrow.scale.z = GLYPH_LENGTH, 1.0, 1.0
+    arrow.color.g, arrow.color.b, arrow.color.a = 0.9, 1.0, 1.0
+    text = Marker()
+    text.header.frame_id = 'base_link'
+    text.ns, text.id, text.type = 'rc_sim_car', 1, Marker.TEXT_VIEW_FACING
+    text.pose.position.y, text.pose.position.z = -READOUT_Y, 2.0
+    text.pose.orientation.w = 1.0
+    text.scale.z = TEXT_SIZE
+    text.color.r = text.color.g = text.color.b = text.color.a = 1.0
+    text.text = (f"v {row['speed']:.2f} m/s (cmd {row['target']:.2f})\n"
+                 f"motor PWM {int(row['pwm'])}  steer PWM {int(row['steer_pwm'])}\n"
+                 f"rear slip {row['slip_r']:.3f}")
+    return [arrow, text]
 
 
 def index_at(times, elapsed: float) -> int:
@@ -67,17 +94,20 @@ class Replay(Node):
         self.rate = float(self.get_parameter('rate').value)
         self.loop = bool(self.get_parameter('loop').value)
         self.cols = {name: self.trace.column(name) for name in
-                     ('s', 'y', 'yaw', 'target', 'measured', 'speed', 'pwm', 'kappa_r', 'slip_r', 'delta')}
+                     ('s', 'y', 'yaw', 'target', 'measured', 'speed', 'pwm', 'steer_pwm', 'kappa_r', 'slip_r', 'delta')}
         self.pub_odom = self.create_publisher(Odometry, '/localization/kinematic_state', 10)
         self.pub_vel = self.create_publisher(VelocityReport, '/vehicle/status/velocity_status', 10)
         self.pub_steer = self.create_publisher(SteeringReport, '/vehicle/status/steering_status', 10)
         self.pub_values = self.create_publisher(Float32MultiArrayStamped, '/rc_sim/replay/values', 10)
         latched = QoSProfile(depth=1, durability=DurabilityPolicy.TRANSIENT_LOCAL)
         self.pub_marks = self.create_publisher(MarkerArray, '/rc_sim/replay/violations', latched)
+        self.pub_car = self.create_publisher(MarkerArray, '/rc_sim/replay/car', 10)
+        self.index = 0
         self.tf = tf2_ros.TransformBroadcaster(self)
         self.start = self.get_clock().now()
         self.publish_violations(self.get_parameter('violations').value)
         self.create_timer(0.01, self.tick)
+        self.create_timer(0.1, self.publish_car)
 
     def publish_violations(self, path: str) -> None:
         if not path:
@@ -88,13 +118,19 @@ class Replay(Node):
         array.markers.extend(mark_markers(marks))
         self.pub_marks.publish(array)
 
+    def publish_car(self) -> None:
+        row = {k: self.cols[k][self.index] for k in ('target', 'speed', 'pwm', 'steer_pwm', 'slip_r')}
+        array = MarkerArray()
+        array.markers.extend(car_markers(row))
+        self.pub_car.publish(array)
+
     def tick(self) -> None:
         now = self.get_clock().now()
         elapsed = (now - self.start).nanoseconds * 1e-9 * self.rate
         if self.loop and elapsed > self.times[-1]:
             self.start = now
             elapsed = 0.0
-        i = index_at(self.times, elapsed)
+        i = self.index = index_at(self.times, elapsed)
         c = self.cols
         stamp = now.to_msg()
         qz, qw = sin(0.5 * c['yaw'][i]), cos(0.5 * c['yaw'][i])
