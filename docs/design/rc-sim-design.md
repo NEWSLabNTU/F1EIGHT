@@ -31,7 +31,7 @@ not the geometry, decide the motion.
 | Question | Decision |
 |---|---|
 | Approach | Upgrade our own Python plant behind the existing interface (PWM in, sensors out), replacing `simple_planning_simulator` |
-| Student task | The speed controller only (`SpeedPID`: target speed → PWM). Autoware plans and steers |
+| Student task | Tune the car's own speed controller (`AckermannSpeedPID` in the vehicle interface) and its related coefficients; Autoware plans and steers |
 | Student track | One straight, so students concentrate on speed and braking control. Its length follows from the graded speed profile (below) |
 | Steering limit | The physical lock, `max_steer_angle` 0.349 rad from `vehicle_info.param.yaml`. The 0.05 rad servo saturation (`docs/known-config-defects.md` §8) is a configuration defect to be measured on the car, not a property to simulate |
 | Where | AutoSDV, a new package `src/sim/autosdv_rc_sim` |
@@ -250,27 +250,54 @@ demonstrations; a curve of radius R is driven at √(a_lat·R), with a_lat about
 
 ## What students do (Part 1)
 
-They implement `SpeedPID` (target speed → PWM), from the textbook PID to code,
-the class the car's actuator loads. The simulation replaces the car recordings
-and the per-car models: no car CSV, no per-car calibration.
+Students work on the speed controller the car runs: `AckermannSpeedPID` in
+`autosdv_vehicle_interface/speed_controller.py`, loaded by the actuator. They
+study how the textbook PID becomes that code (sampled integral, derivative on
+the measurement with a low-pass filter, output clamp, integral limit,
+conditional integration) and tune its coefficients in the simulator. Nothing is
+written from scratch; the deliverable is a parameter file and a report.
+
+The coefficients they may set, as `speed_controller_params` (the keys the class
+and the actuator already read):
+
+| Key | Meaning | Production value |
+|---|---|---|
+| `kp_speed` | proportional gain [PWM counts per m/s] | 12.0 |
+| `ki_speed` | integral gain | 10.0 |
+| `kd_speed` | derivative gain, on the measured speed | 0.001 |
+| `integral_limit` | the integral's clamp [counts] | 50.0 |
+| `enable_conditional_integration` | freeze the integral while the output saturates | true |
+| `derivative_filter_alpha` | the derivative's low-pass filter | 0.15 |
+| `pwm_output_alpha` | the actuator's output filter | 0.25 |
+
+Anything outside this list is refused, as the Lab 2 tracker file is today. The
+simulation replaces the car recordings and the per-car models: no car CSV, no
+per-car calibration.
 
 Graded scenarios, all on the straight, in the headless lockstep simulator:
 
 - **Speed holds** at 2, 6 and 11 m/s (the profile above): speed error while
   steady, overshoot after each step, time to reach each new speed.
 - **Launch from rest:** static friction must be overcome without a lurch; the
-  driven wheels' slip ratio stays under a limit (no wheel spin).
+  rear wheels' slip ratio stays under a limit (no wheel spin).
 - **Braking to the stop line** from 11 m/s: stop error, and no wheel lock (slip
   ratio under a limit while braking).
 - **An emergency stop** at 11 m/s (the target drops to 0 at once): the safety
   shell brakes; the controller must not fight it, and must resume cleanly.
-- The existing contract tests stay (loads like the actuator, finite output,
-  reads `init_pwm` and the limits, `reset()`, no ROS / file / sleep).
 
 Model variants (mass, μ, battery voltage, motor constants, ESC deadband) replace
-the per-car variants, so a controller tuned to one exact model loses marks.
+the per-car variants, so coefficients tuned to one exact model lose marks.
 Autoware is not needed to grade: the straight's speed profile is replayed as the
 target, which is what Autoware's planner would command on it.
+
+**A finding to settle first: the production controller cannot command full
+throttle.** `AckermannSpeedPID` limits its output to `init_pwm ±
+(max_pwm − min_pwm) // 2`, that is 370 ± 55, so at most PWM 425 against the ESC's
+470. If full duty gives about 11 m/s, the controller tops out near half of that,
+well short of 40 km/h. Either the output limit becomes a coefficient students
+may set (bounded by the actuator's own clamp), or the simulator's motor is
+scaled so that 425 reaches the top speed. The first matches the car's real
+hardware; it is an open question below.
 
 ## Running on a laptop
 
@@ -295,7 +322,8 @@ off. The headless grading mode needs only Python.
 
 ## Open questions
 
-1. Keep the feed-forward (students fit it from a simulator speed-step run) or a
-   plain PID?
+1. The output limit (above): make it a tunable coefficient bounded by the
+   actuator's clamp, or keep 370 ± 55 and accept a lower top speed? Decided:
+   no separate feed-forward; students tune the production controller.
 2. The motor and gear ratio, and the drive battery's voltage (assumed 3S,
    11.1 V nominal). Rear-wheel drive is decided.
