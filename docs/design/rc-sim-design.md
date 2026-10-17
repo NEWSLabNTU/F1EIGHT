@@ -32,12 +32,12 @@ not the geometry, decide the motion.
 |---|---|
 | Approach | Upgrade our own Python plant behind the existing interface (PWM in, sensors out), replacing `simple_planning_simulator` |
 | Student task | The speed controller only (`SpeedPID`: target speed → PWM). Autoware plans and steers |
-| Map | A generated lanelet2 track sized for 40 km/h; the Lab 2 U-turn also loads |
+| Student track | One straight, so students concentrate on speed and braking control. Its length follows from the graded speed profile (below) |
 | Steering limit | The physical lock, `max_steer_angle` 0.349 rad from `vehicle_info.param.yaml`. The 0.05 rad servo saturation (`docs/known-config-defects.md` §8) is a configuration defect to be measured on the car, not a property to simulate |
 | Where | AutoSDV, a new package `src/sim/autosdv_rc_sim` |
 | Duality | The real vehicle interface runs in simulation unchanged; only its two hardware touchpoints get simulated backends (`hardware:=real\|sim`) |
 | Grading | Deterministic and independent of CPU speed: a lockstep simulation clock in one process, running the same logic classes as the ROS nodes |
-| Track | Sized from speeds and hold times, not drawn |
+| Track sizing | From the speeds to be held, the hold time and the planner's limits, not drawn; curves remain possible for demos, not graded |
 
 Alternatives considered: forking `simple_planning_simulator` with a C++ slip
 model (students would have to publish Autoware's actuation command instead of
@@ -208,50 +208,58 @@ racing of 1:43 scale RC cars" (drivetrain form), Karnopp (1985) for stiction.
 
 ## The track
 
-The track is sized from the speeds to be tested and how long each must be held,
-not drawn. A straight must let the car accelerate to v, hold it for T seconds
-(the steady window that is measured) and brake:
+Students drive one straight. The track is a single lanelet whose length follows
+from the speed profile that is graded, so the car can accelerate to each speed,
+hold it long enough to measure, and brake to a stop on a stop line:
 
-    L_straight = v² / (2a) + v·T + v² / (2d)
+    L = Σ_i (v_i² − v_{i−1}²) / (2a)  +  Σ_i v_i · T  +  v_top² / (2d)  +  L_runout
 
-and a curve of radius R is driven at v_curve = √(a_lat · R). With the planner's
-limits a = 2.5 m/s², d = 3.5 m/s² and a_lat = 3 m/s² (well under μg ≈ 7.8):
+With the planner's limits a = 2.5 m/s² and d = 3.5 m/s², holds of T = 3 s and
+the graded profile 0 → 2 → 6 → 11 m/s → stop:
 
-| Top speed of the straight | Hold T | Length |
+| Segment | Length | Time |
 |---|---|---|
-| 11 m/s (40 km/h) | 3 s | 24 + 33 + 17 = 75 m |
-| 11 m/s | 5 s | 97 m |
-| 6 m/s | 3 s | 7 + 18 + 5 = 31 m |
+| accelerate 0 → 2 m/s | 0.8 m | 0.8 s |
+| hold 2 m/s | 6.0 m | 3.0 s |
+| accelerate 2 → 6 m/s | 6.4 m | 1.6 s |
+| hold 6 m/s | 18.0 m | 3.0 s |
+| accelerate 6 → 11 m/s | 17.0 m | 2.0 s |
+| hold 11 m/s (40 km/h) | 33.0 m | 3.0 s |
+| brake 11 m/s → stop on the stop line | 17.3 m | 3.1 s |
+| run-out beyond the stop line | 10 m | — |
+| **total** | **about 110 m** | **about 17 s** |
 
-| Curve radius | Curve speed |
-|---|---|
-| 20 m | 7.7 m/s |
-| 8 m | 4.9 m/s |
-| 4 m | 3.5 m/s |
-
-Default loop (holds of 3 s): a 75 m straight at 11 m/s, a 180° turn of 20 m
-radius (63 m), a 31 m straight at 6 m/s, an 8 m curve, a 4 m hairpin, and a
-return straight closing the loop; about 380 m, a lap of about 60 s. The
-generator (`just sim make-track`) takes v, T, a, d, a_lat and the radii, prints
-every segment's length and the lap, refuses a segment too short to reach its
-speed, and writes the lanelet2 map, the start pose and the speed-limit profile.
-The Lab 2 U-turn also loads, for the low-speed case.
+The generator (`just sim make-track --speeds 2,6,11 --hold 3 --accel 2.5
+--decel 3.5`) prints this table, writes the lanelet2 map (one straight lane,
+the start pose, the stop line) and the speed-limit profile, and refuses a
+profile whose segments cannot reach their speed. Changing a speed or the hold
+time resizes the straight. Curves (a radius list) remain possible for
+demonstrations; a curve of radius R is driven at √(a_lat·R), with a_lat about
+3 m/s². They are not graded.
 
 ## What students do (Part 1)
 
 They implement `SpeedPID` (target speed → PWM), from the textbook PID to code,
-as now. The simulation replaces the car recordings and per-car models:
+the class the car's actuator loads. The simulation replaces the car recordings
+and the per-car models: no car CSV, no per-car calibration.
 
-- No car CSV and no per-car calibration. If the feed-forward stays, students fit
-  it from a speed-step run they make in the simulator (`just sim speed-steps`).
-- Grading runs closed-loop scenarios in the headless simulator: speed holds at
-  about 2, 6 and 11 m/s, a launch from rest (static friction, wheel spin), hard
-  braking before a curve, a lap following Autoware's speed profile (speed error
-  on the straights and in the curves), and safety checks (slip ratio, lane
-  excursion). The existing contract tests (no ROS imports, reads `init_pwm`,
-  reset, finite output) stay.
-- Model variants (mass, μ, battery, motor) replace the per-car variants, so a
-  controller tuned to one exact model loses marks.
+Graded scenarios, all on the straight, in the headless lockstep simulator:
+
+- **Speed holds** at 2, 6 and 11 m/s (the profile above): speed error while
+  steady, overshoot after each step, time to reach each new speed.
+- **Launch from rest:** static friction must be overcome without a lurch; the
+  driven wheels' slip ratio stays under a limit (no wheel spin).
+- **Braking to the stop line** from 11 m/s: stop error, and no wheel lock (slip
+  ratio under a limit while braking).
+- **An emergency stop** at 11 m/s (the target drops to 0 at once): the safety
+  shell brakes; the controller must not fight it, and must resume cleanly.
+- The existing contract tests stay (loads like the actuator, finite output,
+  reads `init_pwm` and the limits, `reset()`, no ROS / file / sleep).
+
+Model variants (mass, μ, battery voltage, motor constants, ESC deadband) replace
+the per-car variants, so a controller tuned to one exact model loses marks.
+Autoware is not needed to grade: the straight's speed profile is replayed as the
+target, which is what Autoware's planner would command on it.
 
 ## Running on a laptop
 
@@ -282,5 +290,3 @@ off. The headless grading mode needs only Python.
    debugging only. Should a full-stack lap still be required as a smoke test?
 3. Rear-wheel or all-wheel drive on the AutoSDV chassis; the motor and gear
    ratio; the battery voltage (the drive battery is 3S, 11.1 V nominal).
-4. Track size: does a 150–200 m loop fit the planner's defaults (lane width,
-   curvature limits) at small-car scale?
