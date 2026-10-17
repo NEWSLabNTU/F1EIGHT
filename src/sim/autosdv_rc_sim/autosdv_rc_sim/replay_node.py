@@ -23,7 +23,8 @@ from autosdv_rc_sim.lockstep import Trace
 
 
 SPHERE_SIZE = 1.5   # m
-TEXT_SIZE = 1.0     # m
+TEXT_SIZE = 1.5     # m
+LABEL_Y0, LABEL_DY, LABEL_ROWS = 3.0, 2.0, 6   # label rows, m from the lane's centre line
 
 
 def index_at(times, elapsed: float) -> int:
@@ -34,19 +35,18 @@ def index_at(times, elapsed: float) -> int:
 def mark_markers(marks) -> list:
     """A red sphere and a text label per violation, sized to read on a 115 m straight at 10 px/m.
 
-    Labels at the same place are stacked so they do not overprint.
+    The labels are long, so they are staggered sideways of the lane (the view is top-down,
+    where height does not separate them) and do not overprint.
     """
-    out, stacked = [], {}
+    out = []
     for i, m in enumerate(marks):
-        level = stacked.get(m['s'], 0)
-        stacked[m['s']] = level + 1
-        for kind, size, z in ((Marker.SPHERE, SPHERE_SIZE, 0.0),
-                              (Marker.TEXT_VIEW_FACING, TEXT_SIZE,
-                               SPHERE_SIZE + TEXT_SIZE + 1.5 * TEXT_SIZE * level)):
+        for kind, size, y, z in ((Marker.SPHERE, SPHERE_SIZE, 0.0, 0.0),
+                                 (Marker.TEXT_VIEW_FACING, TEXT_SIZE,
+                                  LABEL_Y0 + LABEL_DY * (i % LABEL_ROWS), SPHERE_SIZE + TEXT_SIZE)):
             mk = Marker()
             mk.header.frame_id = 'map'
             mk.ns, mk.id, mk.type = 'rc_sim_violations', 2 * i + (kind == Marker.TEXT_VIEW_FACING), kind
-            mk.pose.position.x, mk.pose.position.z = float(m['s']), z
+            mk.pose.position.x, mk.pose.position.y, mk.pose.position.z = float(m['s']), y, z
             mk.pose.orientation.w = 1.0
             mk.scale.x = mk.scale.y = mk.scale.z = size
             mk.color.r, mk.color.a = 1.0, 1.0

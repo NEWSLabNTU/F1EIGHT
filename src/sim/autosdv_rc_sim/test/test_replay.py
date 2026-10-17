@@ -96,21 +96,21 @@ def test_markers_are_red_in_map_at_s(tmp_path):
         assert all(m.header.frame_id == 'map' and m.pose.position.x == 12.5 for m in marks)
         assert all(m.color.r == 1.0 and m.color.g == 0.0 and m.color.a == 1.0 for m in marks)
         assert 'hold_rmse_6' in marks[1].text
-        # visible at the view's default zoom (10 px/m): a sphere of about 1.5 m, text about 1 m
-        assert marks[0].scale.x >= 1.5 and marks[1].scale.z >= 1.0
+        # visible at the view's default zoom (10 px/m): a sphere of about 1.5 m, text 1.5 m
+        assert marks[0].scale.x >= 1.5 and marks[1].scale.z >= 1.5
         assert marks[1].pose.position.z > marks[0].pose.position.z + marks[0].scale.z / 2
         node.destroy_node()
     finally:
         rclpy.try_shutdown()
 
 
-def test_marks_at_one_place_do_not_overprint(tmp_path):
+def test_labels_do_not_overprint(tmp_path):
     pytest.importorskip('rclpy')
     from autosdv_rc_sim.replay_node import mark_markers
     marks = [{'s': 5.0, 'text': 'a'}, {'s': 5.0, 'text': 'b'}, {'s': 9.0, 'text': 'c'}]
-    texts = [m for m in mark_markers(marks) if m.text]
-    zs = [m.pose.position.z for m in texts]
-    assert zs[1] > zs[0] + texts[0].scale.z and zs[2] == zs[0]
+    labels = [m for m in mark_markers(marks) if m.type == 9]
+    ys = [m.pose.position.y for m in labels]
+    assert len(set(ys)) == 3 and min(ys) > 2.0     # beside the lane, one row each
 
 
 def test_rviz_follows_the_car():
