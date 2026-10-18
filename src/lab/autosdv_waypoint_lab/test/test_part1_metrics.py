@@ -391,6 +391,14 @@ def test_validity_reasons():
     assert 'aborted' in M.invalid_reason(aborted='not engaged')
     assert M.invalid_reason(estop_missing='x').startswith('e-stop not raised')
     assert M.invalid_reason(not_engaged='x').startswith('the stack did not engage')
+    assert M.invalid_reason(actuator_missing='x').startswith('the actuator is not running')
+
+
+def test_actuator_missing_after_the_grace():
+    assert M.actuator_missing(False, 10.0, None) is None             # not engaged yet
+    assert M.actuator_missing(False, 10.0 + M.ACTUATOR_GRACE, 10.0) is None
+    assert M.actuator_missing(False, 10.1 + M.ACTUATOR_GRACE, 10.0) is not None
+    assert M.actuator_missing(True, 100.0, 10.0) is None
 
 
 def test_invalid_run_scores_zero(ideal):
@@ -453,7 +461,8 @@ def _course(tmp_path):
     return d
 
 
-def _grade_live(tmp_path, rows, mode_at=None, t_engage=0.0, params=(), drop=None):
+def _grade_live(tmp_path, rows, mode_at=None, t_engage=0.0, params=(), drop=None,
+                actuator=True):
     rclpy = pytest.importorskip('rclpy')
     import os
     from std_msgs.msg import Float64MultiArray, String
@@ -470,6 +479,8 @@ def _grade_live(tmp_path, rows, mode_at=None, t_engage=0.0, params=(), drop=None
             Parameter('out_dir', value=str(out)), Parameter('variant', value='nominal'),
             Parameter('wheel_radius', value=0.05)]
             + [Parameter(k, value=v) for k, v in params])
+        if actuator:
+            node.on_mode(String(data='waiting'))   # the actuator's latched first mode
         engaged = False
         em = 0
         for i, r in enumerate(rows):
@@ -511,6 +522,17 @@ def test_grader_node_grades_an_ideal_run(tmp_path, ideal):
     back = M.Trace.read_csv(out / 'trace.csv')
     assert len(back) > 3000 and back['t'][1] - back['t'][0] == pytest.approx(0.01)
     assert sum(back['emergency']) > 100
+
+
+def test_grader_node_invalid_without_the_actuator(tmp_path, ideal):
+    # an actuator that crashed at start-up: the car stands still, which must not grade
+    # as a valid "did not move" run
+    still = [dict(r, s=0.0, speed=0.0, kappa_r=0.0) for r in ideal]
+    out, status = _grade_live(tmp_path, still, actuator=False)
+    marks = json.loads((out / 'marks.json').read_text())
+    assert not marks['valid'] and marks['passed'] == 0
+    assert marks['invalid_reason'].startswith('the actuator is not running')
+    assert status['state'] == 'invalid'
 
 
 def test_grader_node_invalid_on_controller_fault(tmp_path, ideal):

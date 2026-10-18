@@ -635,13 +635,15 @@ def invalid_reason(*, aborted: Optional[str] = None, mrm: Optional[str] = None,
                    fault: Optional[str] = None, lockstep: Optional[str] = None,
                    estop_missing: Optional[str] = None,
                    not_engaged: Optional[str] = None,
-                   startup_stall: Optional[str] = None) -> Optional[str]:
+                   startup_stall: Optional[str] = None,
+                   actuator_missing: Optional[str] = None) -> Optional[str]:
     """Why a run is not valid, the first cause in this order; None when it is valid.
 
     Only these invalidate (lead ruling). A car that stalls, never moves or does not finish in
     time is a VALID run whose unreached checks fail (see stall_message).
     """
     for reason in (startup_stall and STARTUP_STALL.format(startup_stall),
+                   actuator_missing and f'the actuator is not running: {actuator_missing}',
                    lockstep and f'lockstep invalidated: {lockstep}',
                    fault and f'controller fault: {fault}',
                    mrm and f'MRM: {mrm}',
@@ -652,6 +654,23 @@ def invalid_reason(*, aborted: Optional[str] = None, mrm: Optional[str] = None,
             return reason
     return None
 
+
+def actuator_missing(mode_seen: bool, t: float, t_engaged: Optional[float]) -> Optional[str]:
+    """Why the actuator counts as dead: engaged ACTUATOR_GRACE s ago and no mode from it yet.
+
+    The actuator latches its mode from its first tick, so silence after the engage means it
+    never started (a crash at start-up, e.g. a speed controller that failed to load). Without
+    this the car stands still and the run would end valid as "did not move", blaming a class
+    that never ran.
+    """
+    if mode_seen or t_engaged is None or t - t_engaged <= ACTUATOR_GRACE:
+        return None
+    return (f'no mode from it {ACTUATOR_GRACE:g} s after the engage: it failed to start, '
+            'e.g. the speed controller does not import or its __init__ raised '
+            "(see the actuator's log in play_log/)")
+
+
+ACTUATOR_GRACE = 2.0  # s of sim time after the engage for the actuator's first mode
 
 # a lockstep timeout before the engage: nothing of the student's has run yet
 STARTUP_STALL = ('the simulator stalled before the run started (machine too slow / '

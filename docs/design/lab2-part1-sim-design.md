@@ -220,7 +220,8 @@ and the shell's mode, on the windows `part1_profile.yaml` defines. Sixteen check
 | `hold_rmse_11b` | the second 11 m/s hold |
 
 Validity (not a check): a run is invalid, scores 0 and says why, only for a lockstep
-timeout (before the engage: a startup stall, "run again"), a controller fault, an MRM, a
+timeout (before the engage: a startup stall, "run again"), a controller fault, an actuator that never started
+(no mode 2 s after the engage), an MRM, a
 scenario abort, an e-stop that was never raised, or a stack that never engaged. A car that
 does not move, stops early or does not finish in time has a valid run whose unreached
 checks fail, with a message saying so.

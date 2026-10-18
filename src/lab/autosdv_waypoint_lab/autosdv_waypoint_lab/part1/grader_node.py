@@ -18,7 +18,7 @@ metrics.py as their windows close, and publishes:
 On finish (at rest for 2 s in the final brake segment or past it), an early valid end (the car
 did not move or stopped for 10 s with a target; or run_timeout sim s after the engage: the
 unreached checks fail, with a student-facing `message`) or invalidity (MRM, controller fault,
-lockstep invalidated, scenario aborted, e-stop never raised, no engage within engage_timeout)
+actuator not running, lockstep invalidated, scenario aborted, e-stop never raised, no engage within engage_timeout)
 it writes
 out_dir/trace.csv, then out_dir/marks.json (the runner waits for that file), publishes
 the final status and stays alive.
@@ -237,6 +237,7 @@ class Part1Grader(Node):
         self.pwm = self.pwm_levels['init_pwm']
         self.steer_pwm = 0
         self.mode = 'waiting'
+        self.mode_seen = False              # the actuator has published its mode
         self.estop = False
         self.engaged = False
         self.t_engaged: Optional[float] = None
@@ -321,6 +322,7 @@ class Part1Grader(Node):
 
     def on_mode(self, msg: String) -> None:
         self.mode = msg.data
+        self.mode_seen = True
         reason = msg.data.partition(':')[2]
         if self.final is None and reason == 'controller_fault':
             self.fault = ('the speed controller raised or returned an invalid value '
@@ -433,7 +435,9 @@ class Part1Grader(Node):
         reason = M.invalid_reason(aborted=self.aborted, mrm=self.mrm, fault=self.fault,
                                   lockstep=self.lockstep, startup_stall=self.startup_stall,
                                   estop_missing=M.estop_missing(self.trace, self.profile),
-                                  not_engaged=not_engaged)
+                                  not_engaged=not_engaged,
+                                  actuator_missing=M.actuator_missing(
+                                      self.mode_seen, self._t(), self.t_engaged))
         if reason:
             self.finalize(reason)
             return

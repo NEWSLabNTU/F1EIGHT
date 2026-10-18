@@ -125,6 +125,8 @@ Re-run the calibration after any change to the plant, the stack or the reference
 
 - the clock handshake was invalidated (`lockstep invalidated: ...`);
 - the controller faulted the shell (`controller fault: ...`);
+- the actuator never started (`the actuator is not running: ...`): the class did not
+  import or its `__init__` raised, so nothing of it ran;
 - an MRM was raised (`MRM: ...`);
 - the scenario aborted;
 - the e-stop was never raised;
@@ -235,6 +237,7 @@ grading).
 | `error: submission DIR: submission error: .../speed_pid.yaml: kp is ...` | a key misspelled, out of range, or the wrong type; the message names it |
 | "Your car did not move ... still the stub?" | `update()` returns neutral: the TODOs are not done, or the output never leaves `init_pwm` |
 | invalid: `controller fault: ...` | `update()` raised or returned a non-number; the traceback is in `play_log/` |
+| invalid: `the actuator is not running: ...` | the actuator died at start-up: `speed_pid.py` does not import, or `SpeedPID.__init__` raised; the traceback is in `play_log/` |
 | invalid: `lockstep invalidated: ...` | the simulation lost a participant (a node crashed or hung); run again, and report it if it repeats |
 | invalid: `MRM: ...` / `the stack did not engage` | a stack fault, not your controller; run again; report it with `run.json` |
 | the car stops about 9 m past the line | no braking mode: regeneration alone cannot follow 2.5 m/s² |
