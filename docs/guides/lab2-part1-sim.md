@@ -5,7 +5,11 @@ loop: run, read the curves and the violations, change the controller, run again.
 is the RC simulator's model (motor, ESC, rear-wheel drive with slip, hall sensor) behind
 the car's real vehicle interface (`hardware:=sim`). Around it runs the Lab 2 stack: the
 waypoint path publisher, the TA's pure pursuit for steering, Autoware's command gate, and
-the actuator's safety shell with **your** `SpeedPID` inside it.
+the actuator's safety shell with **your** `SpeedPID` inside it. It is the car's own launch
+(`waypoint_follow.launch.xml`, `localization:=ground_truth hardware:=sim`): only the
+localization differs, which here is the simulator's true pose. The test harness around it
+(the plant, the scenario that engages and e-stops the car, the grader) is
+`lab2_part1_sim.launch.xml`'s own.
 
 Design: `docs/design/lab2-part1-sim-design.md`. The simulator itself: `docs/guides/rc-sim.md`.
 

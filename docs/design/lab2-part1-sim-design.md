@@ -22,14 +22,15 @@ steering are not theirs: steering only keeps the car on the straight.
 Setup is the repository's standard one: `./setup.sh`, then `just build`. Nothing else
 is installed or configured by hand.
 
-## The stack (Approach 1: the Lab 2 bench's parts on the RC simulator's car)
+## The stack (the car's launch, localization from the plant)
 
 ```
 just lab2 sim  ─ runner: course, setsid stack, wait for the result, print marks, kill group
 
 waypoint_path_publisher (part1 straight course, v column = speed profile) ─► /planning/trajectory
 kinematic_state + trajectory ─► path_tracker (TA reference pure pursuit; speed = path speed here)
-  ─► vehicle_cmd_gate ─► /control/command/control_cmd (+ emergency_cmd)
+  ─► lab2_part1_scenario (test fixture: 0 in the e-stop, the resume ramp, the aligned start)
+  ─► vehicle_cmd_gate ─► /control/command/control_cmd (+ emergency_cmd, via the scenario)
   ─► actuator (hardware:=sim): safety shell + STUDENT SpeedPID   (loaded by import path)
   ─► /rc_sim/pwm ─► rc_sim_plant  (1 kHz physics, owns /clock, tick handshake)
   ─► /rc_sim/hall_edges ─► velocity_report ─► /vehicle/status/velocity_status ─► actuator
@@ -45,8 +46,46 @@ lab2_part1_dashboard (window): curves, violation spans, final marks    RViz: car
   (`v_max` 11.5 m/s, stop ramp `decel` 2.5 m/s^2), reading a generated straight course.
 - **Control** is the TA's pure pursuit (steering) and the path's speed as the target, the
   command gate, and the car's actuator with the student's `SpeedPID`.
-- Reused from `waypoint_follow_bench.launch.xml` wherever possible; the bench plant,
-  the EKF and the marker localizer are replaced by the RC simulator's plant.
+- **The launch is the car's.** `lab2_part1_sim.launch.xml` includes
+  `waypoint_follow.launch.xml` (`just lab2 vehicle`) with `localization:=ground_truth
+  hardware:=sim`, and passes every Part 1 setting as an argument: the Part 1 path publisher
+  and gate parameter files (`config/part1/`), rc_sim's actuator overrides, the graph
+  `config/part1/part1-diagnostics.yaml` (the waypoint graph without the two marker checks),
+  `use_sim_time`, path_tracker's topic and lockstep, the gate's emergency output and the
+  student's `SpeedPID`. What it adds is the harness only: `rc_sim_plant`,
+  `lab2_part1_scenario`, the grader, the dashboard, RViz and its lane map. A play_launch
+  dump of the old composition and the new one has the same 40 nodes with the same
+  parameters and remaps, apart from vehicle_info's global parameters, which the car's
+  launch sets for every node, and `laps: 0` passed inline to the path publisher, which
+  its file already sets (2026-10-19).
+- **So Part 1 shares everything with the car but localization**; what differs is the
+  car itself (the plant), the parameter files, and the harness.
+
+### The e-stop: why the scenario stays in the command path
+
+The scenario is the one harness node between the stack's nodes: path_tracker publishes
+on `/control/part1/tracker_cmd` (`tracker_control_topic`), the scenario forwards it to
+`/control/trajectory_follower/control_cmd`; the gate's emergency verdict goes to
+`/control/command/emergency_cmd_gate` (`output_emergency_cmd`) and the scenario forwards it
+to `/control/command/emergency_cmd`, OR-ed with the e-stop. The car's software runs
+unchanged; only the harness touches the command path.
+
+The alternative (D11 in the one-stack plan) was measured on 2026-10-19 and rejected: the
+scenario calls `/control/vehicle_cmd_gate/external_emergency_stop` and
+`clear_external_emergency_stop` (`std_srvs/srv/Trigger`) and path_tracker publishes
+straight to the gate (reference controller, 3 quiet runs and a 3 quiet + 3 loaded
+tolerance round; ntu-sdv-course `2026/labs/Lab2/lab2-one-controller.md`, D11):
+
+| | scenario (kept) | gate e-stop (D11) |
+|---|---|---|
+| e-stop to first emergency actuator tick | 0.01 s, every run | 0.02 or 0.06 s (4-tick spread; the car's position at it spreads 0.23 m) |
+| why | the scenario's emergency timer is a lockstep participant | the gate's stop command carries a new stamp, so the actuator's command gate waits out its 0.5 s wall guard; the gate is not a participant |
+| `estop_resume_slip` | 0.263 m/s, spread 0.0005 (quiet + loaded) | 4.34-4.58 m/s (limit 0.5), spread 0.242 vs 0.02 allowed: the gate steps back to 6 m/s in about 0.1 s, the rear wheel spins |
+| `launch_slip` spread | 0 | 0.027 vs 0.02 allowed, without the aligned start |
+| MRM | none | the gate's e-stop raises one (`emergency_stop_operation`), which the grader counts as an invalid run; its 10 Hz recovery spreads the release by 0.08 s |
+
+The decision (2026-10-19) is the harness exception: the scenario stays, as a documented
+test fixture, and its code and the calibrated limits do not change.
 
 ## The course and the run
 
@@ -263,6 +302,11 @@ The largest spreads: `stepdown_undershoot` 0.10 % (allowed 0.5), `stop_error` 0.
 its allowance (at most 0.004 against 0.5 for `estop_resume_overshoot`).
 `stepdown_lag`, evaluated afterwards on the same six traces: 0.5416-0.5481 m/s, spread
 0.0065 (allowed max(2 % of 0.88, 0.01) = 0.018).
+Re-run 2026-10-19 on the shared launch (the same round, busy loops ×1): **PASS**, all 6 runs
+valid 16/16, quiet runs bit-identical and equal to the old composition's values. The
+largest spreads: `stepdown_undershoot` 0.057 % (allowed 0.5), `estop_resume_overshoot`
+0.038 % (0.5), `stop_error` 0.0017 m (0.03), `stop_kappa` 0.0015 (0.01), `hold_rmse_11b`
+0.0014 m/s (0.01); every other check 0.0005 or less.
 
 **Calibration** (`scripts/testing/lab2/part1_calibrate.py --repeats 2`: the reference live on
 nominal, low_batt and low_mu, 6 runs, all passing, repeats bit-identical). Limit = 1.5 × the
