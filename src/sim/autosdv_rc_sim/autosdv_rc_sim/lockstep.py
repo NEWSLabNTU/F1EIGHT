@@ -224,8 +224,12 @@ class Trace:
 
 class Lockstep:
     def __init__(self, vehicle: VehicleParams, actuator_params: dict, controller_overrides: dict,
-                 profile: TrackProfile, variant: str = 'nominal'):
+                 profile: TrackProfile, variant: str = 'nominal',
+                 controller_class: Optional[str] = None):
+        # controller_class: 'pkg.module:Class' as the actuator's speed_controller_class takes
+        # it; None runs the car's default (AckermannSpeedPID), which the grader uses
         self.vehicle = vehicle
+        self.controller_class = controller_class or DEFAULT_SPEED_CONTROLLER
         self.params = actuator_params
         self.overrides = dict(controller_overrides)
         self.profile = profile
@@ -238,7 +242,7 @@ class Lockstep:
     def run(self, scenario, max_time: float = 90.0) -> Trace:
         p = self.params
         controller = load_speed_controller(
-            DEFAULT_SPEED_CONTROLLER, build_controller_params(p, self.overrides))
+            self.controller_class, build_controller_params(p, self.overrides))
         core = ActuatorCore(p, controller, logger=_QuietLogger(), start_time=0.0)
         estimator = VelocityEstimator(self.distance_per_marker)
         plant = Plant(self.vehicle, 0.0, 0.0, 0.0)

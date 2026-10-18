@@ -15,7 +15,8 @@
   tier4_simulator_component.launch.xml and launch_dummy_vehicle:=false.
   What it reproduces: the lab's 11 m/s straight (planning caps raised from the car's
   4.17 m/s / 1.0 m/s^2 to 11.5 / 2.5 for this run only; the car's launch is untouched),
-  Autoware's own velocity planner deciding the profile. Results here are not graded: separate processes on a simulated clock still race
+  Autoware's own velocity planner deciding the profile. Results here are not graded: the speed
+  loop runs in lockstep with the clock (lockstep:=true), but the rest of Autoware still races
   within a tick. `just sim grade` is the grade.
 -->
 <launch>
@@ -25,6 +26,9 @@
   <arg name="speed_controller_params" default=""
        description="the coefficients as a YAML mapping, e.g. {kp_speed: 15.0, max_pwm_offset: 100}"/>
   <arg name="real_time_factor" default="1.0"/>
+  <arg name="lockstep" default="true"
+       description="clock handshake: /clock waits for velocity_report's and the actuator's acks (lockstep_sync.py)"/>
+  <arg name="lockstep_timeout" default="2.0" description="wall seconds before a silent participant invalidates the run"/>
   <arg name="rviz" default="true"/>
   <arg name="vehicle_model" default="autosdv_vehicle"/>
   <arg name="sensor_model" default="autosdv_sensor_kit"/>
@@ -111,6 +115,8 @@
       <param name="track_dir" value="$(var track_dir)"/>
       <param name="variant" value="$(var variant)"/>
       <param name="real_time_factor" value="$(var real_time_factor)"/>
+      <param name="lockstep" value="$(var lockstep)"/>
+      <param name="lockstep_timeout" value="$(var lockstep_timeout)"/>
     </node>
   </group>
 

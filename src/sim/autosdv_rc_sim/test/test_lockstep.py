@@ -80,3 +80,25 @@ def test_timing_must_agree_with_the_car():
         check_timing(v, a, dict(vr, rate=10.0))
     with pytest.raises(ValueError, match='lockstep timing'):
         Lockstep(dataclasses.replace(v, physics_dt=0.002), a, {}, PROFILE)
+
+
+class _Neutral:
+    """A speed controller that never drives: proves controller_class reaches the harness."""
+
+    def __init__(self, params):
+        self.init_pwm = int(params['init_pwm'])
+
+    def reset(self):
+        pass
+
+    def update(self, target_speed, measured_speed, dt):
+        return self.init_pwm
+
+
+def test_controller_class_selects_the_speed_controller():
+    vehicle = load_vehicle()
+    ls = Lockstep(vehicle, load_actuator_params(), {}, PROFILE,
+                  controller_class=f'{__name__}:_Neutral')
+    trace = ls.run(ProfileScenario(PROFILE), max_time=3.0)
+    assert set(trace.column('pwm')) == {370}
+    assert max(trace.column('speed')) == 0.0

@@ -243,8 +243,15 @@ the graded profile 0 → 2 → 6 → 11 m/s → stop:
 | run-out beyond the stop line | 10 m | — |
 | **total** | **about 115 m** | **about 18 s** |
 
+**Changed 2026-10-18:** the ESC's regeneration was lowered to a light drag brake
+(`esc_regen_current_limit` 8.65 → 2.5 A: 1.5-2.0 m/s² with road load, against 3.0-3.5
+for the ESC brake), so a controller needs a braking mode to stop at 2.5 m/s²
+(docs/design/lab2-part1-sim-design.md). `AckermannSpeedPID` has none, so the committed
+default track brakes at 1.5 m/s²: 40.3 m and 7.3 s for the last row, 131.5 m and 20.7 s
+in all.
+
 The generator (`just sim make-track --speeds 2,6,11 --hold 3 --accel 2.5
---decel 2.5`) prints this table, writes the lanelet2 map (one straight lane,
+--decel 1.5`) prints this table, writes the lanelet2 map (one straight lane,
 the start pose, the stop line) and the speed-limit profile, and refuses a
 profile whose segments cannot reach their speed. Changing a speed or the hold
 time resizes the straight. Curves (a radius list) remain possible for

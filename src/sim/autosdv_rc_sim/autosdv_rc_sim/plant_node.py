@@ -4,7 +4,9 @@
        /initialpose3d         PoseWithCovarianceStamped: place the car (the planning
                               simulator's pose initializer publishes it)
   out  /clock                 every clock_period of simulated time
-       /rc_sim/hall_edges     Int64MultiArray of edge times [ns], to velocity_report's SimGPIO
+       /rc_sim/hall_edges     Int64MultiArray of edge times [ns], to velocity_report's SimGPIO;
+                              under lockstep one per batch, its layout labelled
+                              "until_ns=<ns>" (complete up to the /clock that follows)
        /sensing/camera/zedxm/imu/data   raw IMU in zedxm_imu_link, carrying the static
                               offsets imu_corrector removes
        /localization/kinematic_state    Odometry map -> base_link: the true pose
@@ -12,35 +14,57 @@
        TF map -> base_link
        /rc_sim/state          [t, x, y, yaw, vx, vy, yaw_rate, omega_f, omega_r, delta,
                               kappa_r, duty, brake]
+       /rc_sim/lockstep/status   String JSON {"ok", "reason", "rtf", "enabled", ...}: latched,
+                              1 Hz and on change; ok false for good once a participant timed out
+  in   /rc_sim/lockstep/ack   String "<name> <sec> <nanosec> <period_ns> [key=value ...]"
+                              (hal.format_ack), from velocity_report and the actuator
+                              (sim only); in Lab 2 Part 1 also path_tracker and the
+                              scenario's emergency timer ("emergency")
 
 Physics runs at 1 kHz in its own thread, paced to real_time_factor x wall
 time; when the CPU falls behind, simulated time slows instead of jumping.
 This node owns /clock, so it runs with use_sim_time false and every other
 node with true. PWM is held between writes, as the PCA9685 holds it.
+
+Clock handshake (``lockstep``, default true): the plant never publishes a
+/clock past a deadline of a participant (velocity_report, the actuator; in Lab 2
+Part 1 also path_tracker and the scenario's emergency timer) that it has not
+acknowledged, so under load the simulation slows instead of the speed loop
+skipping ticks or computing on a stale report. The rules, the ack format and
+the equal-instant order are in lockstep_sync.py; a participant silent for
+``lockstep_timeout`` wall seconds invalidates the run (status ok false) and
+is no longer waited for, so the run never hangs. With no participant (the
+headless tests) it changes nothing.
 """
+import json
 import threading
 import time
 
 from autosdv_coach_lab.bench_plant import quat_conjugate, quat_multiply, quat_rotate
 from builtin_interfaces.msg import Time as TimeMsg
-from geometry_msgs.msg import AccelWithCovarianceStamped, PoseWithCovarianceStamped, TransformStamped
+from geometry_msgs.msg import (
+    AccelWithCovarianceStamped, PoseWithCovarianceStamped, TransformStamped)
 from nav_msgs.msg import Odometry
 import rclpy
 from rclpy.executors import ExternalShutdownException, MultiThreadedExecutor
 from rclpy.node import Node
-from rclpy.qos import QoSProfile, ReliabilityPolicy
+from rclpy.qos import DurabilityPolicy, QoSProfile, ReliabilityPolicy
 from rclpy.time import Time
 from rosgraph_msgs.msg import Clock
 from sensor_msgs.msg import Imu
-from std_msgs.msg import Float64MultiArray, Int32MultiArray, Int64MultiArray
+from std_msgs.msg import (
+    Float64MultiArray, Int32MultiArray, Int64MultiArray, MultiArrayDimension, String)
 import tf2_ros
 
 from autosdv_rc_sim.detmath import atan2, cos, sin
 from autosdv_rc_sim.imu import ImuModel
+from autosdv_rc_sim.lockstep_sync import LockstepSync
 from autosdv_rc_sim.params import GRAVITY, load_vehicle
 from autosdv_rc_sim.plant import Plant
 from autosdv_rc_sim.track import default_track_dir, track_poses
-from autosdv_vehicle_interface.hal import EDGE_TOPIC, PWM_TOPIC   # the one definition of the two topic names
+# the one definition of the topic names and the ack format
+from autosdv_vehicle_interface.hal import (
+    EDGE_TOPIC, EDGES_UNTIL, LOCKSTEP_ACK_TOPIC, LOCKSTEP_STATUS_TOPIC, parse_ack, PWM_TOPIC)
 
 
 def stamp(t_ns: int) -> TimeMsg:
@@ -65,8 +89,9 @@ class RcSimPlant(Node):
                               ('imu_topic', '/sensing/camera/zedxm/imu/data'),
                               ('imu_frame', 'zedxm_imu_link'), ('base_frame', 'base_link'),
                               ('map_frame', 'map'), ('angular_velocity_offset_x', 0.0),
-                              ('angular_velocity_offset_y', 0.0), ('angular_velocity_offset_z', 0.0),
-                              ('seed', 0)):
+                              ('angular_velocity_offset_y', 0.0),
+                              ('angular_velocity_offset_z', 0.0),
+                              ('seed', 0), ('lockstep', True), ('lockstep_timeout', 2.0)):
             self.declare_parameter(name, default)
         gp = lambda k: self.get_parameter(k).value  # noqa: E731
         self.p = load_vehicle(gp('vehicle_file') or None, gp('variant'))
@@ -74,27 +99,41 @@ class RcSimPlant(Node):
         self.plant = Plant(self.p, start['x'], start['y'], start['yaw'])
         self.imu = ImuModel(self.p, int(gp('seed')))
         self.gyro_offset = tuple(float(gp(f'angular_velocity_offset_{a}')) for a in 'xyz')
-        self.base_frame, self.map_frame, self.imu_frame = gp('base_frame'), gp('map_frame'), gp('imu_frame')
+        self.base_frame, self.map_frame = gp('base_frame'), gp('map_frame')
+        self.imu_frame = gp('imu_frame')
         self.dt = self.p.physics_dt
         self.dt_ns = int(round(self.dt * 1e9))
         self.steps_clock = max(1, int(round(gp('clock_period') / self.dt)))
         self.steps_imu = max(1, int(round(1.0 / gp('imu_rate') / self.dt)))
         self.steps_odom = max(1, int(round(1.0 / gp('odom_rate') / self.dt)))
-        self.wall_per_batch = self.steps_clock * self.dt / gp('real_time_factor')
+        self.real_time_factor = float(gp('real_time_factor'))
+        self.sync = LockstepSync(gp('lockstep_timeout')) if gp('lockstep') else None
+        self.clock_ns = 0                       # the last /clock published
+        self.cond = threading.Condition()       # acks wake the physics thread
 
         self.lock = threading.Lock()
         self.pwm = [self.p.init_pwm, self.p.init_steer]
         self.pending_pose = None
         reliable = QoSProfile(depth=100, reliability=ReliabilityPolicy.RELIABLE)
         self.create_subscription(Int32MultiArray, PWM_TOPIC, self.on_pwm, reliable)
-        self.create_subscription(PoseWithCovarianceStamped, '/initialpose3d', self.on_initial_pose, 1)
+        self.create_subscription(
+            PoseWithCovarianceStamped, '/initialpose3d', self.on_initial_pose, 1)
         self.pub_clock = self.create_publisher(Clock, '/clock', 10)
         self.pub_edges = self.create_publisher(Int64MultiArray, EDGE_TOPIC, reliable)
         self.pub_imu = self.create_publisher(Imu, gp('imu_topic'), 10)
         self.pub_odom = self.create_publisher(Odometry, '/localization/kinematic_state', 10)
-        self.pub_accel = self.create_publisher(AccelWithCovarianceStamped, '/localization/acceleration', 10)
+        self.pub_accel = self.create_publisher(
+            AccelWithCovarianceStamped, '/localization/acceleration', 10)
         self.pub_state = self.create_publisher(Float64MultiArray, '/rc_sim/state', 10)
         self.tf = tf2_ros.TransformBroadcaster(self)
+        self.pub_status = self.create_publisher(String, LOCKSTEP_STATUS_TOPIC, QoSProfile(
+            depth=1, reliability=ReliabilityPolicy.RELIABLE,
+            durability=DurabilityPolicy.TRANSIENT_LOCAL))
+        self.create_subscription(String, LOCKSTEP_ACK_TOPIC, self.on_ack, reliable)
+        self.status_wall = time.monotonic()
+        self.status_clock_ns = 0
+        self.rtf = 0.0
+        self.publish_status(self.status_wall)
         self.tf_buffer = tf2_ros.Buffer()
         self.tf_listener = tf2_ros.TransformListener(self.tf_buffer, self)
         self.q_base_imu = None
@@ -105,10 +144,14 @@ class RcSimPlant(Node):
         self.thread.start()
         self.get_logger().info(
             f"rc_sim plant: variant {gp('variant')}, start {start}, /clock every "
-            f'{self.steps_clock * self.dt * 1e3:.0f} ms, real-time factor {gp("real_time_factor")}')
+            f'{self.steps_clock * self.dt * 1e3:.0f} ms, '
+            f'real-time factor {gp("real_time_factor")}, '
+            f"lockstep {'on, timeout %g s' % gp('lockstep_timeout') if self.sync else 'off'}")
 
     def stop(self) -> None:
         self._stop.set()
+        with self.cond:
+            self.cond.notify_all()
         self.thread.join(timeout=2.0)
 
     # ------------------------------------------------------------ input
@@ -117,6 +160,22 @@ class RcSimPlant(Node):
             with self.lock:
                 self.pwm[msg.data[0]] = int(msg.data[1])
 
+    def on_ack(self, msg) -> None:
+        if self.sync is None:
+            return
+        try:
+            name, deadline_ns, period_ns, extra = parse_ack(msg.data)
+        except ValueError as e:
+            self.get_logger().warn(f'ignoring a malformed lockstep ack: {e}',
+                                   throttle_duration_sec=5.0)
+            return
+        if 'pwm' in extra and 'steer' in extra:     # the actuator's ack carries what it wrote
+            with self.lock:
+                self.pwm = [int(extra['pwm']), int(extra['steer'])]
+        with self.cond:
+            self.sync.on_ack(name, deadline_ns, period_ns, extra)
+            self.cond.notify_all()
+
     def on_initial_pose(self, msg) -> None:
         q = msg.pose.pose.orientation
         yaw = atan2(2.0 * (q.w * q.z + q.x * q.y), 1.0 - 2.0 * (q.y * q.y + q.z * q.z))
@@ -124,10 +183,50 @@ class RcSimPlant(Node):
             self.pending_pose = (msg.pose.pose.position.x, msg.pose.pose.position.y, yaw)
 
     # ------------------------------------------------------------ physics
+    def wait_for_lockstep(self):
+        """Block until /clock may advance; return how far (None: no limit). Never hangs."""
+        with self.cond:
+            while not self._stop.is_set():
+                wall = time.monotonic()
+                limit = self.sync.limit(self.clock_ns)
+                if limit is None or limit > self.clock_ns:
+                    return limit
+                was_ok = self.sync.ok
+                for name in self.sync.check_timeouts(self.clock_ns, wall):
+                    self.get_logger().error(
+                        f'lockstep: {name} timed out at t={self.clock_ns * 1e-9:.3f} s; the run '
+                        f'is invalid, continuing without waiting for it ({self.sync.reason})')
+                if was_ok and not self.sync.ok:
+                    self.publish_status(wall)
+                elif wall - self.status_wall >= 1.0:
+                    self.publish_status(wall)
+                self.cond.wait(0.05)
+        return None
+
+    def publish_status(self, wall: float) -> None:
+        if wall > self.status_wall:
+            self.rtf = (self.clock_ns - self.status_clock_ns) * 1e-9 / (wall - self.status_wall)
+        self.status_wall, self.status_clock_ns = wall, self.clock_ns
+        status = {'ok': True, 'reason': '', 'rtf': round(self.rtf, 4),
+                  'enabled': self.sync is not None, 't': self.clock_ns * 1e-9}
+        if self.sync is not None:
+            status.update(ok=self.sync.ok, reason=self.sync.reason, **self.sync.summary())
+        self.pub_status.publish(String(data=json.dumps(status)))
+
     def run(self) -> None:
         edges, k = [], 0
         next_wall = time.monotonic()
         while not self._stop.is_set() and rclpy.ok():
+            # The batch ends clock_period ahead, or at the earliest unacknowledged deadline.
+            target = self.plant.t_ns + self.steps_clock * self.dt_ns
+            if self.sync is not None:
+                limit = self.wait_for_lockstep()
+                if self._stop.is_set():
+                    break
+                if limit is not None:
+                    # up to the physics step: a deadline off the 1 ms grid (path_tracker's 30 Hz)
+                    # is passed by less than a step, never published ahead of the physics
+                    target = min(target, -(-limit // self.dt_ns) * self.dt_ns)
             with self.lock:
                 motor, steer = self.pwm
                 pose, self.pending_pose = self.pending_pose, None
@@ -141,24 +240,39 @@ class RcSimPlant(Node):
             #    clock_period made the car read at most ~8 m/s (Task 18c).
             #  - The /clock before the data: no message is stamped later than the clock the
             #    other nodes have already seen.
-            for _ in range(self.steps_clock):
+            while self.plant.t_ns + self.dt_ns <= target:
                 edges.extend(self.plant.step(self.dt, motor, steer).edges)
                 k += 1
                 if k % self.steps_imu == 0:
                     self.publish_imu()
                 if k % self.steps_odom == 0:
                     self.publish_odometry()
-            if edges:
+            new_clock = self.plant.t_ns
+            if self.sync is not None:
+                # every batch, empty or not, marked complete up to the /clock that follows:
+                # velocity_report holds a report until its edges are all in (hal.SimGPIO)
+                msg = Int64MultiArray(data=edges)
+                msg.layout.dim = [MultiArrayDimension(label=f'{EDGES_UNTIL}{new_clock}',
+                                                      size=len(edges), stride=1)]
+                self.pub_edges.publish(msg)
+                edges = []
+            elif edges:
                 self.pub_edges.publish(Int64MultiArray(data=edges))
                 edges = []
+            advanced = new_clock - self.clock_ns
+            self.clock_ns = new_clock
             clock = Clock()
-            clock.clock = stamp(self.plant.t_ns)
+            clock.clock = stamp(self.clock_ns)
             self.pub_clock.publish(clock)
             for publish, msg in self.outbox:
                 publish(msg)
             self.outbox = []
-            next_wall += self.wall_per_batch
-            delay = next_wall - time.monotonic()
+            now = time.monotonic()
+            if now - self.status_wall >= 1.0:
+                with self.cond:
+                    self.publish_status(now)
+            next_wall += advanced * 1e-9 / self.real_time_factor
+            delay = next_wall - now
             if delay > 0.0:
                 time.sleep(delay)
             elif delay < -0.1:
@@ -170,7 +284,8 @@ class RcSimPlant(Node):
             return True
         try:
             t = self.tf_buffer.lookup_transform(self.base_frame, self.imu_frame, Time())
-        except (tf2_ros.LookupException, tf2_ros.ConnectivityException, tf2_ros.ExtrapolationException):
+        except (tf2_ros.LookupException, tf2_ros.ConnectivityException,
+                tf2_ros.ExtrapolationException):
             return False
         r = t.transform.rotation
         self.q_base_imu = (r.x, r.y, r.z, r.w)
@@ -192,7 +307,8 @@ class RcSimPlant(Node):
         msg.angular_velocity.x = wx + self.gyro_offset[0]
         msg.angular_velocity.y = wy + self.gyro_offset[1]
         msg.angular_velocity.z = wz + self.gyro_offset[2]
-        msg.linear_acceleration.x, msg.linear_acceleration.y, msg.linear_acceleration.z = lx, ly, lz
+        acc = msg.linear_acceleration
+        acc.x, acc.y, acc.z = lx, ly, lz
         g = max(self.p.gyro_noise_std, 1e-4)
         g *= g
         a = max(self.p.accel_noise_std, 1e-3)
@@ -213,7 +329,8 @@ class RcSimPlant(Node):
         odom.child_frame_id = self.base_frame
         odom.pose.pose.position.x, odom.pose.pose.position.y = x, y
         odom.pose.pose.orientation.z, odom.pose.pose.orientation.w = qz, qw
-        odom.twist.twist.linear.x, odom.twist.twist.linear.y, odom.twist.twist.angular.z = vx, vy, wz
+        twist = odom.twist.twist
+        twist.linear.x, twist.linear.y, twist.angular.z = vx, vy, wz
         for i in (0, 7, 14, 21, 28, 35):
             odom.pose.covariance[i] = 1e-4
             odom.twist.covariance[i] = 1e-4

@@ -66,8 +66,8 @@ coss-park:
 # The web UI address. Override for a shared host: RC_SIM_WEB_ADDR=127.0.0.1:8092 just sim rc
 web_addr := env_var_or_default('RC_SIM_WEB_ADDR', '0.0.0.0:8081')
 
-#   just sim make-track                                  2,6,11 m/s, 3 s holds, a 2.5, d 2.5
-#   just sim make-track --speeds 2,6,11 --hold 3 --accel 2.5 --decel 2.5 --out tmp/rc_sim/tracks/mine
+#   just sim make-track                                  2,6,11 m/s, 3 s holds, a 2.5, d 1.5
+#   just sim make-track --speeds 2,6,11 --hold 3 --accel 2.5 --decel 1.5 --out tmp/rc_sim/tracks/mine
 # Prints the segment table; refuses a profile the model cannot drive.
 # Size and write a straight track (lanelet2 map, point cloud, track.yaml) from a speed profile
 [positional-arguments]

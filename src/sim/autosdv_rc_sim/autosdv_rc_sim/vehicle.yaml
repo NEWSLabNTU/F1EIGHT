@@ -50,7 +50,7 @@ vehicle:
   drag_brake:         {value: 0.0,    source: guess,      note: "dynamic-braking fraction at neutral"}
   brake_torque_max:   {value: 0.40,   source: guess,      note: "rear axle at full brake [N m]: with the road load, the rear tyre force stays 10 % under the nominal rear grip at mu 0.8 at 1, 6 and 11 m/s (test_drivetrain.py)"}
   esc_current_limit:  {value: 120.0,  source: guess,      note: "motoring current limit [A]; typical 1/10 sensorless ESC. The motor would draw 185 A at stall"}
-  esc_regen_current_limit: {value: 8.65, source: guess,   note: "regeneration limit [A]: forward duty below the back-EMF brakes the car, as a synchronous-rectifying ESC does. 0.399 N m at the rear axle, no more than brake_torque_max, so motor braking loads the rear tyres no more than the ESC brake (test_drivetrain.py). Refit from car data"}
+  esc_regen_current_limit: {value: 2.5, source: guess,    note: "regeneration limit [A]: forward duty below the back-EMF brakes the car, as a synchronous-rectifying ESC does, lightly, as a hobby ESC with a light drag brake does (unmeasured). 0.115 N m at the rear axle, about 0.3 of brake_torque_max: regen plus road load decelerates 1.6-2.0 m/s^2 at 3-11 m/s on every variant, so slowing harder needs the ESC brake (3.0-3.5 m/s^2). Was 8.65 A (= the brake), which made the brake band redundant above 1 m/s. Refit from car data"}
   reverse_scale:      {value: 0.5,    source: guess}
   rearm_time:         {value: 0.1,    source: guess,      note: "neutral at standstill before reverse is armed [s]"}
   # --- steering servo

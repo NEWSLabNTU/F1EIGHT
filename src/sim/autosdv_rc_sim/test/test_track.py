@@ -10,6 +10,8 @@ from autosdv_rc_sim.track import (
     write_track)
 
 SPEC = dict(speeds=(2.0, 6.0, 11.0), hold=3.0, accel=2.5, decel=2.5, runout=10.0)
+# The committed default track: braking at what regeneration gives (track.py docstring)
+DEFAULT_TRACK = dict(SPEC, decel=1.5)
 
 
 def test_the_spec_table():
@@ -88,7 +90,7 @@ def test_the_written_map(tmp_path):
 
 
 def test_the_committed_default_track_is_current(tmp_path):
-    write_track(make_profile(**SPEC), tmp_path)
+    write_track(make_profile(**DEFAULT_TRACK), tmp_path)
     committed = default_track_dir()
     for name in ('lanelet2_map.osm', 'pointcloud_map.pcd', 'map_projector_info.yaml', 'track.yaml'):
         assert filecmp.cmp(tmp_path / name, committed / name, shallow=False), name

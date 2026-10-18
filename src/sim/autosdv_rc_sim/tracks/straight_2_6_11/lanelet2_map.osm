@@ -42,12 +42,12 @@
     <tag k="ele" v="0.0000" />
   </node>
   <node id="9" lat="0" lon="0">
-    <tag k="local_x" v="105.4000" />
+    <tag k="local_x" v="121.5333" />
     <tag k="local_y" v="0.5000" />
     <tag k="ele" v="0.0000" />
   </node>
   <node id="10" lat="0" lon="0">
-    <tag k="local_x" v="115.4000" />
+    <tag k="local_x" v="131.5333" />
     <tag k="local_y" v="0.5000" />
     <tag k="ele" v="0.0000" />
   </node>
@@ -92,22 +92,22 @@
     <tag k="ele" v="0.0000" />
   </node>
   <node id="19" lat="0" lon="0">
-    <tag k="local_x" v="105.4000" />
+    <tag k="local_x" v="121.5333" />
     <tag k="local_y" v="-0.5000" />
     <tag k="ele" v="0.0000" />
   </node>
   <node id="20" lat="0" lon="0">
-    <tag k="local_x" v="115.4000" />
+    <tag k="local_x" v="131.5333" />
     <tag k="local_y" v="-0.5000" />
     <tag k="ele" v="0.0000" />
   </node>
   <node id="21" lat="0" lon="0">
-    <tag k="local_x" v="105.4000" />
+    <tag k="local_x" v="121.5333" />
     <tag k="local_y" v="0.5000" />
     <tag k="ele" v="0.0000" />
   </node>
   <node id="22" lat="0" lon="0">
-    <tag k="local_x" v="105.4000" />
+    <tag k="local_x" v="121.5333" />
     <tag k="local_y" v="-0.5000" />
     <tag k="ele" v="0.0000" />
   </node>

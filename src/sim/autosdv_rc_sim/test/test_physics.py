@@ -118,7 +118,9 @@ def test_standstill_is_held_below_the_breakaway_torque():
 def test_motor_braking_under_a_forward_command_does_not_lock_the_rear_wheels(variant):
     """PWM just above the deadband at speed is a duty below the back-EMF: the ESC regenerates.
 
-    The regeneration cap keeps that under the rear grip on every variant."""
+    The regeneration cap keeps that under the rear grip on every variant, and it is a light
+    drag brake: regeneration plus road load slow the car at 1.5-2.0 m/s^2, clearly less than
+    the ESC brake (3.0-3.5), so braking harder needs the brake band below neutral."""
     p = load_vehicle(variant=variant)
     plant = rolling(p, 11.0)
     kappas = []
@@ -127,8 +129,19 @@ def test_motor_braking_under_a_forward_command_does_not_lock_the_rear_wheels(var
         if plant.state.vx > 1.0:
             kappas.append(plant.kappa_rear)
     assert plant.esc_out.duty > 0.0 and plant.drivetrain.current < 0.0     # it is regenerating
-    assert plant.state.vx < 6.0                                            # and braking hard
+    decel = (11.0 - plant.state.vx) / 2.5
+    assert 1.5 < decel < 2.1                                               # lightly: a drag brake
     assert min(kappas) > -0.2
+
+
+@pytest.mark.parametrize('variant', variant_names())
+def test_the_esc_brake_is_clearly_stronger_than_regeneration(variant):
+    """Full brake (min_pwm) from 11 m/s: at least 2.9 m/s^2, against regeneration's 2.1 at most."""
+    p = load_vehicle(variant=variant)
+    plant = rolling(p, 11.0)
+    for _ in range(int(round(1.0 / p.physics_dt))):
+        plant.step(p.physics_dt, p.min_pwm, STRAIGHT)
+    assert 11.0 - plant.state.vx >= 2.9
 
 
 def test_uncapped_motor_braking_would_lock_the_rear_wheels():

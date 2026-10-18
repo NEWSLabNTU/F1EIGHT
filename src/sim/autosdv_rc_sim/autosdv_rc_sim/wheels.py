@@ -42,8 +42,14 @@ def sticks(omega: float, external: float, friction: WheelFriction, band: float) 
 
 
 def friction_sign(omega: float, external: float, band: float) -> float:
-    """Direction the Coulomb torque opposes: the rotation, or inside the band the impending motion."""
-    if abs(omega) >= band:
+    """Direction the Coulomb torque opposes: the rotation, or inside the band the impending motion.
+
+    Inside the band an axle that still turns against the external torque (a rolling wheel
+    the tyre is slowing down) keeps opposing its rotation: taking the external torque's
+    sign there would make the Coulomb torque drive the wheel along its rotation, and a car
+    coasting to a stop would creep forever at the band's edge (|omega| = band).
+    """
+    if abs(omega) >= band or omega * external < 0.0:
         return 1.0 if omega > 0.0 else -1.0
     if external > 0.0:
         return 1.0

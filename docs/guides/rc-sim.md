@@ -39,8 +39,10 @@ Headless and deterministic: one Python process steps the car (1 kHz), the
 hall sensor, `velocity_report`'s estimate, the actuator's shell and your
 coefficients (100 Hz) on a simulated clock, so the same file gives the same
 marks on any machine. The target is what Autoware's planner commands on the
-graded straight (115.4 m): 0 → 2 → 6 → 11 m/s, 3 s holds, then a stop on
-the stop line. Two runs per model variant:
+graded straight (131.5 m): 0 → 2 → 6 → 11 m/s at 2.5 m/s^2, 3 s holds, then a stop on
+the stop line at 1.5 m/s^2. The ESC regenerates only lightly (a drag brake: 1.5-2.0 m/s^2
+with road load, against 3.0-3.5 m/s^2 for its brake), and `AckermannSpeedPID` has no braking
+mode, so the default track brakes at what regeneration gives. Two runs per model variant:
 
 - **profile** — speed holds at 2, 6 and 11 m/s (steady error, overshoot,
   time to reach), the launch from rest (no wheel spin, no lurch), the
@@ -102,17 +104,73 @@ edges instead of a GPIO pin. The plant publishes `/clock`; every other node
 uses simulated time. In RViz, put a 2D Goal Pose at the stop line and press
 Engage. Autoware's velocity planner decides the speeds, as on the car, but
 with the planning caps raised for this run only: `max_vel` 4.17 -> 11.5 m/s and
-acceleration/deceleration 1.0 -> 2.5 m/s^2 (jerk 1.0 -> 5.0), from the package's
+acceleration 1.0 -> 2.5 m/s^2 and normal deceleration 1.0 -> 1.5 m/s^2 (jerk 1.0 -> 5.0), from the package's
 `config/common.param.yaml`, a copy of upstream's `common.param.yaml`.
 `rc_sim.launch.xml` composes planning through `rc_sim_planning_component.launch.xml`
 (upstream's component with that one path changed), because `autoware.launch.xml`
 exposes no argument for it; the car's own launch keeps 4.17 and 1.0. So the run
 reproduces the lab's 11 m/s straight (the smoke test requires a peak of at least
-9 m/s and a stop within 1 m of the stop line; measured 0.02-0.07 m short). Separate processes on a
-simulated clock race within a tick, so results are close to, but not exactly,
+9 m/s and a stop within 1 m of the stop line; measured 0.02-0.07 m short before
+the clock handshake, 0.03-0.05 m past with it). The speed loop runs in lockstep with the clock (below); the rest of
+Autoware still races within a tick, so results are close to, but not exactly,
 the graded run.
 
-`just sim make-track --speeds 2,6,11 --hold 3 --accel 2.5 --decel 2.5` prints
+### Clock handshake (lockstep)
+
+`lockstep:=true` (the default; `lockstep:=false` turns it off) makes the plant
+wait for the speed loop instead of running ahead of it:
+
+- `velocity_report` and the actuator acknowledge every timer deadline on
+  `/rc_sim/lockstep/ack` (`std_msgs/String`,
+  `"<name> <sec> <nanosec> <period_ns> [key=value ...]"`) once its work is done:
+  the report published, the PWM written. Only with `hardware:=sim`; the car never
+  acknowledges or waits.
+- The plant learns each one's period and phase from its acks and never publishes a
+  `/clock` past a deadline it has no ack for. Under load simulated time slows (a
+  real-time factor below 1) instead of ticks being skipped.
+- At equal instants `velocity_report` goes first: the actuator holds a tick until
+  the report of the latest `velocity_report` deadline at or before it has arrived.
+  Likewise `velocity_report` holds a report until the plant has marked its hall edges
+  complete up to that instant (the edge message's layout label `until_ns=<ns>`).
+- Lab 2 Part 1 adds `path_tracker` (its `lockstep` parameter): the plant never skips
+  one of its 30 Hz cycles, and the actuator also holds a tick until the control command
+  stamped with the tracker's latest deadline has come through the forwarder and
+  `vehicle_cmd_gate` (both keep the stamp). That hold is dropped after 0.5 s (wall)
+  without such a command, and re-armed by the next command on the tracker's schedule
+  (not by one the gate makes up on its own).
+- It also adds the e-stop's source, participant `emergency`: `lab2_part1_scenario`'s
+  20 Hz emergency timer applies a scheduled e-stop change at its tick, stamps the message
+  with the tick and acknowledges it, and the actuator's third gate holds its tick until
+  that message has arrived, so the e-stop acts on the same tick in every run. On stacks
+  where nobody acknowledges as `path_tracker` or `emergency` (`just sim rc`, the car)
+  these two gates never arm.
+- A participant silent for `lockstep_timeout` (2 s wall) invalidates the run:
+  `/rc_sim/lockstep/status` (latched JSON, 1 Hz and on change) says `"ok": false`
+  and why, and the plant stops waiting for it, so the run never hangs. The status
+  also carries the real-time factor (`rtf`) and the loop's own accounting:
+  `stale_reports` (actuator ticks on a report older than the latest one due, 0
+  expected), `max_report_age`, `late_edges`, `skipped_ticks`, `timeouts`.
+  `"ok": false` is for good, and the participants' own holds (the actuator waiting for
+  its report, command or emergency) follow it and stay off; the plant still waits for
+  acks. So in `just sim rc` any 2 s stall (a suspended laptop, a debugger pause) leaves
+  the equal-instant ordering off for the rest of that session: restart the simulator to
+  get it back.
+
+Measured with `smoke.py` (each run about 40 s; this shared 32-core host already ran
+at a load average of 26-133): with the handshake, the actuator never used a report
+older than 40 ms (the report period is 50 ms) and no tick was stale, quiet or with
+32-128 busy loops added. With 32-64 loops the car stopped 0.03-0.05 m past the
+line in every run; without the handshake, 19 % of ticks used the previous report
+even on the quiet host (up to 70 ms old), and with 64 loops the car stopped 4.4-5.3 m
+past the line. The real-time factor with the handshake averaged 0.78-0.98 per run
+(lowest one-second value 0.54), following the host's other load more than the busy
+loops; without it, 0.92-1.00. With 128 loops (real-time factor 0.64, lowest 0.35) the
+speed loop stayed locked (no stale tick, reports at most 40 ms old) but the car stopped
+2.6 m past the line: Autoware's planning and control, which produce the target speed,
+are not in the handshake and fall behind under that load.
+Design: `autosdv_rc_sim/lockstep_sync.py`.
+
+`just sim make-track --speeds 2,6,11 --hold 3 --accel 2.5 --decel 1.5` prints
 the segment table and writes a track for `track:=`.
 
 ## Seeing a graded run

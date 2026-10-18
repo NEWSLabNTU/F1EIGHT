@@ -3,7 +3,11 @@
     L = sum (v_i^2 - v_{i-1}^2) / (2a) + sum v_i T + v_top^2 / (2d) + run-out
 
 With a = 2.5, d = 2.5, T = 3 s and 0 -> 2 -> 6 -> 11 m/s: 115.4 m, 17.8 s
-(docs/design/rc-sim-design.md, "The track"). The written map is one straight
+(docs/design/rc-sim-design.md, "The track"). The committed default track brakes at
+d = 1.5 instead (131.5 m, 20.7 s): since the ESC's regeneration was lowered to a light
+drag brake (vehicle.yaml esc_regen_current_limit), a controller without a braking mode,
+such as the car's AckermannSpeedPID that rc_sim_grade tunes, can follow only a
+deceleration that regeneration and road load give (1.5-2.0 m/s^2). The written map is one straight
 lane, split into a lanelet per segment so each carries its speed limit, plus
 a 1 m lead-in behind the start pose, a stop line, a flat point cloud for the
 map loader, and track.yaml with the profile and the start and goal poses.
@@ -293,7 +297,8 @@ def main(argv=None) -> int:
     ap.add_argument('--speeds', default='2,6,11', help='speeds to hold [m/s], rising')
     ap.add_argument('--hold', type=float, default=3.0, help='hold time per speed [s]')
     ap.add_argument('--accel', type=float, default=2.5, help="the planner's acceleration [m/s^2]")
-    ap.add_argument('--decel', type=float, default=2.5, help="the planner's deceleration [m/s^2]")
+    ap.add_argument('--decel', type=float, default=1.5,
+                    help="the planner's deceleration [m/s^2] (1.5: what regeneration alone gives)")
     ap.add_argument('--runout', type=float, default=10.0, help='beyond the stop line [m]')
     ap.add_argument('--variant', default='nominal', help='vehicle model variant to check against')
     ap.add_argument('--out', default='', help='output directory (default tmp/rc_sim/tracks/straight_<speeds>)')
