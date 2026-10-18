@@ -75,3 +75,39 @@ def test_stall_startup_and_cap():
     assert R.why_stop(args, w, 0.0, 700.0, 1.0) is None
     w.sim_t_wall = 1201.0
     assert 'rtf 0.50' in R.why_stop(args, w, 0.0, 1201.0, 1.0)
+
+
+def test_hold_defaults(monkeypatch):
+    monkeypatch.setattr(R.sys.stdin, 'isatty', lambda: True, raising=False)
+    assert R.parse([]).hold                        # one run from a terminal
+    assert not R.parse(['--final']).hold           # the graded set never waits
+    assert not R.parse(['--no-hold']).hold
+    monkeypatch.setattr(R.sys.stdin, 'isatty', lambda: False, raising=False)
+    assert not R.parse([]).hold                    # scripted: no one to press Enter
+    assert R.parse(['--hold']).hold
+
+
+def test_session_has_finds_a_member_by_command_line():
+    import os
+    import subprocess
+    import uuid
+    needle = f'probe-{uuid.uuid4().hex}'           # in no other command line of this session
+    p = subprocess.Popen([sys.executable, '-c', 'import time; time.sleep(30)', needle],
+                         start_new_session=True)
+    try:
+        import time
+        deadline = time.monotonic() + 5.0          # until the child has exec'd
+        while not R.session_has(p.pid, needle.encode()):
+            assert time.monotonic() < deadline
+            time.sleep(0.05)
+        assert not R.session_has(p.pid, b'no-such-process-name')
+        assert not R.session_has(os.getsid(0), needle.encode())
+    finally:
+        os.killpg(p.pid, 9)
+        p.wait()
+
+
+def test_hold_open_returns_without_a_dashboard(tmp_path):
+    proc = SimpleNamespace(pid=2 ** 22 + 12345, poll=lambda: None)   # no such session
+    R.hold_open(proc, tmp_path)                    # returns at once, prints nothing
+    assert not R._holding

@@ -14,6 +14,11 @@ session (setsid), output to <out>/<variant>/stack.log, waits for the grader's ma
 in <out>/<variant>/, prints the marks, and stops the whole process group (SIGINT, SIGTERM,
 SIGKILL). Nothing it started is left running, whatever happens (Ctrl-C included).
 
+A single run from a terminal holds the finished run open first: the dashboard and RViz
+stay up with the final curves, violations and marks until the dashboard window is closed,
+Enter or Ctrl-C (--no-hold skips it; --final and a non-terminal stdin never hold; --hold
+forces it). The dashboard saves its window to <out>/<variant>/dashboard.png when it closes.
+
     --submission DIR   a Part 1 submission (<id>_lab_2_1/ holding lab2_speed/, or the
                        package): scripts/testing/lab2/submission.py --part1 gives the class,
                        the parameters and the PYTHONPATH entry. `just lab2 sim` also takes
@@ -40,7 +45,7 @@ no progress, MRM, its own timeout) and writes the reason into marks.json.
 
 Outputs (default <out> = tmp/lab2/part1/<submission name>): <variant>/trace.csv and
 <variant>/marks.json (the grader's), <variant>/run.json (the command, the play_log, the
-timings), and with --final, final.json: marks = 25 * sum(passed) / sum(total), an invalid
+timings), <variant>/dashboard.png (with the dashboard), and with --final, final.json: marks = 25 * sum(passed) / sum(total), an invalid
 run counting 0 of its checks.
 
 Exit status: 0 when every run was valid (passed or not), 1 when a run was invalid or never
@@ -58,6 +63,7 @@ import json
 import os
 from pathlib import Path
 import re
+import select
 import signal
 import subprocess
 import sys
@@ -79,10 +85,15 @@ MIN_RTF = 0.2
 STOP_WAITS = ((signal.SIGINT, 20.0), (signal.SIGTERM, 5.0), (signal.SIGKILL, 5.0))
 
 _running = []           # the stack's Popen, for the signal handler
+_holding = []          # non-empty while the finished run is held open (Ctrl-C ends the hold)
 
 
 class UsageError(ValueError):
     """Exit 2."""
+
+
+class HoldEnded(Exception):
+    """Ctrl-C (or SIGTERM) while a finished run is held open: stop the stack, carry on."""
 
 
 def info(msg):
@@ -116,6 +127,11 @@ def parse(argv):
     ap.add_argument('--no-rviz', dest='rviz', action='store_false')
     ap.add_argument('--gui', dest='gui', action='store_true', default=True, help='the dashboard')
     ap.add_argument('--no-gui', dest='gui', action='store_false')
+    ap.add_argument('--hold', dest='hold', action='store_true', default=None,
+                    help='after a run, keep the dashboard and RViz open until the dashboard '
+                         'window is closed or Enter is pressed (default: a single run from a '
+                         'terminal, with the dashboard)')
+    ap.add_argument('--no-hold', dest='hold', action='store_false')
     ap.add_argument('--timeout', type=float, default=0.0,
                     help='[s wall] hard cap per run; 0 (default): from the achieved rtf')
     ap.add_argument('--stall', type=float, default=30.0,
@@ -155,6 +171,8 @@ def parse(argv):
         ap.error('--final runs ' + ', '.join(VARIANTS_FINAL) + '; drop variant:=/--variant')
     if args.variant is None:
         args.variant = 'nominal'
+    if args.hold is None:
+        args.hold = not args.final and sys.stdin.isatty()
     return args
 
 
@@ -268,6 +286,8 @@ def group_alive(pgid):
 
 
 def on_signal(signum, frame):
+    if _holding:
+        raise HoldEnded()
     for proc in list(_running):
         info('\nstopping the stack ...')
         stop_group(proc)
@@ -373,6 +393,52 @@ def why_stop(args, watch, t0, now, rtf_arg):
     return None
 
 
+def session_has(sid, needle):
+    """True while a process of session sid has needle in its command line (Linux /proc).
+
+    A session, not a process group: the stack starts in its own session (setsid), and
+    play_launch moves the nodes into a process group of their own inside it."""
+    for d in Path('/proc').iterdir():
+        if not d.name.isdigit():
+            continue
+        try:
+            if os.getsid(int(d.name)) != sid:
+                continue
+            if needle in (d / 'cmdline').read_bytes():
+                return True
+        except (OSError, ProcessLookupError):
+            continue
+    return False
+
+
+def hold_open(proc, out_dir):
+    """Keep the finished run's stack (the dashboard and RViz) up for the student to read.
+
+    Returns when the dashboard window is closed, Enter is pressed, Ctrl-C, or the stack
+    exits on its own. The grader stopped recording at the end of the run, so the curves
+    and the marks on screen are final while the car sits still behind them."""
+    if not session_has(proc.pid, b'lab2_part1_dashboard'):
+        return
+    info('\n  The run is over: the dashboard and RViz stay open so you can read them.\n'
+         '  Close the dashboard window or press Enter to stop the simulation '
+         f'(the window is saved to {out_dir / "dashboard.png"}).')
+    _holding.append(True)
+    watch_stdin = sys.stdin is not None and sys.stdin.isatty()
+    try:
+        while proc.poll() is None and session_has(proc.pid, b'lab2_part1_dashboard'):
+            if not watch_stdin:
+                time.sleep(0.5)
+                continue
+            ready, _, _ = select.select([sys.stdin], [], [], 0.5)
+            if ready:
+                sys.stdin.readline()
+                break
+    except HoldEnded:
+        pass
+    finally:
+        _holding.clear()
+
+
 # ------------------------------------------------------------------ one run
 def run_one(args, variant, ctrl_args, pythonpath, out_root, env):
     out_dir = out_root / variant
@@ -399,6 +465,7 @@ def run_one(args, variant, ctrl_args, pythonpath, out_root, env):
     watch = Watch()
     rtf_arg = launch_rtf(args.launch_args)
     marks, why, t_engaged, t_marks = None, None, None, None
+    printed = False
     try:
         while True:
             watch.spin(0.5)
@@ -419,6 +486,10 @@ def run_one(args, variant, ctrl_args, pythonpath, out_root, env):
             why = why_stop(args, watch, t0, now, rtf_arg)
             if why:
                 break
+        if marks is not None and args.hold and args.gui:
+            print_checks(marks)
+            printed = True
+            hold_open(proc, out_dir)
     finally:
         watch.spin(0.5)
         watch.close()
@@ -441,7 +512,7 @@ def run_one(args, variant, ctrl_args, pythonpath, out_root, env):
            'sim_s': watch.sim_t, 'rtf': watch.rtf,
            'events': watch.events, 'stopped_cleanly': clean}
     (out_dir / 'run.json').write_text(json.dumps(run, indent=2) + '\n')
-    print_marks(marks, run)
+    print_marks(marks, run, table=not printed)
     return marks
 
 
@@ -453,7 +524,7 @@ def fmt(v):
     return str(v)
 
 
-def print_marks(marks, run):
+def print_checks(marks):
     checks = marks.get('checks') or {}
     if checks:
         w = max(len(k) for k in checks)
@@ -462,6 +533,11 @@ def print_marks(marks, run):
             ok = c.get('pass')
             tag = 'PASS' if ok else ('FAIL' if ok is False else ' -- ')
             info(f"  {name:<{w}}  {fmt(c.get('value')):>9}  {fmt(c.get('limit')):>9}  {tag}")
+
+
+def print_marks(marks, run, table=True):
+    if table:
+        print_checks(marks)
     if marks.get('valid', False):
         info(f"  {marks['variant']}: {marks.get('passed', 0)}/"
              f"{marks.get('total', CHECKS_PER_RUN)} passed")

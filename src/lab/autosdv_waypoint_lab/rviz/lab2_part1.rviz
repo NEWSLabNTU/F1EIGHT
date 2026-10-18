@@ -7,19 +7,10 @@
 #   white bar     the stop line; yellow bar: the e-stop trigger (/lab2/part1/markers)
 #   cyan arrow    the car, with the live readout (/lab2/part1/car); the 0.4 m vehicle model
 #   red spheres   failed checks, where they happened (/lab2/part1/violations)
-Panels:
-  - Class: rviz_common/Displays
-    Help Height: 0
-    Name: Displays
-    Property Tree Widget:
-      Expanded: ~
-      Splitter Ratio: 0.55
-    Tree Height: 600
-  - Class: rviz_common/Views
-    Expanded:
-      - /Current View1
-    Name: Views
-    Splitter Ratio: 0.5
+# No side panels: rviz2 (Humble) adds the configured panels after it applies the window
+# geometry, so `Hide Left Dock` / `collapsed` below never take effect and the docks eat
+# most of a laptop-sized view. Panels > Displays brings the display list back.
+Panels: []
 Visualization Manager:
   Class: ""
   Displays:
@@ -198,10 +189,6 @@ Visualization Manager:
         Value: ThirdPersonFollower (rviz_default_plugins)
         Yaw: 3.14159
 Window Geometry:
-  Displays:
-    collapsed: true
-  Views:
-    collapsed: true
   Hide Left Dock: true
   Hide Right Dock: true
   Width: 1280

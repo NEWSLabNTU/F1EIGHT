@@ -13,7 +13,8 @@ reloads trace.csv so a late start loses nothing. Sim time on the x axis.
 Needs a display: without DISPLAY / WAYLAND_DISPLAY it exits with a message (launch
 with gui:=false for batch runs). QT_QPA_PLATFORM=offscreen renders without one,
 for tests (--screenshot FILE --exit-after S). Ctrl-C, SIGTERM or closing the window
-stop it cleanly.
+stop it cleanly; with --screenshot FILE (or the screenshot parameter, which the launch file
+sets to out_dir/dashboard.png) it saves the window there first.
 """
 import argparse
 import csv
@@ -151,6 +152,9 @@ def make_node(model: Model):
     class DashboardNode(Node):
         def __init__(self):
             super().__init__('lab2_part1_dashboard')
+            # where to save the window on exit; --screenshot wins (a parameter, not an
+            # argument, in the launch file: out_dir may hold spaces)
+            self.screenshot = self.declare_parameter('screenshot', '').value
             latched = QoSProfile(depth=1, durability=DurabilityPolicy.TRANSIENT_LOCAL,
                                  reliability=ReliabilityPolicy.RELIABLE)
             history = QoSProfile(depth=TRACE_HISTORY, reliability=ReliabilityPolicy.RELIABLE,
@@ -383,7 +387,8 @@ def main(args=None) -> int:
 
     argv = sys.argv if args is None else args
     ap = argparse.ArgumentParser(description=__doc__.splitlines()[0])
-    ap.add_argument('--screenshot', default='', help='save the window here on exit (PNG)')
+    ap.add_argument('--screenshot', default='',
+                    help='save the window here on exit (PNG); else the screenshot parameter')
     ap.add_argument('--exit-after', type=float, default=0.0,
                     help='close after this many wall seconds (tests)')
     opts = ap.parse_args(remove_ros_args(argv)[1:])
@@ -405,6 +410,7 @@ def main(args=None) -> int:
     rclpy.init(args=argv)
     model = Model()
     node = make_node(model)
+    screenshot = opts.screenshot or node.screenshot
     executor = SingleThreadedExecutor()
     executor.add_node(node)
 
@@ -440,11 +446,12 @@ def main(args=None) -> int:
     try:
         code = app.exec_() if hasattr(app, 'exec_') else app.exec()
     finally:
-        if opts.screenshot:
+        if screenshot:
             win.refresh()
             win.canvas.draw()
             app.processEvents()
-            win.grab().save(opts.screenshot)
+            if not win.grab().save(screenshot):
+                print(f'lab2_part1_dashboard: could not save {screenshot}', file=sys.stderr)
         for sig, handler in previous.items():
             signal.signal(sig, handler)
         executor.shutdown(timeout_sec=1.0)

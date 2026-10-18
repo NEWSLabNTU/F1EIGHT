@@ -17,7 +17,7 @@
     rc_sim_plant -> /localization/kinematic_state + TF map->base_link: the TRUE pose
     lab2_part1_scenario: engage, the e-stop at the course's trigger, release
     lab2_part1_grader: live checks -> /lab2/part1/status, trace.csv, marks.json in out_dir
-    lab2_part1_dashboard (gui:=true), RViz (rviz:=true)
+    lab2_part1_dashboard (gui:=true; saves dashboard.png in out_dir on exit), RViz (rviz:=true)
 
   What the waypoint stack loses here, and why:
     zed_aruco, waypoint_localization (AR-tag localizer, EKF, gyro odometer, start_pose_init)
@@ -216,7 +216,9 @@
     <param name="use_sim_time" value="true"/>
   </node>
 
+  <!-- dashboard.png in out_dir: the window as it was when the run was stopped -->
   <node pkg="autosdv_waypoint_lab" exec="lab2_part1_dashboard" name="lab2_part1_dashboard" output="screen" if="$(var gui)">
+    <param name="screenshot" value="$(var out_dir)/dashboard.png"/>
     <param name="profile_file" value="$(var profile_file)"/>
     <param name="use_sim_time" value="true"/>
   </node>

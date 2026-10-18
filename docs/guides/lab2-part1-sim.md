@@ -21,7 +21,10 @@ just lab2 sim                                                  # part1_submissio
 
 One command builds nothing by hand and leaves nothing running. It starts the stack in
 its own process group, opens RViz and the dashboard, engages the car, drives the course,
-grades the run live, prints the marks and stops everything (Ctrl-C included).
+grades the run live, prints the marks and stops everything (Ctrl-C included). A single
+run from a terminal first holds the finished run open: the dashboard and RViz stay up with
+the final curves and marks until the dashboard window is closed or Enter is pressed
+(`--no-hold` skips it; `--final` never holds).
 
 `submission:=DIR` is either `<student_id>_lab_2_1/` holding `lab2_speed/`, or the
 `lab2_speed/` package itself. To stop typing it, put it in `~/lab2/lab2.yaml`:
@@ -67,7 +70,8 @@ both read; nothing in either hard-codes a position.
   - each failed check's window in red, the e-stop in grey;
   - the 16 checks live ("pending" until each window closes), then the marks.
 
-  It plots exactly what the grader graded.
+  It plots exactly what the grader graded, and saves itself to `dashboard.png` in the
+  run's output directory when it closes.
 
 ## The checks
 
@@ -142,6 +146,7 @@ checks); an invalid run counts 0 of its 16.
   emergency, segment`);
 - `marks.json` (`variant, valid, invalid_reason, passed, total, checks`);
 - `run.json` (the command, the timings, the `play_log` path);
+- `dashboard.png` (the dashboard as it was when it closed; with the dashboard only);
 - `play_log/` (every node's log).
 
 `--final` adds `final.json` beside them.
