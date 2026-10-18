@@ -12,12 +12,12 @@ HERE = Path(__file__).resolve().parent
 
 
 # the handout's config/speed_pid_car.yaml: every key but the feed-forward's
-CAR_YAML = ('kp: 20.0\nki: 25.0\nkd: 0.0\nintegral_limit: 10.0\nerror_limit: 0.25\n'
+CAR_YAML = ('kp: 20.0\nki: 25.0\nkd: 0.0\nintegral_limit: 10.0\nerror_limit: 0.5\n'
             'integral_band: 0.25\nenable_conditional_integration: true\n'
             'derivative_filter_alpha: 0.15\nmax_pwm_offset: 100\nmax_brake_offset: 10\n'
             'kp_brake: 20.0\nbrake_enter: 0.2\nbrake_exit: 0.05\nbrake_deadband: 5\n')
 CAR_ARGS = ('speed_controller_params:={kp: 20.0, ki: 25.0, kd: 0.0, integral_limit: 10.0, '
-            'error_limit: 0.25, integral_band: 0.25, enable_conditional_integration: true, '
+            'error_limit: 0.5, integral_band: 0.25, enable_conditional_integration: true, '
             'derivative_filter_alpha: 0.15, max_pwm_offset: 100, max_brake_offset: 10, '
             'kp_brake: 20.0, brake_enter: 0.2, brake_exit: 0.05, brake_deadband: 5, '
             'ff_deadband: 5.0, ff_gain: 0.03}')
@@ -55,11 +55,26 @@ def test_uncalibrated_warns_and_gives_no_feed_forward(tmp_path):
     assert 'ff_deadband: 0.0' in args[1] and 'ff_gain: 0.0' in args[1]
 
 
+@pytest.mark.parametrize('cal', [None, 'car: A\ndeadband: [5\n', '[1, 2]\n', 'car: A\n',
+                                 'car: A\ndeadband: fast\ngain: 0.03\n',
+                                 'car: A\ndeadband: 5.0\ngain: .nan\n'])
+def test_unusable_calibration_warns_and_gives_no_feed_forward(tmp_path, cal):
+    root, pkg = make(tmp_path)
+    if cal is None:
+        (pkg / 'config' / 'calibration.yaml').unlink()
+    else:
+        (pkg / 'config' / 'calibration.yaml').write_text(cal)
+    _, args, warnings = submission.resolve(root)
+    assert args[1].endswith('ff_deadband: 0.0, ff_gain: 0.0}')
+    assert any('calibration.yaml' in w and 'no feed-forward' in w for w in warnings), warnings
+
+
 def test_old_lab2_waypoint_layout_is_refused_with_the_new_name(tmp_path):
     (tmp_path / 'lab2_waypoint' / 'lab2_waypoint').mkdir(parents=True)
     (tmp_path / 'lab2_waypoint' / 'lab2_waypoint' / 'speed_pid.py').write_text('')
-    with pytest.raises(submission.SubmissionError, match='lab2_speed'):
+    with pytest.raises(submission.SubmissionError, match='lab2_speed') as e:
         submission.resolve(tmp_path)
+    assert 'retired' in str(e.value)
 
 
 def test_car_file_is_checked_like_part1(tmp_path):
@@ -87,10 +102,6 @@ def test_missing_files_are_errors(tmp_path):
     with pytest.raises(submission.SubmissionError):
         submission.resolve(tmp_path)
     root, pkg = make(tmp_path)
-    (pkg / 'config' / 'calibration.yaml').unlink()
-    with pytest.raises(submission.SubmissionError):
-        submission.resolve(root)
-    (pkg / 'config' / 'calibration.yaml').write_text('car: A\n')
     (pkg / 'config' / 'speed_pid_car.yaml').unlink()
     with pytest.raises(submission.SubmissionError, match='speed_pid_car.yaml'):
         submission.resolve(root)

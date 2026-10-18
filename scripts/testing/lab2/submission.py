@@ -12,6 +12,7 @@ the same SpeedPID as Part 1, driving the real car. It must hold
     lab2_speed/speed_pid.py             the SpeedPID (and any helper module beside it)
     config/speed_pid_car.yaml           the real car's parameters
     config/calibration.yaml             deadband and gain from the car's speed-step CSV
+                                        (without it the car runs with no feed-forward)
 
 and the result is
 
@@ -19,8 +20,9 @@ and the result is
     speed_controller_class      lab2_speed.speed_pid:SpeedPID
     speed_controller_params     speed_pid_car.yaml, checked as Part 1's speed_pid.yaml is,
                                 with ff_deadband / ff_gain from the calibration unless
-                                speed_pid_car.yaml sets them itself (an uncalibrated
-                                gain, 0, gives 0 for both: no feed-forward)
+                                speed_pid_car.yaml sets them itself (a calibration that
+                                is missing, does not load or has gain 0 gives 0 for
+                                both, with a warning: no feed-forward)
 
 The merge is the handout's `bench/params.py speed_pid_params()`, re-implemented
 here on purpose: the gate must not import code out of the student's copy of the
@@ -240,24 +242,41 @@ def params(pkg: Path):
     data, warnings = check_part1_yaml(pkg / 'config' / CAR_YAML)
     # the car file leaves the feed-forward to calibration.yaml on purpose
     warnings = [w for w in warnings if not any(w.startswith(f'{CAR_YAML}: {k} ') for k in FF_KEYS)]
-    cal = _load(pkg / 'config' / 'calibration.yaml')
+    deadband, gain, cal_warnings = calibration_ff(pkg / 'config' / 'calibration.yaml')
+    data.setdefault('ff_deadband', deadband)
+    data.setdefault('ff_gain', gain)
+    return data, warnings + cal_warnings
+
+
+def calibration_ff(path: Path):
+    """(ff_deadband, ff_gain, [warnings]) from a calibration.yaml. As the handout's
+    speed_pid_params(): a file that is missing, does not load or is not calibrated gives
+    0, 0 (no feed-forward) with a warning, never an error; it costs the calibration marks,
+    not the run."""
+    def unused(why):
+        return 0.0, 0.0, [f'calibration.yaml not used (no feed-forward): {path} {why}']
+    if not path.is_file():
+        return unused('is missing')
+    try:
+        cal = yaml.safe_load(path.read_text())
+    except (OSError, yaml.YAMLError) as e:
+        return unused(f'does not load ({e})')
+    if not isinstance(cal, dict):
+        return unused('is not a mapping')
     try:
         deadband, gain = float(cal['deadband']), float(cal['gain'])
     except (KeyError, TypeError, ValueError):
-        raise SubmissionError(f'{pkg}/config/calibration.yaml: deadband and gain must be numbers') \
-            from None
+        return unused('needs deadband and gain as numbers')
     if not (math.isfinite(deadband) and math.isfinite(gain)):
-        raise SubmissionError(f'{pkg}/config/calibration.yaml: deadband and gain must be finite')
+        return unused('needs finite deadband and gain')
+    warnings = []
     if str(cal.get('car', '')).strip().upper() not in CARS:
         warnings.append(f'calibration.yaml: car is {cal.get("car")!r}, expected one of A, B, C')
     if gain <= 0.0:
-        # as the handout's speed_pid_params(): not calibrated -> no feed-forward at all
         warnings.append('calibration.yaml: gain is 0, the calibration is not done '
                         '(no feed-forward)')
-        deadband, gain = 0.0, 0.0
-    data.setdefault('ff_deadband', deadband)
-    data.setdefault('ff_gain', gain)
-    return data, warnings
+        return 0.0, 0.0, warnings
+    return deadband, gain, warnings
 
 
 def flow_mapping(d: dict) -> str:
