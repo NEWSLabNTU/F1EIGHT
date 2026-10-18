@@ -14,6 +14,8 @@
   <license>Apache-2.0</license>
 
   <depend>rclpy</depend>
+  <depend>std_msgs</depend>
+  <depend>visualization_msgs</depend>
   <depend>autosdv_lab_msgs</depend>
   <depend>geometry_msgs</depend>
   <depend>sensor_msgs</depend>
@@ -39,6 +41,13 @@
   <exec_depend>autosdv_vehicle_description</exec_depend>
   <!-- the vehicle bench's plant and the bag reader -->
   <exec_depend>autosdv_coach_lab</exec_depend>
+  <!-- Lab 2 Part 1: the RC simulator's plant and lanelet writer, the e-stop message -->
+  <exec_depend>autosdv_rc_sim</exec_depend>
+  <exec_depend>autosdv_vehicle_interface</exec_depend>
+  <exec_depend>tier4_vehicle_msgs</exec_depend>
+  <!-- Lab 2 Part 1 dashboard (matplotlib in a Qt window) and grader -->
+  <exec_depend>python3-matplotlib</exec_depend>
+  <exec_depend>python3-pyqt5</exec_depend>
 
   <exec_depend>rviz2</exec_depend>
   <test_depend>python3-pytest</test_depend>

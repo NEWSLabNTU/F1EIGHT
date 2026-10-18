@@ -1,0 +1,228 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<!--
+  Lab 2 Part 1: speed and brake control on the simulated car. `just lab2 sim`.
+  Design: docs/design/lab2-part1-sim-design.md.
+
+  The Lab 2 bench's parts (waypoint_follow_bench.launch.xml) on the RC simulator's car
+  (rc_sim.launch.xml), all on the plant's /clock:
+
+    course_dir/path.csv (v column = the speed profile)
+      -> waypoint_path_publisher -> /planning/trajectory
+    /planning/trajectory + /localization/kinematic_state
+      -> path_tracker (the TA's pure pursuit; speed = the path's)
+      -> lab2_part1_scenario (pass-through; 0 during the e-stop, a 2.5 m/s^2 ramp after it)
+      -> vehicle_cmd_gate
+      -> /control/command/control_cmd -> actuator (hardware:=sim, the STUDENT SpeedPID)
+      -> /rc_sim/pwm -> rc_sim_plant (owns /clock) -> /rc_sim/hall_edges -> velocity_report
+    rc_sim_plant -> /localization/kinematic_state + TF map->base_link: the TRUE pose
+    lab2_part1_scenario: engage, the e-stop at the course's trigger, release
+    lab2_part1_grader: live checks -> /lab2/part1/status, trace.csv, marks.json in out_dir
+    lab2_part1_dashboard (gui:=true), RViz (rviz:=true)
+
+  What the waypoint stack loses here, and why:
+    zed_aruco, waypoint_localization (AR-tag localizer, EKF, gyro odometer, start_pose_init)
+        the plant's true pose is the localization, so the stop error measures control
+    localization_monitor and its two graph checks (marker fix age, path deviation)
+        config/part1/part1-diagnostics.yaml drops them; nothing else changes in the graph
+    autosdv.launch.yaml's sensor kit
+        the vehicle description (robot_state_publisher) is included on its own, for RViz
+        and the plant's IMU mount
+
+  Control is autosdv_pursuit_control_component without trajectory_follower, with one
+  argument changed: output_emergency_cmd moves vehicle_cmd_gate's emergency verdict to
+  /control/command/emergency_cmd_gate, and lab2_part1_scenario forwards it to
+  /control/command/emergency_cmd (the actuator's emergency input) OR-ed with the e-stop.
+  The gate publishes its verdict every cycle, so a second publisher on the actuator's input
+  would be overwritten ten times a second. The gate's limits (autoware_launch
+  vehicle_cmd_gate.param.yaml: vel_lim 25 m/s, lon_acc_lim 5 m/s^2; on_transition only for
+  the 0.1 s stable check after the engage) pass the profile's 11 m/s and 2.5 m/s^2.
+
+  path_tracker publishes on /control/part1/tracker_cmd, and lab2_part1_scenario passes it
+  on to /control/trajectory_follower/control_cmd (the gate's AUTO input) unchanged, except
+  around the e-stop: speed 0 while the emergency is raised, then a ramp from 0 at
+  2.5 m/s^2 until it meets the path's speed (the gate never sees the e-stop, so its output is
+  still 6 m/s when the emergency clears, and it cannot do this).
+-->
+<launch>
+  <arg name="variant" default="nominal" description="vehicle model variant: nominal, low_batt, low_mu (rc_sim vehicle.yaml)"/>
+  <arg name="course_dir" default="$(find-pkg-share autosdv_waypoint_lab)/config/courses/lab2_part1"
+       description="written by lab2_make_part1_course: path.csv, part1_profile.yaml, track.yaml, the map"/>
+  <!-- The stub (holds neutral) by default, as on the student branch: `just lab2 sim
+       submission:=DIR` sets both; the TA reference only by name (just lab2 sim with the class option). -->
+  <arg name="speed_controller_class" default="autosdv_waypoint_lab.stub.speed_pid_part1:SpeedPID"
+       description="the SpeedPID, package.module:Class (just lab2 sim submission:=DIR sets it)"/>
+  <arg name="speed_controller_params" default=""
+       description="its parameters, a YAML mapping string (config/speed_pid.yaml of the submission); empty: the class's own defaults"/>
+  <arg name="out_dir" default="$(env PWD)/tmp/lab2/part1/launch/$(var variant)"
+       description="the grader writes trace.csv and marks.json here"/>
+  <arg name="rviz" default="true"/>
+  <arg name="gui" default="true" description="the dashboard window"/>
+  <arg name="grader" default="true" description="false: no grader (stack debugging only; nothing is graded)"/>
+  <arg name="real_time_factor" default="1.0" description="the plant's pace; lower on a slow host"/>
+  <arg name="lockstep" default="true" description="the plant waits for velocity_report, the actuator, path_tracker and the scenario's emergency timer (sim only)"/>
+  <arg name="lockstep_timeout" default="2.0"
+       description="[s wall] a participant silent this long invalidates the run; raise it on a host that stalls at startup"/>
+  <arg name="vehicle_model" default="autosdv_vehicle"/>
+  <arg name="sensor_model" default="autosdv_sensor_kit"/>
+  <arg name="vehicle_id" default="$(env VEHICLE_ID default)"/>
+
+  <let name="cfg" value="$(find-pkg-share autosdv_waypoint_lab)/config/part1"/>
+  <let name="profile_file" value="$(var course_dir)/part1_profile.yaml"/>
+  <let name="vehicle_info_param_file"
+       value="$(find-pkg-share $(var vehicle_model)_description)/config/vehicle_info.param.yaml"/>
+  <let name="grader_status" value="/lab2/part1/status" if="$(var grader)"/>
+  <let name="grader_status" value="" unless="$(var grader)"/>
+
+  <set_parameter name="use_sim_time" value="true"/>
+
+  <!-- the vehicle description (TF base_link -> sensors); vehicle_info's global parameters
+       come with the control component -->
+  <group>
+    <include file="$(find-pkg-share tier4_vehicle_launch)/launch/vehicle.launch.xml">
+      <arg name="use_sim_time" value="true"/>
+      <arg name="launch_vehicle_interface" value="false"/>
+      <arg name="vehicle_model" value="$(var vehicle_model)"/>
+      <arg name="sensor_model" value="$(var sensor_model)"/>
+      <arg name="vehicle_id" value="$(var vehicle_id)"/>
+      <arg name="config_dir" value="$(find-pkg-share individual_params)/config/$(var vehicle_id)/$(var sensor_model)"/>
+    </include>
+  </group>
+
+  <!-- the lane and the stop line, for RViz only -->
+  <group if="$(var rviz)">
+    <push-ros-namespace namespace="map"/>
+    <node pkg="autoware_map_projection_loader" exec="autoware_map_projection_loader_node"
+          name="map_projection_loader" output="screen">
+      <param name="map_projector_info_path" value="$(var course_dir)/map_projector_info.yaml"/>
+      <param name="lanelet2_map_path" value="$(var course_dir)/lanelet2_map.osm"/>
+    </node>
+    <node pkg="autoware_map_loader" exec="autoware_lanelet2_map_loader" name="lanelet2_map_loader" output="screen">
+      <param name="allow_unsupported_version" value="true"/>
+      <param name="center_line_resolution" value="5.0"/>
+      <param name="use_waypoints" value="true"/>
+      <param name="lanelet2_map_path" value="$(var course_dir)/lanelet2_map.osm"/>
+      <remap from="output/lanelet2_map" to="vector_map"/>
+    </node>
+    <node pkg="autoware_lanelet2_map_visualizer" exec="autoware_lanelet2_map_visualizer"
+          name="lanelet2_map_visualization" output="screen">
+      <remap from="input/lanelet2_map" to="vector_map"/>
+      <remap from="output/lanelet2_map_marker" to="vector_map_marker"/>
+    </node>
+  </group>
+
+  <!-- system: the MRM path and the graph that gates autonomous (the waypoint lab's, without
+       the marker checks) -->
+  <group>
+    <include file="$(find-pkg-share autosdv_launch)/launch/components/autosdv_pursuit_system_component.launch.xml">
+      <arg name="use_sim_time" value="true"/>
+      <arg name="run_mode" value="planning_simulation"/>
+      <arg name="diagnostic_graph_aggregator_graph_path" value="$(var cfg)/part1-diagnostics.yaml"/>
+      <arg name="component_state_monitor_topic_path"
+           value="$(find-pkg-share autosdv_launch)/config/system/component_state_monitor/topics-waypoint.yaml"/>
+    </include>
+  </group>
+
+  <group>
+    <include file="$(find-pkg-share autosdv_launch)/launch/components/autosdv_pursuit_api_component.launch.xml"/>
+  </group>
+
+  <!-- control: the lab's component without trajectory_follower (path_tracker publishes its
+       topic), the gate's emergency verdict moved (see the header) -->
+  <group>
+    <include file="$(find-pkg-share autosdv_launch)/launch/components/autosdv_pursuit_control_component.launch.xml">
+      <arg name="vehicle_model" value="$(var vehicle_model)"/>
+      <arg name="use_sim_time" value="true"/>
+      <arg name="launch_trajectory_follower" value="false"/>
+      <arg name="output_emergency_cmd" value="/control/command/emergency_cmd_gate"/>
+      <!-- no longitudinal rate limit in the gate: its dt is its own callback spacing, which a
+           loaded host makes bursty (P1 report, round 2) -->
+      <arg name="vehicle_cmd_gate_param_path"
+           value="$(find-pkg-share autosdv_waypoint_lab)/config/part1/vehicle_cmd_gate_part1.param.yaml"/>
+    </include>
+  </group>
+
+  <!-- planning and lateral control: the waypoint lab's nodes (waypoint_nodes.launch.xml
+       without localization_monitor), Part 1 path settings -->
+  <node pkg="autosdv_waypoint_lab" exec="waypoint_path_publisher" name="waypoint_path_publisher"
+        namespace="planning" output="screen">
+    <param from="$(var cfg)/waypoint_path_publisher.param.yaml"/>
+    <param name="course_dir" value="$(var course_dir)"/>
+    <param name="use_sim_time" value="true"/>
+  </node>
+  <node pkg="autosdv_waypoint_lab" exec="path_tracker" name="path_tracker" namespace="control" output="screen">
+    <param from="$(var vehicle_info_param_file)"/>
+    <param from="$(find-pkg-share autosdv_waypoint_lab)/config/path_tracker.param.yaml"/>
+    <param name="tracker_class" value="autosdv_waypoint_lab.reference.path_tracker:PathTracker"/>
+    <!-- through lab2_part1_scenario, which ramps the resume after the e-stop -->
+    <param name="control_topic" value="/control/part1/tracker_cmd"/>
+    <!-- in the clock handshake: no skipped cycle, and the actuator waits for its command -->
+    <param name="lockstep" value="$(var lockstep)"/>
+    <param name="use_sim_time" value="true"/>
+  </node>
+
+  <!-- the car's vehicle interface on the simulated hardware, the student's SpeedPID inside -->
+  <group>
+    <include file="$(find-pkg-share autosdv_vehicle_launch)/launch/vehicle_interface.launch.xml">
+      <arg name="hardware" value="sim"/>
+      <arg name="launch_vehicle_interface" value="true"/>
+      <arg name="is_simulation" value="false"/>
+      <arg name="vehicle_id" value="$(var vehicle_id)"/>
+      <arg name="speed_controller_class" value="$(var speed_controller_class)"/>
+      <arg name="speed_controller_params" value="$(var speed_controller_params)"/>
+      <arg name="speed_controller_dt_source" value="loop"/>
+      <!-- the path publisher bypasses Autoware planning and its velocity limit: brake on any MRM -->
+      <arg name="emergency_stop_on_any_mrm" value="true"/>
+      <arg name="publish_operation_mode_availability" value="false"/>
+      <arg name="launch_signal_manager" value="false"/>
+      <!-- rc_sim's: the -143 steering ratio the plant's servo also reads, debug publishing on
+           (the grader reads ~/debug/pwm_values and ~/debug/mode) -->
+      <arg name="actuator_param_overrides"
+           value="$(find-pkg-share autosdv_rc_sim)/config/actuator_rc_sim.param.yaml"/>
+    </include>
+  </group>
+
+  <!-- the plant owns /clock: the only node on wall time -->
+  <group scoped="true">
+    <set_parameter name="use_sim_time" value="false"/>
+    <node pkg="autosdv_rc_sim" exec="rc_sim_plant" name="rc_sim_plant" output="screen">
+      <param from="$(find-pkg-share individual_params)/config/$(var vehicle_id)/autosdv_sensor_kit/imu_corrector.param.yaml"/>
+      <param name="use_sim_time" value="false"/>
+      <param name="track_dir" value="$(var course_dir)"/>
+      <param name="variant" value="$(var variant)"/>
+      <param name="real_time_factor" value="$(var real_time_factor)"/>
+      <param name="odom_rate" value="100.0"/>   <!-- /rc_sim/state at the grader's 100 Hz -->
+      <param name="lockstep" value="$(var lockstep)"/>
+      <param name="lockstep_timeout" value="$(var lockstep_timeout)"/>
+    </node>
+  </group>
+
+  <node pkg="autosdv_waypoint_lab" exec="lab2_part1_scenario" name="lab2_part1_scenario" output="screen">
+    <param name="profile_file" value="$(var profile_file)"/>
+    <param name="wait_for_topic" value="$(var grader_status)"/>
+    <param name="use_sim_time" value="true"/>
+    <!-- its emergency timer in the clock handshake: the e-stop acts on the same actuator tick every run -->
+    <param name="lockstep" value="$(var lockstep)"/>
+    <remap from="~/input/gate_emergency" to="/control/command/emergency_cmd_gate"/>
+    <remap from="~/output/emergency" to="/control/command/emergency_cmd"/>
+    <remap from="~/input/control_cmd" to="/control/part1/tracker_cmd"/>
+    <remap from="~/output/control_cmd" to="/control/trajectory_follower/control_cmd"/>
+  </node>
+
+  <node pkg="autosdv_waypoint_lab" exec="lab2_part1_grader" name="lab2_part1_grader" output="screen" if="$(var grader)">
+    <param name="profile_file" value="$(var profile_file)"/>
+    <param name="out_dir" value="$(var out_dir)"/>
+    <param name="variant" value="$(var variant)"/>
+    <param name="mode_topic" value="/autosdv/actuator_node/debug/mode"/>
+    <param name="use_sim_time" value="true"/>
+  </node>
+
+  <node pkg="autosdv_waypoint_lab" exec="lab2_part1_dashboard" name="lab2_part1_dashboard" output="screen" if="$(var gui)">
+    <param name="profile_file" value="$(var profile_file)"/>
+    <param name="use_sim_time" value="true"/>
+  </node>
+
+  <node pkg="rviz2" exec="rviz2" name="rviz2" output="screen" if="$(var rviz)"
+        args="-d $(find-pkg-share autosdv_waypoint_lab)/rviz/lab2_part1.rviz">
+    <param name="use_sim_time" value="true"/>
+  </node>
+</launch>

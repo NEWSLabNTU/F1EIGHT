@@ -228,3 +228,15 @@ def test_a_stale_or_unaligned_survey_is_not_run(tmp_path, monkeypatch, capsys):
     (d / 'course.yaml').write_text(yaml.safe_dump(t))
     ok, why = lc.aligned_for(d, 'lab2_uturn')
     assert not ok and 'not aligned' in why
+
+
+def test_sim_reads_part1_submission_not_the_gate_submission(tmp_path):
+    f = tmp_path / 'lab2.yaml'
+    f.write_text('submission: /s/gate\npart1_submission: /s/part1\n')
+    cf = f'config:={f}'
+    assert lc.plan('sim', [cf, '--final'])[0] == ['--final', 'submission:=/s/part1']
+    assert lc.plan('sim', [cf, 'submission:=/x'])[0] == ['submission:=/x']
+    assert lc.plan('sim', [cf, '--class', 'a.b:C'])[0] == ['--class', 'a.b:C']
+    f.write_text('submission: /s/gate\n')
+    assert lc.plan('sim', [cf])[0] == []           # no part1_submission: the runner's stub
+    assert lc.plan('gate', [cf])[0] == ['submission:=/s/gate']

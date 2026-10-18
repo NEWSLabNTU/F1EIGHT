@@ -1,0 +1,210 @@
+# Lab 2 Part 1 on the simulated car (launch/lab2_part1_sim.launch.xml): Autoware's view
+# trimmed to what the run needs. The view follows the car (TopDownOrtho on base_link,
+# 10 px/m); the saved ThirdPersonFollower is behind the car.
+#   grey lane     the course's lanelet map (/map/vector_map_marker)
+#   white line    path.csv (/lab2/part1/course_path); coloured ribbon: the planner's window
+#                 (/planning/trajectory, coloured by speed)
+#   white bar     the stop line; yellow bar: the e-stop trigger (/lab2/part1/markers)
+#   cyan arrow    the car, with the live readout (/lab2/part1/car); the 0.4 m vehicle model
+#   red spheres   failed checks, where they happened (/lab2/part1/violations)
+Panels:
+  - Class: rviz_common/Displays
+    Help Height: 0
+    Name: Displays
+    Property Tree Widget:
+      Expanded: ~
+      Splitter Ratio: 0.55
+    Tree Height: 600
+  - Class: rviz_common/Views
+    Expanded:
+      - /Current View1
+    Name: Views
+    Splitter Ratio: 0.5
+Visualization Manager:
+  Class: ""
+  Displays:
+    - Class: rviz_default_plugins/Grid
+      Name: Grid (5 m)
+      Enabled: true
+      Cell Size: 5
+      Plane Cell Count: 60
+      Color: 70; 70; 74
+      Reference Frame: map
+      Value: true
+    - Class: rviz_default_plugins/MarkerArray
+      Name: Lane (lanelet2)
+      Enabled: true
+      Namespaces:
+        center_lane_line: false
+        center_line_arrows: false
+        lane_start_bound: false
+        lanelet direction: false
+        lanelet_id: false
+        left_lane_bound: true
+        right_lane_bound: true
+        road_lanelets: true
+        stop_lines: true
+      Topic:
+        Depth: 5
+        Durability Policy: Transient Local
+        History Policy: Keep Last
+        Reliability Policy: Reliable
+        Value: /map/vector_map_marker
+      Value: true
+    - Class: rviz_default_plugins/Path
+      Name: Course path
+      Enabled: true
+      Color: 230; 230; 230
+      Line Style: Lines
+      Line Width: 0.05
+      Topic:
+        Depth: 1
+        Durability Policy: Transient Local
+        History Policy: Keep Last
+        Reliability Policy: Reliable
+        Value: /lab2/part1/course_path
+      Value: true
+    - Class: rviz_plugins/Trajectory
+      Color Border Vel Max: 11
+      Enabled: true
+      Name: Planner window (speed)
+      Topic:
+        Depth: 5
+        Durability Policy: Volatile
+        History Policy: Keep Last
+        Reliability Policy: Reliable
+        Value: /planning/trajectory
+      Value: true
+      View Path:
+        Alpha: 0.6
+        Color: 0; 0; 0
+        Constant Color: false
+        Value: true
+        Width: 0.6
+      View Velocity:
+        Alpha: 0.999
+        Color: 0; 0; 0
+        Constant Color: false
+        Scale: 0.3
+        Value: false
+    - Class: rviz_default_plugins/MarkerArray
+      Name: Stop line and e-stop
+      Enabled: true
+      Namespaces:
+        {}
+      Topic:
+        Depth: 1
+        Durability Policy: Transient Local
+        History Policy: Keep Last
+        Reliability Policy: Reliable
+        Value: /lab2/part1/markers
+      Value: true
+    - Class: rviz_default_plugins/MarkerArray
+      Name: Violations
+      Enabled: true
+      Namespaces:
+        {}
+      Topic:
+        Depth: 1
+        Durability Policy: Transient Local
+        History Policy: Keep Last
+        Reliability Policy: Reliable
+        Value: /lab2/part1/violations
+      Value: true
+    - Class: rviz_default_plugins/MarkerArray
+      Name: Car (glyph and readout)
+      Enabled: true
+      Namespaces:
+        {}
+      Topic:
+        Depth: 5
+        Durability Policy: Volatile
+        History Policy: Keep Last
+        Reliability Policy: Reliable
+        Value: /lab2/part1/car
+      Value: true
+    - Alpha: 0.6
+      Class: rviz_default_plugins/RobotModel
+      Collision Enabled: false
+      Description File: ""
+      Description Source: Topic
+      Description Topic:
+        Depth: 5
+        Durability Policy: Transient Local
+        History Policy: Keep Last
+        Reliability Policy: Reliable
+        Value: /robot_description
+      Enabled: true
+      Links:
+        All Links Enabled: true
+        Expand Joint Details: false
+        Expand Link Details: false
+        Expand Tree: false
+        Link Tree Style: Links in Alphabetic Order
+      Name: Vehicle model
+      TF Prefix: ""
+      Update Interval: 0
+      Value: true
+      Visual Enabled: true
+    - Class: rviz_default_plugins/TF
+      Name: TF
+      Enabled: false
+      Frame Timeout: 15
+      Marker Scale: 1
+      Show Arrows: true
+      Show Axes: true
+      Show Names: false
+      Value: false
+  Enabled: true
+  Global Options:
+    Background Color: 20; 20; 24
+    Fixed Frame: map
+    Frame Rate: 30
+  Name: root
+  Tools:
+    - Class: rviz_default_plugins/MoveCamera
+    - Class: rviz_default_plugins/Measure
+      Line color: 128; 128; 0
+  Transformation:
+    Current:
+      Class: rviz_default_plugins/TF
+  Value: true
+  Views:
+    Current:
+      Angle: 0
+      Class: rviz_default_plugins/TopDownOrtho
+      Invert Z Axis: false
+      Name: Current View
+      Near Clip Distance: 0.01
+      Scale: 10
+      Target Frame: base_link
+      Value: TopDownOrtho (rviz_default_plugins)
+      X: 15
+      Y: 0
+    Saved:
+      - Class: rviz_default_plugins/ThirdPersonFollower
+        Distance: 18
+        Focal Point:
+          X: 0
+          Y: 0
+          Z: 0
+        Focal Shape Fixed Size: true
+        Focal Shape Size: 0.05
+        Invert Z Axis: false
+        Name: Behind the car
+        Near Clip Distance: 0.01
+        Pitch: 0.35
+        Target Frame: base_link
+        Value: ThirdPersonFollower (rviz_default_plugins)
+        Yaw: 3.14159
+Window Geometry:
+  Displays:
+    collapsed: true
+  Views:
+    collapsed: true
+  Hide Left Dock: true
+  Hide Right Dock: true
+  Width: 1280
+  Height: 720
+  X: 0
+  Y: 0

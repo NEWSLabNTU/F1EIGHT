@@ -37,6 +37,9 @@
        needs it. -->
   <exec_depend>autosdv_coach_lab</exec_depend>
   <exec_depend>autosdv_lab_msgs</exec_depend>
+  <!-- lab2_part1_sim.launch.xml -->
+  <exec_depend>autosdv_waypoint_lab</exec_depend>
+  <exec_depend>autosdv_rc_sim</exec_depend>
 
   <test_depend>ament_copyright</test_depend>
   <test_depend>ament_flake8</test_depend>

@@ -114,3 +114,112 @@ def test_team_without_tracker_file_warns_and_uses_the_default(tmp_path):
 def test_team_needs_exactly_one_controller(tmp_path):
     with pytest.raises(submission.SubmissionError, match='exactly one'):
         submission.resolve_team(tmp_path, out_dir=tmp_path / 'out')
+
+
+# ---- Part 1 on the simulated car: lab2_speed/ (just lab2 sim)
+
+PART1_YAML = (HERE.parents[2] / 'src/lab/autosdv_waypoint_lab/config/speed_pid_part1.yaml').read_text()
+
+
+def make_part1(tmp_path, pid=PART1_YAML, nested=True):
+    root = tmp_path / 'B1_lab_2_1' if nested else tmp_path / 'lab2_speed'
+    pkg = root / 'lab2_speed' if nested else root
+    (pkg / 'lab2_speed').mkdir(parents=True)
+    (pkg / 'config').mkdir()
+    (pkg / 'lab2_speed' / 'speed_pid.py').write_text('class SpeedPID: pass\n')
+    (pkg / 'config' / 'speed_pid.yaml').write_text(pid)
+    return root, pkg
+
+
+def test_part1_defaults_resolve_to_every_key(tmp_path):
+    root, pkg = make_part1(tmp_path)
+    got_pkg, args, warnings = submission.resolve_part1(root)
+    assert got_pkg == pkg.resolve() and warnings == []
+    assert args[0] == 'speed_controller_class:=lab2_speed.speed_pid:SpeedPID'
+    assert args[1].startswith('speed_controller_params:={')
+    mapping = submission.yaml.safe_load(args[1].split(':=', 1)[1])
+    assert set(mapping) == set(submission.part1_keys())
+    assert mapping['enable_conditional_integration'] is True
+    assert isinstance(mapping['max_pwm_offset'], int)
+
+
+def test_part1_package_dir_itself(tmp_path):
+    _, pkg = make_part1(tmp_path, nested=False)
+    assert submission.resolve_part1(pkg)[0] == pkg.resolve()
+
+
+def test_part1_missing_key_warns_and_is_left_out(tmp_path):
+    root, _ = make_part1(tmp_path, pid='kp: 12\nki: 3.5\n')
+    _, args, warnings = submission.resolve_part1(root)
+    assert args[1] == 'speed_controller_params:={kp: 12.0, ki: 3.5}'
+    assert any('kd is not set' in w for w in warnings)
+
+
+@pytest.mark.parametrize('pid,match', [
+    ('kp: 1\nkp_speed: 2\n', 'unknown key'),
+    ('kp: -1\n', 'outside'),
+    ('kp: .nan\n', 'finite'),
+    ('kp: fast\n', 'number'),
+    ('kp: true\n', 'number'),
+    ('enable_conditional_integration: 1\n', 'true or false'),
+    ('enable_conditional_integration: "yes"\n', 'true or false'),
+    ('derivative_filter_alpha: 0\n', 'outside'),
+    ('derivative_filter_alpha: 1.5\n', 'outside'),
+    ('integral_limit: 0\n', 'outside'),
+    ('max_pwm_offset: 101\n', 'outside'),
+    ('max_pwm_offset: 0\n', 'outside'),
+    ('max_pwm_offset: 50.5\n', 'whole number'),
+    ('max_brake_offset: 11\n', 'outside'),
+    ('max_brake_offset: -1\n', 'outside'),
+    ('ff_gain: 0\n', 'outside'),
+    ('brake_enter: 0\n', 'outside'),
+    ('brake_exit: -0.1\n', 'outside'),
+    ('brake_deadband: 11\n', 'outside'),
+    ('brake_deadband: 2.5\n', 'whole number'),
+    ('brake_enter: 0.2\nbrake_exit: 0.2\n', 'hysteresis'),
+    ('brake_enter: 0.2\nbrake_exit: 0.3\n', 'below brake_enter'),
+    ('kp: 1\nkp: 2\n', 'twice'),
+    ('[1, 2]\n', 'mapping'),
+    ('kp: [1\n', 'not valid YAML'),
+])
+def test_part1_bad_values_are_refused_with_the_reason(tmp_path, pid, match):
+    root, _ = make_part1(tmp_path, pid=pid)
+    with pytest.raises(submission.SubmissionError, match=match):
+        submission.resolve_part1(root)
+
+
+def test_part1_integral_float_offsets_and_zero_brake_are_accepted(tmp_path):
+    root, _ = make_part1(tmp_path, pid='max_pwm_offset: 80.0\nmax_brake_offset: 0\n')
+    mapping = submission.yaml.safe_load(submission.resolve_part1(root)[1][1].split(':=', 1)[1])
+    assert mapping == {'max_pwm_offset': 80, 'max_brake_offset': 0}
+
+
+def test_part1_offset_limits_follow_the_actuator_file():
+    keys = submission.part1_keys({'init_pwm': 380, 'min_pwm': 365, 'max_pwm': 480})
+    assert keys['max_pwm_offset'][2] == 100 and keys['max_brake_offset'][2] == 15
+
+
+def test_part1_missing_package_or_yaml_is_an_error(tmp_path):
+    with pytest.raises(submission.SubmissionError, match='lab2_speed'):
+        submission.resolve_part1(tmp_path)
+    root, pkg = make_part1(tmp_path)
+    (pkg / 'config' / 'speed_pid.yaml').unlink()
+    with pytest.raises(submission.SubmissionError, match='missing'):
+        submission.resolve_part1(root)
+
+
+def test_part1_cli_and_shell_helper(tmp_path, capsys):
+    root, pkg = make_part1(tmp_path, pid='kp: 12\n')
+    assert submission.main([str(root), '--part1', '--launch-args']) == 0
+    out = capsys.readouterr().out.splitlines()
+    assert out == ['speed_controller_class:=lab2_speed.speed_pid:SpeedPID',
+                   'speed_controller_params:={kp: 12.0}']
+    assert submission.main([str(root), '--launch-args']) == 2   # not a Part 2 layout
+    script = (f'cd {HERE.parents[2]}; source scripts/testing/lab2/submission.sh; '
+              f'lab2_apply_submission --part1 variant:=nominal submission:={root}; '
+              'printf "%s\\n" "${LAB2_ARGS[@]}"; echo "PP=$PYTHONPATH"')
+    lines = subprocess.run(['bash', '-c', script], capture_output=True, text=True,
+                           check=True).stdout.splitlines()
+    assert lines[-4:-1] == ['variant:=nominal', 'speed_controller_class:=lab2_speed.speed_pid:SpeedPID',
+                            'speed_controller_params:={kp: 12.0}']
+    assert lines[-1].startswith(f'PP={pkg.resolve()}')

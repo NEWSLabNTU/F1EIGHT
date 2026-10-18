@@ -119,6 +119,37 @@ gate *ARGS:
     lab2_apply_submission "${LAB2_ARGS[@]}" || exit 2
     exec python3 scripts/testing/lab2/bench_gate.py "${LAB2_ARGS[@]}"
 
+#   just lab2 sim submission:=~/lab2/B12345678_lab_2_1            one run, nominal car, ~1.5 min
+#   just lab2 sim submission:=DIR --final                          nominal, low_batt, low_mu: the 25-point mark
+#   just lab2 sim submission:=DIR variant:=low_mu rviz:=false gui:=false
+#   just lab2 sim                                                  `part1_submission` from ~/lab2/lab2.yaml
+#   just lab2 sim --class autosdv_waypoint_lab.reference.speed_pid_part1:SpeedPID \
+#       --params "$(...)"                                          TA: a controller by import path
+# No submission anywhere: the STUB runs (it holds neutral), with a warning.
+# Outputs: tmp/lab2/part1/<submission name>/<variant>/ (trace.csv, marks.json, run.json, play_log).
+# ROS_DOMAIN_ID: yours if exported (non-zero), else 1 + uid % 100. Web UI on LAB2_WEB_ADDR
+# (default 127.0.0.1:8081). scripts/testing/lab2/part1_run.py --help: the rest.
+# Part 1: your SpeedPID on the simulated car, one straight, live; graded, marks printed
+[positional-arguments]
+sim *ARGS:
+    #!/usr/bin/env bash
+    source scripts/env.sh
+    source scripts/testing/lab2/lab2_config.sh
+    lab2_config sim "$@" || exit 2
+    exec python3 scripts/testing/lab2/part1_run.py "${LAB2_ARGS[@]}"
+
+#   just lab2 make-part1-course                    rewrite config/courses/lab2_part1 (committed)
+#   just lab2 make-part1-course --estop-offset 12 --out tmp/lab2/part1/course
+# Prints the segment table; part1_profile.yaml is what the scenario node and the grader read.
+# Regenerate the Part 1 straight (path, map, part1_profile.yaml) from its speed profile
+[positional-arguments]
+make-part1-course *ARGS:
+    #!/usr/bin/env bash
+    source scripts/env.sh
+    out=(--out src/lab/autosdv_waypoint_lab/config/courses/lab2_part1)
+    case " $* " in *" --out "*|*" --out="*) out=() ;; esac
+    exec ros2 run autosdv_waypoint_lab lab2_make_part1_course "${out[@]}" "$@"
+
 # Bench checks on fresh benches (follow, marker loss, path publisher loss, faults); PASS/FAIL lines
 [positional-arguments]
 bench-checks *ARGS:

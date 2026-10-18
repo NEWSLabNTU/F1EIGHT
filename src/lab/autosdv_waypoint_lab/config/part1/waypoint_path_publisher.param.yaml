@@ -1,0 +1,15 @@
+# Lab 2 Part 1 (simulated car): the waypoint path publisher on the generated straight
+# (config/courses/lab2_part1), whose path.csv v column IS the speed profile. Loaded by
+# lab2_part1_sim.launch.xml in place of config/waypoint_path_publisher.param.yaml (the
+# hall's 0.8 m/s Part 2 settings).
+/**:
+  ros__parameters:
+    laps: 0              # 0: the course's own (one, open)
+    v_max: 11.5          # [m/s] a cap above the profile's 11 m/s top, so it never binds
+    decel: 2.5           # [m/s^2] the end-of-run ramp; the profile already brakes at 2.5 onto the
+                         #   stop line, 10 m before the run's end, so this never binds either
+    spacing: 0.1         # [m] path.csv is written at 0.1 m: resampling changes nothing
+    window_behind: 2.0   # [m]
+    window_ahead: 25.0   # [m] 2.3 s at 11 m/s: a trajectory up to path_tracker's 0.5 s timeout old
+                         #   still reaches 20 m past the car, ten times the 2 m lookahead
+    rate: 20.0           # [Hz] the hall's 10 Hz window moves 1.1 m per message at 11 m/s

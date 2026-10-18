@@ -1,0 +1,105 @@
+# Diagnostic graph for Lab 2 Part 1 on the simulated car (lab2_part1_sim.launch.xml).
+#
+# The waypoint lab's graph (autosdv_launch config/system/diagnostics/autosdv-waypoint-main.yaml)
+# with the two checks that read localization_monitor removed: there are no markers and no
+# EKF here, the car's pose is the plant's true pose. So
+#
+#   localization  the kinematic_state rate only (rc_sim_plant publishes it at 100 Hz here)
+#   planning      the trajectory rate only (no path-deviation check)
+#   control       control-waypoint.yaml unchanged (path_tracker's tracker_state)
+#   perception    perception-waypoint.yaml unchanged (constant OK)
+#
+# and the 1 Hz /adapi/mrm_request/delegate diagnostic with a 3.0 s timeout, as rc_sim's graph
+# gives the /adapi diagnostics (the waypoint graph's 5.0 s also works; 3.0 matches the
+# simulator, where a sim-time stall is the realistic cause of a late heartbeat).
+# The topic monitors are the waypoint lab's: component_state_monitor/topics-waypoint.yaml.
+files:
+  - { path: $(find-pkg-share autoware_launch)/config/system/diagnostics/system.yaml }
+  - { path: $(find-pkg-share autoware_launch)/config/system/diagnostics/vehicle.yaml }
+  - { path: $(find-pkg-share autosdv_launch)/config/system/diagnostics/control-waypoint.yaml }
+  - { path: $(find-pkg-share autosdv_launch)/config/system/diagnostics/perception-waypoint.yaml }
+
+units:
+  - path: /autoware/localization
+    type: and
+    list:
+      - { type: link, link: /autoware/localization/topic_rate_check/kinematic_state }
+
+  - path: /autoware/localization/topic_rate_check/kinematic_state
+    type: diag
+    node: topic_state_monitor_localization_kinematic_state
+    name: localization_topic_status
+
+  - path: /autoware/planning
+    type: and
+    list:
+      - { type: link, link: /autoware/planning/topic_rate_check/trajectory }
+
+  - path: /autoware/planning/topic_rate_check/trajectory
+    type: diag
+    node: topic_state_monitor_scenario_planning_trajectory
+    name: planning_topic_status
+
+  - path: /autoware/modes/local
+    type: and
+    list:
+      - { type: link, link: /autoware/vehicle }
+      - { type: link, link: /autoware/system }
+      - { type: link, link: /autoware/control/local }
+      - { type: link, link: /adapi/mrm_request/delegate }
+
+  - path: /autoware/modes/remote
+    type: and
+    list:
+      - { type: link, link: /autoware/vehicle }
+      - { type: link, link: /autoware/system }
+      - { type: link, link: /autoware/control/remote }
+      - { type: link, link: /adapi/mrm_request/delegate }
+
+  - path: /autoware/modes/stop
+    type: and
+    list:
+      - { type: link, link: /adapi/mrm_request/delegate }
+
+  - path: /autoware/modes/autonomous
+    type: and
+    list:
+      - { type: link, link: /autoware/localization }
+      - { type: link, link: /autoware/planning }
+      - { type: link, link: /autoware/perception }
+      - { type: link, link: /autoware/control }
+      - { type: link, link: /autoware/vehicle }
+      - { type: link, link: /autoware/system }
+      - { type: link, link: /adapi/mrm_request/delegate }
+
+  - path: /autoware/modes/pull_over
+    type: and
+    list:
+      - { type: link, link: /autoware/localization }
+      - { type: link, link: /autoware/planning }
+      - { type: link, link: /autoware/perception }
+      - { type: link, link: /autoware/control }
+      - { type: link, link: /autoware/vehicle }
+      - { type: link, link: /autoware/system }
+
+  - path: /autoware/modes/comfortable_stop
+    type: and
+    list:
+      - { type: link, link: /autoware/localization }
+      - { type: link, link: /autoware/planning }
+      - { type: link, link: /autoware/perception }
+      - { type: link, link: /autoware/control }
+      - { type: link, link: /autoware/vehicle }
+      - { type: link, link: /autoware/system }
+
+  - path: /autoware/modes/emergency_stop
+    type: and
+    list:
+      - { type: link, link: /autoware/vehicle }
+      - { type: link, link: /autoware/system }
+
+  - path: /adapi/mrm_request/delegate
+    type: diag
+    node: /adapi/node/mrm_request
+    name: delegate
+    timeout: 3.0

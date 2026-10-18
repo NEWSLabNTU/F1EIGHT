@@ -13,7 +13,7 @@ Precedence, highest first:
     the user's file                     ~/lab2/lab2.yaml, or config:=FILE / --config FILE
     the built-in defaults               src/lab/autosdv_waypoint_lab/config/lab2_defaults.yaml
 
-Keys: car, team, team_dir, submission, route, course_dir, reference, bag_dir. A missing
+Keys: car, team, team_dir, submission, part1_submission, route, course_dir, reference, bag_dir. A missing
 user file is fine as long as every key a recipe needs has a value; a missing
 required key is one error line naming the key and the file to put it in.
 
@@ -25,6 +25,9 @@ Recipes:
 
     vehicle     course_dir:= (below) and team:=TEAM_DIR, unless given
     gate        submission:=SUBMISSION, unless a controller is given
+    sim         submission:=PART1_SUBMISSION when set (no default: without one the runner
+                warns and runs the stub), unless --class / speed_controller_class:= is given;
+                on its command line submission:= means part1_submission
     record      --car --team --out-dir, and --name ROUTE_N (the next free one)
     grade       no bag: --score LATEST --reference REFERENCE
     check-bags  no bag: LATEST; --car --team when set
@@ -52,8 +55,9 @@ import yaml
 REPO = Path(__file__).resolve().parents[3]
 DEFAULTS = REPO / 'src/lab/autosdv_waypoint_lab/config/lab2_defaults.yaml'
 USER_FILE = Path('~/lab2/lab2.yaml')
-KEYS = ('car', 'team', 'team_dir', 'submission', 'route', 'course_dir', 'reference', 'bag_dir')
-PATH_KEYS = ('team_dir', 'submission', 'reference', 'bag_dir')
+KEYS = ('car', 'team', 'team_dir', 'submission', 'part1_submission', 'route', 'course_dir',
+        'reference', 'bag_dir')
+PATH_KEYS = ('team_dir', 'submission', 'part1_submission', 'reference', 'bag_dir')
 LAUNCH_RECIPES = ('vehicle', 'gate')
 COURSE_CHOICES = ('auto', 'package')
 SURVEY_LATEST = REPO / 'surveys' / 'latest'
@@ -72,6 +76,8 @@ TEMPLATE_KEYS = [
     ('team_dir', '~/lab2/team3', "Part 2: the team's controller directory and its path_tracker.param.yaml"),
     ('submission', '~/lab2/B12345678_lab_2_1',
      'Part 1: your controller, for `just lab2 gate` on a workstation'),
+    ('part1_submission', '~/lab2/B12345678_lab_2_1',
+     'Lab 2 Part 1 on the simulated car: the directory holding lab2_speed/, for `just lab2 sim`'),
 ]
 TEMPLATE_DEFAULTS = [
     ('route', 'the graded course'),
@@ -255,6 +261,8 @@ def split_args(recipe, argv):
         if recipe in ('record', 'check-bags', 'audit') else {}
     if launch:
         own_flags = {'--team': 'team_dir', '--submission': 'submission'}
+    elif recipe == 'sim':
+        own_flags = {'--submission': 'part1_submission'}
     for a in it:
         key, sep, val = a.partition(':=')
         flag, eq, fval = a.partition('=')
@@ -275,6 +283,8 @@ def split_args(recipe, argv):
             cfg_file = val
         elif sep and launch and key == 'team':
             cli['team_dir'] = val
+        elif sep and recipe == 'sim' and key == 'submission':
+            cli['part1_submission'] = val
         elif sep and key in KEYS:
             cli[key] = val
         else:
@@ -336,6 +346,11 @@ def plan(recipe, argv, cwd=REPO, bench=False):
         elif not _has(rest, 'speed_controller_class:='):
             out.append(f'submission:={c.require("submission", "the controller the gate runs")}')
             use('submission')
+    elif recipe == 'sim':
+        out = list(rest)
+        if c.get('part1_submission') and not _has(rest, '--class', 'speed_controller_class:='):
+            out.append(f'submission:={c.get("part1_submission")}')
+            use('part1_submission')
     elif recipe == 'record':
         car = c.require('car', 'recorded into the bag')
         team = c.require('team', 'recorded into the bag')

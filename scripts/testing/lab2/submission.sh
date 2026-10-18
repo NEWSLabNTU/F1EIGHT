@@ -9,15 +9,20 @@
 # adds tracker_param_file:= for its path_tracker.param.yaml.
 # Every other argument passes through unchanged. Source scripts/env.sh first:
 # it must not run after this, or it would not know about PYTHONPATH.
+#
+#   lab2_apply_submission --part1 "$@"   # `just lab2 sim`: submission:=DIR is a Part 1
+#                                        # lab2_speed/ submission for the simulated car
 lab2_apply_submission() {
     LAB2_ARGS=()
-    local sub="" skip="" a mode=()
+    local sub="" skip="" a mode=() default_mode=()
+    if [ "${1:-}" = "--part1" ]; then default_mode=(--part1); shift; fi
+    mode=("${default_mode[@]}")
     for a in "$@"; do
         if [ -n "$skip" ]; then sub="$a"; skip=""; continue; fi
         case "$a" in
-            submission:=*) sub="${a#submission:=}"; mode=() ;;
-            --submission) skip=1; mode=() ;;
-            --submission=*) sub="${a#--submission=}"; mode=() ;;
+            submission:=*) sub="${a#submission:=}"; mode=("${default_mode[@]}") ;;
+            --submission) skip=1; mode=("${default_mode[@]}") ;;
+            --submission=*) sub="${a#--submission=}"; mode=("${default_mode[@]}") ;;
             team:=*) sub="${a#team:=}"; mode=(--team) ;;
             --team) skip=1; mode=(--team) ;;
             --team=*) sub="${a#--team=}"; mode=(--team) ;;

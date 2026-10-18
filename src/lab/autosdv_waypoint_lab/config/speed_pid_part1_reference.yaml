@@ -1,0 +1,43 @@
+# Lab 2 Part 1: the TA REFERENCE's tuned parameters (TA-only; removed from the student branch).
+# Used with autosdv_waypoint_lab.reference.speed_pid_part1:SpeedPID by --class runs,
+# part1_calibrate.py (the limits are 1.5 x this controller's worst case) and part1_tolerance.py.
+# The students' starting point is config/speed_pid_part1.yaml (detuned, = the handout's and the
+# stub's defaults): a correct implementation with those values passed 35/48 checks on --final
+# (18.2/25; hold_rmse_11/11b, reach_s and stop_error fail on every variant, hold_rmse_6 on
+# low_batt), measured 2026-10-18 with this reference's code.
+#
+# A plain mapping. The actuator receives it as the one-line launch argument
+# speed_controller_params:="{kp: ..., ki: ...}" and merges it over its own motor parameters
+# (init_pwm, min_pwm, max_pwm, brake_pwm, rate, ...), so SpeedPID(params) sees both; these keys
+# win on a collision. Only the keys below are accepted (scripts/testing/lab2/submission.py
+# --part1 checks names, types and ranges; the handout's selfcheck.py has a copy of that table,
+# and the two must match).
+kp: 10.0                               # [counts per m/s], >= 0
+ki: 15.0                               # [counts per m], >= 0
+kd: 0.3                                # [counts per m/s^2], >= 0
+integral_limit: 30.0                   # |integral| clamp [counts], > 0
+error_limit: 0.3                       # |error| that P and I see while driving [m/s], (0, 20]
+enable_conditional_integration: true   # freeze the integral while the output saturates
+derivative_filter_alpha: 0.15          # the derivative's EMA, (0, 1]; 1 = no filtering
+max_pwm_offset: 100                    # throttle authority above neutral [counts], 1 .. max_pwm - init_pwm (100)
+max_brake_offset: 10                   # brake authority below neutral [counts], 0 .. init_pwm - min_pwm (10)
+kp_brake: 20.0                         # brake request [counts per m/s too fast], 0 .. 1000
+brake_enter: 0.4                       # enter the braking mode when the car is this much too fast [m/s], (0, 5]
+brake_exit: 0.05                       # leave it when the excess falls below this [m/s], 0 .. < brake_enter
+brake_deadband: 5                      # counts below neutral the ESC ignores (its dead band), 0 .. 10
+# The feed-forward PWM = init_pwm + ff_deadband + v / ff_gain (v > 0). Given: you may change
+# them, and if you do, say why in the report. Calibrated on a fresh pack (12.4 V); the car runs
+# at 11.1 V nominal, so the feed-forward under-drives and the integral must make up the rest
+# (about 10 counts at 11 m/s on the nominal car, 13 on low_batt).
+#
+# How they were found (TA note; the handout's copy omits the numbers): the rc_sim plant alone
+# (autosdv_rc_sim.plant.Plant, nominal variant with battery_voltage 12.4, 1 ms steps, straight
+# wheels) held at each constant PWM 376..470 (step 2) from rest for 25 s; the steady speed is
+# the mean of the last 2 s. A least-squares line PWM = a + b v over the 35 points with
+# 1.5 <= v <= 11.6 m/s gives a = 375.273, b = 6.9795 counts per m/s (largest residual 0.37), so
+#     ff_deadband = a - init_pwm = 5.273 -> 5.27 counts, ff_gain = 1 / b = 0.14328 -> 0.1433.
+# The same fit at the nominal 11.1 V gives a = 375.249, b = 7.8219 (d 5.25, g 0.128): at 11 m/s
+# this feed-forward asks for 452 counts where the car needs 461.7.
+# (tmp/lab2/part1/agents/P2/ff_fit.py nominal 12.4 reproduces it.)
+ff_deadband: 5.27                      # d [counts], 0 .. 50
+ff_gain: 0.1433                        # g [m/s per count], > 0

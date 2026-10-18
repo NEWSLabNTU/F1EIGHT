@@ -18,7 +18,8 @@ def course_files():
 setup(
     name=package_name,
     version='0.1.0',
-    packages=[package_name, package_name + '.reference', package_name + '.stub'],
+    packages=[package_name, package_name + '.reference', package_name + '.stub',
+              package_name + '.part1'],
     data_files=[
         ('share/ament_index/resource_index/packages', ['resource/' + package_name]),
         ('share/' + package_name, ['package.xml']),
@@ -27,6 +28,7 @@ setup(
         (os.path.join('share', package_name, 'config'), glob('config/*.yaml')),
         (os.path.join('share', package_name, 'config', 'dictionaries'),
          glob('config/dictionaries/*.dict')),
+        (os.path.join('share', package_name, 'config', 'part1'), glob('config/part1/*.yaml')),
     ] + course_files(),
     install_requires=['setuptools'],
     zip_safe=True,
@@ -53,6 +55,11 @@ setup(
             'lab2_audit = autosdv_waypoint_lab.audit:main',
             'mock_aruco_camera = autosdv_waypoint_lab.mock_camera_node:main',
             'bench_straight_driver = autosdv_waypoint_lab.bench_straight_driver_node:main',
+            # Lab 2 Part 1 on the RC simulator (docs/design/lab2-part1-sim-design.md)
+            'lab2_make_part1_course = autosdv_waypoint_lab.part1.course:main',
+            'lab2_part1_scenario = autosdv_waypoint_lab.part1.scenario_node:main',
+            'lab2_part1_grader = autosdv_waypoint_lab.part1.grader_node:main',
+            'lab2_part1_dashboard = autosdv_waypoint_lab.part1.dashboard:main',
         ],
     },
 )

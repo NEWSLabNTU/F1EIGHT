@@ -69,6 +69,12 @@
   <arg name="output_gear_cmd" default="/control/command/gear_cmd"/>
   <arg name="output_turn_indicators_cmd" default="/control/command/turn_indicators_cmd"/>
   <arg name="output_hazard_lights_cmd" default="/control/command/hazard_lights_cmd"/>
+  <arg name="output_emergency_cmd" default="/control/command/emergency_cmd"
+       description="vehicle_cmd_gate's emergency verdict, which the actuator brakes on. Lab 2 Part 1 (lab2_part1_sim.launch.xml) moves it so lab2_part1_scenario can OR its e-stop into it"/>
+
+  <arg name="vehicle_cmd_gate_param_path"
+       default="$(find-pkg-share autoware_launch)/config/control/vehicle_cmd_gate/vehicle_cmd_gate.param.yaml"
+       description="loaded after autoware_launch's vehicle_cmd_gate.param.yaml, so it need hold only the keys it changes; the default is that file again (no change). Lab 2 Part 1 lifts the longitudinal rate limit (config/part1/vehicle_cmd_gate_part1.param.yaml)"/>
 
   <let name="cfg" value="$(find-pkg-share autoware_launch)/config/control"/>
   <let name="vehicle_param_file" value="$(find-pkg-share $(var vehicle_model)_description)/config/vehicle_info.param.yaml"/>
@@ -105,7 +111,7 @@
         <remap from="input/mrm_state" to="/system/fail_safe/mrm_state"/>
         <remap from="input/kinematics" to="/localization/kinematic_state"/>
         <remap from="input/acceleration" to="/localization/acceleration"/>
-        <remap from="output/vehicle_cmd_emergency" to="/control/command/emergency_cmd"/>
+        <remap from="output/vehicle_cmd_emergency" to="$(var output_emergency_cmd)"/>
         <remap from="output/control_cmd" to="$(var output_control_cmd)"/>
         <remap from="output/gear_cmd" to="$(var output_gear_cmd)"/>
         <remap from="output/turn_indicators_cmd" to="$(var output_turn_indicators_cmd)"/>
@@ -120,6 +126,7 @@
         <remap from="~/service/external_emergency_stop" to="~/external_emergency_stop"/>
         <remap from="~/service/clear_external_emergency_stop" to="~/clear_external_emergency_stop"/>
         <param from="$(var cfg)/vehicle_cmd_gate/vehicle_cmd_gate.param.yaml"/>
+        <param from="$(var vehicle_cmd_gate_param_path)"/>
         <param from="$(var vehicle_param_file)"/>
         <param name="check_external_emergency_heartbeat" value="$(var check_external_emergency_heartbeat)"/>
         <extra_arg name="use_intra_process_comms" value="false"/>
