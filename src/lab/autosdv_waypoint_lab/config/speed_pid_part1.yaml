@@ -13,6 +13,7 @@ ki: 10.0                               # [counts per m], >= 0
 kd: 0.0                                # [counts per m/s^2], >= 0
 integral_limit: 5.0                    # |integral| clamp [counts], > 0
 error_limit: 5.0                       # |error| that P and I see while driving [m/s], (0, 20]
+integral_band: 20.0                    # integrate only when |error| <= this [m/s], (0, 20]; 20 = off on this course
 enable_conditional_integration: true   # freeze the integral while the output saturates
 derivative_filter_alpha: 0.15          # the derivative's EMA, (0, 1]; 1 = no filtering
 max_pwm_offset: 100                    # throttle authority above neutral [counts], 1 .. max_pwm - init_pwm (100)

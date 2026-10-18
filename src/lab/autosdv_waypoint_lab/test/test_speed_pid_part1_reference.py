@@ -270,3 +270,17 @@ def test_reference_parameters_pass_the_submission_check_and_cover_the_deficit():
 def test_reference_is_tuned_differently_from_the_starting_values():
     start = yaml.safe_load((PKG / 'config' / 'speed_pid_part1.yaml').read_text())
     assert start != DEFAULTS                     # the students' defaults are not the answer
+
+
+def test_integral_band_stops_integration_far_from_the_target():
+    c = pid(ki=10.0, integral_limit=100.0, integral_band=0.25)
+    c.update(1.0, 0.0, 0.1)            # |e| = 1.0 > 0.25: no integration
+    assert c.integral == 0.0
+    c.update(1.0, 0.9, 0.1)            # |e| = 0.1 <= 0.25: integrates 10 * 0.1 * 0.1
+    assert c.integral == pytest.approx(0.1)
+
+
+def test_integral_band_default_is_off():
+    c = pid(ki=10.0, integral_limit=100.0)
+    c.update(5.0, 0.0, 0.1)            # |e| = 5 m/s: still inside the default 20 m/s band
+    assert c.integral == pytest.approx(5.0)

@@ -55,7 +55,7 @@ What is given and what you write:
             feed-forward (feed_forward); the derivative's low-pass filter
             (filter_derivative); the brake band mapping (brake_pwm); the output
             clamp (clamp_pwm); debug_terms
-    TODO    the error and its clamp; P; I with the integral clamp and conditional integration;
+    TODO    the error and its clamp; P; I with the integral clamp, the integration band and conditional integration;
             D on the measurement, through filter_derivative; the braking mode
             (entry and exit with hysteresis, the brake request); the driving
             command with its throttle limit
@@ -77,6 +77,7 @@ class SpeedPID:
         self.kd = float(get('kd', 0.0))             # [counts per m/s^2]
         self.integral_limit = float(get('integral_limit', 5.0))   # |integral| <= this [counts]
         self.error_limit = float(get('error_limit', 5.0))   # |error| P and I see, driving [m/s]
+        self.integral_band = float(get('integral_band', 20.0))  # integrate only when |e| <= this [m/s]
         self.enable_conditional_integration = bool(get('enable_conditional_integration', True))
         self.derivative_filter_alpha = float(get('derivative_filter_alpha', 0.15))  # (0, 1]
         # Authority on either side of neutral [counts], never beyond the PWM scale
@@ -180,8 +181,10 @@ class SpeedPID:
         #
         # TODO 5: driving (not braking). The integral term I (self.integral), with
         #   anti-windup:
-        #   - integrate only when dt > 0, and, if enable_conditional_integration is
-        #     set, only when the PREVIOUS output was not saturated (self.saturated):
+        #   - integrate only when dt > 0, when the car is near the target
+        #     (|e| <= integral_band: a start or a step is the feed-forward's job), and,
+        #     if enable_conditional_integration is set, only when the PREVIOUS output
+        #     was not saturated (self.saturated):
         #         integral += ki * e_d * dt
         #   - then clamp it to [-integral_limit, +integral_limit], always.
         #   The command, in counts above neutral:

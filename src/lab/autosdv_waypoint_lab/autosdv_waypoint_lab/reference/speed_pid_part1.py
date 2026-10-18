@@ -37,7 +37,8 @@ class SpeedPID(_Skeleton):
         if self.braking:
             return self.brake_pwm(-(self.kp_brake * error + d))
 
-        if dt > 0.0 and not (self.enable_conditional_integration and self.saturated):
+        if (dt > 0.0 and abs(error) <= self.integral_band
+                and not (self.enable_conditional_integration and self.saturated)):
             self.integral += self.ki * e_d * dt
         self.integral = max(-self.integral_limit, min(self.integral_limit, self.integral))
 

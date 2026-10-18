@@ -101,6 +101,7 @@ def part1_keys(pwm: dict = None) -> dict:
         'kd': (float, 0.0, 100.0, True),
         'integral_limit': (float, 0.0, 1000.0, False),
         'error_limit': (float, 0.0, 20.0, False),
+        'integral_band': (float, 0.0, 20.0, False),
         'enable_conditional_integration': (bool, None, None, True),
         'derivative_filter_alpha': (float, 0.0, 1.0, False),
         'max_pwm_offset': (int, 1, pwm['max_pwm'] - pwm['init_pwm'], True),
