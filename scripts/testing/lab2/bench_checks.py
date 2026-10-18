@@ -525,8 +525,9 @@ def check_fault(mon, args, env, workdir):
 
 def check_speedpid(mon, args, env, workdir):
     ref = args.course / 'ta' / 'reference' / 'speed_pid.py'
-    ref_yaml = args.course / 'ta' / 'reference' / 'speed_pid.yaml'
-    stub = args.course / 'handout' / 'lab2_pursuit' / 'lab2_pursuit' / 'speed_pid.py'
+    ref_yaml = args.course / 'handout' / 'lab2_speed' / 'config' / 'speed_pid_car.yaml'
+    ref_cal = args.course / 'ta' / 'cars' / 'car_A' / 'calibration_ref.yaml'
+    stub = args.course / 'handout' / 'lab2_speed' / 'lab2_speed' / 'speed_pid.py'
     if not (ref.exists() and stub.exists()):
         report('speedpid', False, f'{ref} or {stub} not found (--course)')
         return
@@ -538,6 +539,10 @@ def check_speedpid(mon, args, env, workdir):
     shutil.copy(stub, plug / 'stub_speed_pid.py')
     import yaml
     params = yaml.safe_load(ref_yaml.read_text()) if ref_yaml.exists() else {}
+    if ref_cal.exists():        # the car file's feed-forward comes from the calibration
+        cal = yaml.safe_load(ref_cal.read_text())
+        params.setdefault('ff_deadband', float(cal['deadband']))
+        params.setdefault('ff_gain', float(cal['gain']))
     flow = '{' + ', '.join(f'{k}: {v}' for k, v in params.items()) + '}'
     penv = dict(env)
     penv['PYTHONPATH'] = f'{plug.parent}:{env.get("PYTHONPATH", "")}'

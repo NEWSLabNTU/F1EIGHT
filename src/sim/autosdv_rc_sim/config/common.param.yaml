@@ -1,0 +1,20 @@
+# rc_sim copy of autoware_launch config/planning/scenario_planning/common/common.param.yaml
+# (Autoware 1.5.0); only the values marked "upstream" differ.
+/**:
+  ros__parameters:
+    max_vel: 11.5          # max velocity limit [m/s] (upstream 4.17; the lab profile peaks at 11)
+
+    # constraints param for normal driving
+    normal:
+      min_acc: -1.5         # min deceleration [m/ss] (upstream -1.0; 1.5: what the ESC's light
+                            # regeneration gives, as the default track's d = 1.5, see track.py)
+      max_acc: 2.5          # max acceleration [m/ss] (upstream 1.0)
+      min_jerk: -5.0        # min jerk [m/sss] (upstream -1.0)
+      max_jerk: 5.0         # max jerk [m/sss] (upstream 1.0)
+
+    # constraints to be observed
+    limit:
+      min_acc: -2.5         # min deceleration limit [m/ss]
+      max_acc: 2.5          # max acceleration limit [m/ss] (upstream 1.0)
+      min_jerk: -6.0        # min jerk limit [m/sss] (upstream -1.5)
+      max_jerk: 6.0         # max jerk limit [m/sss] (upstream 1.5)

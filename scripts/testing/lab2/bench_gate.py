@@ -1,15 +1,16 @@
 #!/usr/bin/env python3
-"""Lab 2 vehicle-bench gate: does the team's SpeedPID drive the three graded routes?
+"""Lab 2 vehicle-bench gate: does the team's SpeedPID drive the graded route (lab2_uturn)?
 
-Each route starts a fresh vehicle bench (`just lab2 bench`: the car's actuator
+Each route (by default the one graded route) starts a fresh vehicle bench (`just lab2 bench`: the car's actuator
 with the SpeedPID plug-in, the EKF, the reference tracker, the MRM path, and a
 plant model for the car), engages, waits for the run to finish and prints one
-PASS or FAIL line. Exit status is the number of FAILs. A team has to pass all
-three before it gets car time.
+PASS or FAIL line. Exit status is the number of FAILs. A team has to pass
+before it gets car time.
 
-    just lab2 gate speed_controller_class:=lab2_waypoint.speed_pid:SpeedPID \\
-                   "speed_controller_params:={kp: 15.0, ki: 5.0}"
-    just lab2 gate --only lab2_straight          # one route
+    just lab2 gate submission:=~/lab2/B12345678_lab_2_1   # lab2_speed + car file + calibration
+    just lab2 gate speed_controller_class:=lab2_speed.speed_pid:SpeedPID \\
+                   "speed_controller_params:={kp: 20.0, ki: 25.0}"
+    just lab2 gate --only hall_demo              # another course instead
     just lab2 gate --list
 
 Arguments after the options go to the bench's launch file unchanged, which is
@@ -50,7 +51,7 @@ import waypoint_checks as wc  # noqa: E402  (Bench, spin_until, call, bring_up, 
 
 REPO = wc.REPO
 COURSES_DIR = REPO / 'src/lab/autosdv_waypoint_lab/config/courses'
-ROUTES = ['lab2_straight', 'lab2_circle_cw', 'lab2_circle_ccw']
+ROUTES = ['lab2_uturn']
 
 SPEED_MEDIAN = (0.6, 1.15)   # x v_ref
 SPEED_PEAK = 1.5             # x v_ref
@@ -65,7 +66,8 @@ def judge(v_ref, speeds, finished, laps_done, laps, mrm, faults, stalled, at_res
     if faults:
         why.append(f'SpeedPID fault ({faults[0]})')
     if mrm:
-        why.append('MRM raised')
+        # `mrm` is True, or the monitor's one-line description of what raised it.
+        why.append('MRM raised' + (f' ({mrm})' if isinstance(mrm, str) else ''))
     if stalled:
         why.append(f'car did not move ({STALL_M} m in {STALL_S:.0f} s)')
     elif timed_out and not finished:
@@ -107,6 +109,7 @@ def make_monitor():
     import rclpy
     from autoware_adapi_v1_msgs.msg import MrmState, OperationModeState
     from tier4_system_msgs.msg import OperationModeAvailability
+    from autoware_adapi_v1_msgs.msg import DiagGraphStatus, DiagGraphStruct
     from autosdv_lab_msgs.msg import WaypointProgress
     from nav_msgs.msg import Odometry
     from rclpy.node import Node
@@ -130,7 +133,16 @@ def make_monitor():
                                      self.on_progress, 10)
             self.create_subscription(String, '/autosdv/actuator_node/debug/mode',
                                      self.on_actuator_mode, latched)
+            self.create_subscription(DiagGraphStruct, '/diagnostics_graph/struct',
+                                     self.on_struct, latched)
+            self.create_subscription(DiagGraphStatus, '/diagnostics_graph/status',
+                                     self.on_status, 10)
             self.MRM_NORMAL = MrmState.NORMAL
+            self.MRM_STATES = {MrmState.MRM_OPERATING: 'operating', MrmState.MRM_SUCCEEDED: 'succeeded',
+                               MrmState.MRM_FAILED: 'failed'}
+            self.MRM_BEHAVIORS = {MrmState.EMERGENCY_STOP: 'EMERGENCY_STOP',
+                                  MrmState.COMFORTABLE_STOP: 'COMFORTABLE_STOP',
+                                  MrmState.PULL_OVER: 'PULL_OVER'}
             self.AUTONOMOUS = OperationModeState.AUTONOMOUS
             self.reset()
 
@@ -138,6 +150,12 @@ def make_monitor():
             self.available = None
             self.mode = None
             self.mrm_since = None
+            self.mrm_info = None
+            self.engaged_at = None
+            self.avail_at = None
+            self.avail_false_at = None
+            self.diag_names = []
+            self.diag_bad = {}           # leaf name -> (time last non-OK, message)
             self.speed = 0.0
             self.speeds = []
             self.recording = False
@@ -146,6 +164,45 @@ def make_monitor():
 
         def on_avail(self, m):
             self.available = bool(m.autonomous)
+            self.avail_at = time.monotonic()
+            if not self.available:
+                self.avail_false_at = self.avail_at
+
+        def on_struct(self, m):
+            # the unit path each leaf hangs under, e.g. /adapi/mrm_request/delegate
+            self.diag_names = [m.nodes[d.parent].path if d.parent < len(m.nodes) else d.name
+                               for d in m.diags]
+
+        def on_status(self, m):
+            now = time.monotonic()
+            for i, d in enumerate(m.diags):
+                lvl = d.level[0] if isinstance(d.level, bytes) else int(d.level)   # a ROS `byte`
+                if lvl != 0:
+                    name = self.diag_names[i] if i < len(self.diag_names) else f'diag #{i}'
+                    level = {1: 'WARN', 2: 'ERROR', 3: 'STALE'}.get(lvl, 'not OK')
+                    self.diag_bad[name] = (now, f'{level}: {d.message}' if d.message else level)
+
+        def describe_mrm(self, m, now):
+            """What the fail-safe did and when, from the first MRM message."""
+            what = (f"{self.MRM_STATES.get(m.state, m.state)} "
+                    f"{self.MRM_BEHAVIORS.get(m.behavior, 'behavior ' + str(m.behavior))}")
+            when = (f'{now - self.engaged_at:.1f} s after engage' if self.engaged_at is not None
+                    else 'before engage')
+            return f'{what}, {when}'
+
+        def mrm_reason(self):
+            """The MRM line plus the diagnostics that were not OK around it.
+
+            The status message that carries the cause can arrive just after the
+            MRM message, so this is read once the run is over, not in the callback.
+            """
+            if self.mrm_since is None:
+                return None
+            bad = [f'{n} {msg}' for n, (t, msg) in self.diag_bad.items()
+                   if abs(t - self.mrm_since) < 2.0]
+            return self.mrm_info + ('; not OK around it: ' + ', '.join(bad[:4]) if bad
+                                    else '; no diagnostic was not OK (the availability message '
+                                         'went false)')
 
         def on_mode(self, m):
             self.mode = int(m.mode)
@@ -153,6 +210,7 @@ def make_monitor():
         def on_mrm(self, m):
             if m.state != self.MRM_NORMAL and self.mrm_since is None:
                 self.mrm_since = time.monotonic()
+                self.mrm_info = self.describe_mrm(m, self.mrm_since)
 
         def on_odom(self, m):
             self.speed = m.twist.twist.linear.x
@@ -189,6 +247,7 @@ def run_route(rclpy, mon, env, workdir, route, extra, timeout):
             result.update(ok=False, why=['engage refused'])
             return result
         t0 = time.monotonic()
+        mon.engaged_at = t0
 
         def over():
             p = mon.progress
@@ -213,7 +272,7 @@ def run_route(rclpy, mon, env, workdir, route, extra, timeout):
         p = mon.progress
         finished = bool(p and p.finished)
         ok, why = judge(v_ref, mon.speeds, finished, int(p.laps_done) if p else 0, laps,
-                        mon.mrm_since is not None, mon.faults, stalled,
+                        mon.mrm_reason() or False, mon.faults, stalled,
                         abs(mon.speed) < 0.05, time.monotonic() - t0 >= timeout)
         moving = [s for s in mon.speeds if s > 0.1]
         result.update(ok=ok, why=why, seconds=round(time.monotonic() - t0, 1),

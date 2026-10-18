@@ -1,0 +1,21 @@
+# Lab 2 Part 1 (simulated car): vehicle_cmd_gate overrides, loaded after autoware_launch's
+# vehicle_cmd_gate.param.yaml through autosdv_pursuit_control_component.launch.xml's
+# vehicle_cmd_gate_param_path. Only the keys below change.
+#
+# lon_acc_lim_for_lon_vel: the gate limits each change of the commanded velocity to
+# lon_acc_lim * dt, where dt is the time between its own callbacks. On a loaded host those
+# come in bursts (two commands a few ms apart), so the 5 m/s^2 default clipped commands on
+# the profile's 2.5 m/s^2 ramps in some runs and not others: the target the student's
+# controller saw depended on the host's load. 50 m/s^2 never binds. The profile itself limits
+# acceleration to 2.5 m/s^2, lab2_part1_scenario ramps the resume after the e-stop, and the
+# e-stop brakes through the emergency flag, not the target, so nothing relied on the limit.
+# on_transition: the same for the first ~0.1 s after the engage (1 m/s^2 there, measured
+# clipping the launch from 0.25 m/s).
+# Everything else in the gate (engage, emergency, operation mode, steering limits) is as
+# upstream.
+/**:
+  ros__parameters:
+    nominal:
+      lon_acc_lim_for_lon_vel: [50.0, 50.0, 50.0, 50.0]
+    on_transition:
+      lon_acc_lim_for_lon_vel: [50.0, 50.0]

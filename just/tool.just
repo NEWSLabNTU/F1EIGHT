@@ -21,11 +21,11 @@ plotjuggler:
     source scripts/env.sh && \
     ros2 run plotjuggler plotjuggler
 
-# Launch manual keyboard control
+# Launch manual keyboard control (a GUI window: needs DISPLAY; limits from control_test/config/keyboard_control.yaml)
 controller:
     #!/usr/bin/env bash
     source scripts/env.sh && \
-    ros2 run control_test keyboard_control
+    ros2 launch control_test keyboard_control.launch.xml
 
 # Launch drive monitor TUI (shows pose, speed, component states)
 tui:

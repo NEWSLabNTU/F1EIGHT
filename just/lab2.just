@@ -1,11 +1,33 @@
 # Lab 2, ArUco localization and waypoint following: the vehicle bench and the
-# vehicle. Arguments after the recipe name go to the launch file, e.g.
+# vehicle.
+#
+# Settings live in ~/lab2/lab2.yaml (`just lab2 init` writes it; config:=FILE picks
+# another): car, team, team_dir, submission, route, reference, bag_dir. Precedence,
+# highest first: key:=value on the command line, that file, the built-in defaults
+# (src/lab/autosdv_waypoint_lab/config/lab2_defaults.yaml). `just lab2 config` shows the
+# result. With the file filled in, a graded run is ONE command on the car (in tmux):
+#
+#   just lab2 run                  stack, preflight, record, engage (asks), stop, audit
+#   just lab2 audit                the latest bag: verdict, metrics, violations, audit.png
+#
+# or, step by step in separate terminals:
+#
+#   just lab2 gate                 workstation: the submission's SpeedPID on the graded route
+#   just lab2 vehicle              car: route + team_dir
+#   just lab2 preflight            car, second terminal
+#   just lab2 record               rosbags/lab2_uturn_1, _2, ...
+#   just lab2 engage               (third terminal), then Ctrl-C the recording
+#   just lab2 check-bags           the latest bag
+#   just lab2 grade                the latest bag against the reference
+#   just lab2 plot                 the latest bag in PlotJuggler
+#
+# Other arguments go to the launch file or the tool, e.g.
 #
 #   just lab2 bench
 #   just lab2 bench tracker_class:=my_lab2.path_tracker:PathTracker
 #   just lab2 vehicle route:=hall_demo
 #   just lab2 gate submission:=~/lab2/B12345678_lab_2_1     a student's SpeedPID and calibration
-#   just lab2 vehicle route:=lab2_straight team:=~/lab2/team3   Part 2: the team's controller and lookahead
+#   just lab2 vehicle route:=lab2_uturn team:=~/lab2/team3   Part 2: the team's controller and lookahead
 #   just lab2 vehicle course_dir:=$PWD/courses/my_hall 'speed_controller_params:={kp: 15.0}'
 #
 # Each argument reaches play_launch as one word, so quote a value that
@@ -28,13 +50,30 @@ web_addr := env_var_or_default('LAB2_WEB_ADDR', '0.0.0.0:8081')
 default:
     @just --list lab2
 
-# Vehicle bench: the real vehicle stack on this PC, a plant model for the car
+#   just lab2 config                         ~/lab2/lab2.yaml over the defaults
+#   just lab2 config config:=FILE car:=B     another file, a command-line override
+# Show the Lab 2 settings every recipe would use, and where each value came from
+[positional-arguments]
+config *ARGS:
+    #!/usr/bin/env bash
+    exec python3 scripts/testing/lab2/lab2_config.py config "$@"
+
+#   just lab2 init                           ~/lab2/lab2.yaml
+#   just lab2 init car:=A team:=3            fill those in, leave the rest commented
+#   just lab2 init config:=FILE              another file
+# Write a commented settings template (never overwrites an existing file)
+[positional-arguments]
+init *ARGS:
+    #!/usr/bin/env bash
+    exec python3 scripts/testing/lab2/lab2_config.py init "$@"
+
 #   just lab2 bench                                  hall_demo, reference laws
 #   just lab2 bench dropout:=0.4 gyro_bias_error_z:=0.01
 #   just lab2 bench tracker_class:=my_lab2.path_tracker:PathTracker
 # The actuator (dry run) and its SpeedPID, the EKF, the tracker and the MRM
 # path all run; the ZED, the AR-tag localizer, velocity_report and the PCA9685
 # are replaced (vehicle_bench_plant, virtual_marker_localizer).
+# Vehicle bench: the real vehicle stack on this PC, a plant model for the car
 [positional-arguments]
 bench *ARGS:
     #!/usr/bin/env bash
@@ -46,31 +85,69 @@ bench *ARGS:
     printf '\033[2m%s\033[0m\n' "${cmd[*]}"
     exec "${cmd[@]}"
 
+#   just lab2 vehicle                       route and team_dir from the config
+#   just lab2 vehicle route:=hall_demo team:=~/lab2/team3
+# team:= / submission:= / speed_controller_class:= on the command line replace team_dir.
 # On the vehicle: ZED + AR-tag localizer + EKF, the course, the student laws
 [positional-arguments]
 vehicle *ARGS:
     #!/usr/bin/env bash
     source scripts/env.sh
     source scripts/testing/lab2/submission.sh
-    lab2_apply_submission "$@" || exit 2
+    source scripts/testing/lab2/lab2_config.sh
+    lab2_config vehicle "$@" || exit 2
+    lab2_apply_submission "${LAB2_ARGS[@]}" || exit 2
     cmd=(play_launch launch --web-addr '{{ web_addr }}'
          autosdv_launch waypoint_follow.launch.xml "${LAB2_ARGS[@]}")
     printf '\033[2m%s\033[0m\n' "${cmd[*]}"
     exec "${cmd[@]}"
 
-# Gate before car time: your SpeedPID on the three graded routes, full stack; PASS/FAIL per route
-#   just lab2 gate submission:=DIR     DIR = your <student_id>_lab_2_1 (or lab2_waypoint) directory:
-#       its speed_pid.py, config/speed_pid.yaml and config/calibration.yaml are loaded for you
-#       (same for `bench` and `vehicle`; scripts/testing/lab2/submission.py shows what is passed)
-#   just lab2 gate speed_controller_class:=lab2_waypoint.speed_pid:SpeedPID "speed_controller_params:={kp: 15.0}"
-#   just lab2 gate --only lab2_straight ...
+#   just lab2 gate                     the config's submission
+#   just lab2 gate submission:=DIR     DIR = your <student_id>_lab_2_1 (or lab2_speed) directory:
+#       its lab2_speed/speed_pid.py, config/speed_pid_car.yaml and config/calibration.yaml are
+#       loaded for you (same for `bench` and `vehicle`; scripts/testing/lab2/submission.py shows
+#       what is passed)
+#   just lab2 gate speed_controller_class:=lab2_speed.speed_pid:SpeedPID "speed_controller_params:={kp: 20.0}"
+#   just lab2 gate --only hall_demo ...        another course instead of lab2_uturn
+# Gate before car time: your SpeedPID on the graded route (lab2_uturn), full stack; PASS/FAIL
 [positional-arguments]
 gate *ARGS:
     #!/usr/bin/env bash
     source scripts/env.sh
     source scripts/testing/lab2/submission.sh
-    lab2_apply_submission "$@" || exit 2
+    source scripts/testing/lab2/lab2_config.sh
+    lab2_config gate "$@" || exit 2
+    lab2_apply_submission "${LAB2_ARGS[@]}" || exit 2
     exec python3 scripts/testing/lab2/bench_gate.py "${LAB2_ARGS[@]}"
+
+#   just lab2 sim submission:=~/lab2/B12345678_lab_2_1            one run, nominal car, ~1.5 min
+#   just lab2 sim submission:=DIR --final                          nominal, low_batt, low_mu: the 25-point mark
+#   just lab2 sim submission:=DIR variant:=low_mu rviz:=false gui:=false
+#   just lab2 sim                                                  `part1_submission` from ~/lab2/lab2.yaml
+# No submission anywhere: the STUB runs (it holds neutral), with a warning.
+# Outputs: tmp/lab2/part1/<submission name>/<variant>/ (trace.csv, marks.json, run.json, play_log).
+# ROS_DOMAIN_ID: yours if exported (non-zero), else 1 + uid % 100. Web UI on LAB2_WEB_ADDR
+# (default 127.0.0.1:8081). scripts/testing/lab2/part1_run.py --help: the rest.
+# Part 1: your SpeedPID on the simulated car, one straight, live; graded, marks printed
+[positional-arguments]
+sim *ARGS:
+    #!/usr/bin/env bash
+    source scripts/env.sh
+    source scripts/testing/lab2/lab2_config.sh
+    lab2_config sim "$@" || exit 2
+    exec python3 scripts/testing/lab2/part1_run.py "${LAB2_ARGS[@]}"
+
+#   just lab2 make-part1-course                    rewrite config/courses/lab2_part1 (committed)
+#   just lab2 make-part1-course --estop-offset 12 --out tmp/lab2/part1/course
+# Prints the segment table; part1_profile.yaml is what the scenario node and the grader read.
+# Regenerate the Part 1 straight (path, map, part1_profile.yaml) from its speed profile
+[positional-arguments]
+make-part1-course *ARGS:
+    #!/usr/bin/env bash
+    source scripts/env.sh
+    out=(--out src/lab/autosdv_waypoint_lab/config/courses/lab2_part1)
+    case " $* " in *" --out "*|*" --out="*) out=() ;; esac
+    exec ros2 run autosdv_waypoint_lab lab2_make_part1_course "${out[@]}" "$@"
 
 # Bench checks on fresh benches (follow, marker loss, path publisher loss, faults); PASS/FAIL lines
 [positional-arguments]
@@ -85,6 +162,70 @@ preflight *ARGS:
     #!/usr/bin/env bash
     source scripts/env.sh
     exec python3 scripts/testing/lab2/waypoint_preflight.py "$@"
+
+#   just lab2 health                         beside `just lab2 run` / loc-check, in a second tmux window; Ctrl-C ends it
+#   just lab2 health --duration 120          two minutes
+#   just lab2 health --with-run              file it under <bag_dir>/run_logs/<the run's bag>/
+#   just lab2 health --kernel                also one kernel_cpu_report.sh snapshot at the end
+# Writes rosbags/health/<date>_<time>/summary.txt + summary.json (and gpu.csv, tegrastats.log on the car).
+# Car-day health: topic rates and gaps, CPU per core, memory, GPU, temperatures, throttling; OK/WARN/FAIL
+[positional-arguments]
+health *ARGS:
+    #!/usr/bin/env bash
+    source scripts/env.sh
+    exec python3 scripts/testing/lab2/health.py "$@"
+
+#   just lab2 run                               the car: route, team_dir, car, team from the config
+#   just lab2 run car:=B team_dir:=~/lab2/team3 (team:= here is the team NUMBER, as in record)
+#   just lab2 run --bench [--camera mock]       the same flow on the vehicle bench
+#   just lab2 run --bench --yes                 engage without asking (bench only; tests)
+# Stack output goes to <bag_dir>/run_logs/lab2_uturn_N/, not the terminal. It asks before engaging
+# and stops the car (disengage) on an MRM, a disengage, a localization loss or the timeout.
+# Ctrl-C at any point: disengage, close the bag, stop the stack.
+# One graded run: stack, preflight, record, engage, watch, stop, audit
+[positional-arguments]
+run *ARGS:
+    #!/usr/bin/env bash
+    source scripts/env.sh
+    exec python3 scripts/testing/lab2/lab2_run.py "$@"
+
+#   just lab2 audit                          the latest bag, car/team/reference from the config
+#   just lab2 audit rosbags/lab2_uturn_3
+#   just lab2 audit --show                   also open the PNG (export DISPLAY=:1 on the car, view over RDP)
+# Writes BAG/audit.png (speed, the run on the floor, path deviation) and BAG/audit.json.
+# Audit a bag: check-bags + grade verdict, every metric, the violations, and a plot
+[positional-arguments]
+audit *ARGS:
+    #!/usr/bin/env bash
+    source scripts/env.sh
+    source scripts/testing/lab2/lab2_config.sh
+    lab2_config audit "$@" || exit 2
+    exec ros2 run autosdv_waypoint_lab lab2_audit "${LAB2_ARGS[@]}"
+
+#   just lab2 integration-test                       the reference controller, rendered boards
+#   just lab2 integration-test submission:=DIR       a student's SpeedPID (team_dir:=DIR for Part 2)
+#   just lab2 integration-test --camera virtual      the modelled localizer instead (faster)
+# Bags go to tmp/lab2_integration/bags (bag_dir:= to change), car SIM, team 0. PASS needs: the run
+# finished, check-bags (bench mode) ACCEPT, grade valid, audit.png, localization vs true pose ok.
+# TA: the whole Part 2 pipeline on the bench, no car; PASS/FAIL
+[positional-arguments]
+integration-test *ARGS:
+    #!/usr/bin/env bash
+    source scripts/env.sh
+    ctrl=()
+    case " $* " in
+        *" submission:="*|*" team_dir:="*|*" speed_controller_class:="*) ;;
+        *) ctrl=(speed_controller_class:=autosdv_vehicle_interface.speed_controller:AckermannSpeedPID) ;;
+    esac
+    exec python3 scripts/testing/lab2/lab2_run.py --bench --yes --integration \
+        car:=SIM team:=0 bag_dir:=tmp/lab2_integration/bags "${ctrl[@]}" "$@"
+
+# TA: fuzz the Part 2 gates with mutated copies of a valid bag (--gate: also the bench gate)
+[positional-arguments]
+fuzz *ARGS:
+    #!/usr/bin/env bash
+    source scripts/env.sh
+    exec python3 scripts/testing/lab2/fuzz_bags.py "$@"
 
 # Engage autonomous mode (the car starts the course)
 engage:
@@ -113,32 +254,41 @@ reinit:
     ros2 service call /localization/pose_twist_fusion_filter/start_pose_init/reinit \
         std_srvs/srv/Trigger {}
 
-# Record the submission bag: the fixed topic list, the compressed camera, course hash, car and team
-#   just lab2 record --car A --team 3 [--name straight_1]
+#   just lab2 record                         car and team from the config, rosbags/lab2_uturn_<next>
+#   just lab2 record --car A --team 3 [--name uturn_1]
 # Start it after `just lab2 vehicle`, before `just lab2 engage`; Ctrl-C ends it. The course is read
 # from the running stack. Writes rosbags/lab2_<name>; check it with `just lab2 check-bags`.
+# Record the submission bag: the fixed topic list, the compressed camera, course hash, car and team
 [positional-arguments]
 record *ARGS:
     #!/usr/bin/env bash
     source scripts/env.sh
-    exec ros2 run autosdv_waypoint_lab lab2_record "$@"
+    source scripts/testing/lab2/lab2_config.sh
+    lab2_config record "$@" || exit 2
+    exec ros2 run autosdv_waypoint_lab lab2_record "${LAB2_ARGS[@]}"
 
-# Would the grader accept these bags? Missing topic, modified course, wrong speed, laps, MRM
-#   just lab2 check-bags rosbags/lab2_straight rosbags/lab2_cw rosbags/lab2_ccw --car A --team 3
+#   just lab2 check-bags                                   the latest bag, car and team from the config
+#   just lab2 check-bags rosbags/lab2_uturn_1 --car A --team 3
+# Would the grader accept these bags? Missing topic, modified course, wrong speed, laps, MRM, off the path
 [positional-arguments]
 check-bags *ARGS:
     #!/usr/bin/env bash
     source scripts/env.sh
-    exec ros2 run autosdv_waypoint_lab lab2_check_bags "$@"
+    source scripts/testing/lab2/lab2_config.sh
+    lab2_config check-bags "$@" || exit 2
+    exec ros2 run autosdv_waypoint_lab lab2_check_bags "${LAB2_ARGS[@]}"
 
-# Run metrics of recorded runs: laps, cross-track, speed tracking, MRM
+#   just lab2 grade                                               score the latest bag against `reference`
 #   just lab2 grade BAG...                                        the engineering metrics
-#   just lab2 grade --score BAG... --reference REFBAG...          TA scoring of the route bags
+#   just lab2 grade --score BAG [--reference REFBAG]              TA scoring of the lab2_uturn bag
+# Score the latest run against the reference, or run metrics of named bags
 [positional-arguments]
 grade *ARGS:
     #!/usr/bin/env bash
     source scripts/env.sh
-    exec ros2 run autosdv_waypoint_lab lab2_grade_run "$@"
+    source scripts/testing/lab2/lab2_config.sh
+    lab2_config grade "$@" || exit 2
+    exec ros2 run autosdv_waypoint_lab lab2_grade_run "${LAB2_ARGS[@]}"
 
 # Regenerate a course's lanelet2_map.osm from its course.yaml; prints marker coverage
 [positional-arguments]
@@ -147,6 +297,17 @@ course-map *DIRS:
     source scripts/env.sh
     [ $# -gt 0 ] || set -- src/lab/autosdv_waypoint_lab/config/courses/*/
     exec ros2 run autosdv_waypoint_lab make_course_map "$@"
+
+#   just lab2 make-uturn 1.5                    summary, the spec's paste block, a diff
+#   just lab2 make-uturn 2.0 --leg 8 --write    a new radius and legs: path, boards, map, header
+#   ... --tex <course repo>/2026/labs/Lab2/spec/uturn_geometry.tex   the spec's numbers and map
+# The boards come from the coverage search; a layout that misses a goal is not written.
+# Regenerate the graded course lab2_uturn from its U-turn radius and leg length (dry run without --write)
+[positional-arguments]
+make-uturn RADIUS *ARGS:
+    #!/usr/bin/env bash
+    shift
+    exec python3 scripts/testing/lab2/make_uturn.py --radius '{{ RADIUS }}' "$@"
 
 # Car in the start box, stack up, not engaged: fix quality and per-marker survey check
 camera-check COURSE="src/lab/autosdv_waypoint_lab/config/courses/hall_demo" SECONDS="20":
@@ -282,14 +443,39 @@ survey-solve *ARGS:
     source scripts/env.sh
     exec ros2 run autosdv_marker_survey lab2_marker_survey_solve "$dir/survey_data.npz" --course "$dir" "$@"
 
-#   just lab2 plot rosbags/lab2_straight_1
-# PlotJuggler asks which topics to load: select all (Ctrl+A), then OK.
-# Open a bag in PlotJuggler: target vs measured speed, motor PWM, EKF path vs marker fixes
-plot BAG:
+#   just lab2 survey-align                       surveys/latest; the car in the taped start box
+#   just lab2 survey-align surveys/<dir> [--route lab2_uturn] [--force]
+#   just lab2 survey-align DIR --bench --truth TRUTH_DIR      the vehicle bench, no car
+# READY, then drive the car STRAIGHT along the taped first leg (2 m or more), stop, Ctrl-C.
+# Nothing here can drive the car (no tracker, the actuator as a dry run). Writes the aligned
+# course (the route's path.csv, the boards in its frame) and align_report.txt into the survey;
+# the stage-1 result stays in DIR/stage1/. Then: loc-check, run.
+# Survey stage 2: put the survey into the route's frame (origin at the start box, x along the first leg)
+[positional-arguments]
+survey-align *ARGS:
     #!/usr/bin/env bash
     source scripts/env.sh
-    bag=$(realpath "{{ BAG }}")
+    exec python3 scripts/testing/lab2/survey_align.py "$@"
+
+#   just lab2 plot                           the latest bag
+#   just lab2 plot rosbags/lab2_uturn_1
+#   just lab2 plot --dry-run                 print the command, open nothing
+# PlotJuggler asks which topics to load: select all (Ctrl+A), then OK.
+# Open a bag in PlotJuggler: target vs measured speed, motor PWM, EKF path vs marker fixes
+[positional-arguments]
+plot *ARGS:
+    #!/usr/bin/env bash
+    dry=0; args=()
+    for a in "$@"; do if [ "$a" = --dry-run ]; then dry=1; else args+=("$a"); fi; done
+    source scripts/testing/lab2/lab2_config.sh
+    lab2_config plot "${args[@]}" || exit 2
+    [ "${#LAB2_ARGS[@]}" = 1 ] || { echo "usage: just lab2 plot [BAG] [config:=FILE] [--dry-run]" >&2; exit 2; }
+    bag=$(realpath "${LAB2_ARGS[0]}")
     [ -f "$bag/metadata.yaml" ] || { echo "error: '$bag' is not a bag directory (no metadata.yaml)" >&2; exit 1; }
     # --disable_opengl: under a remote desktop without GL the plots otherwise draw black
-    exec ros2 run plotjuggler plotjuggler --nosplash --disable_opengl \
-        -d "$bag/metadata.yaml" -l src/lab/autosdv_waypoint_lab/config/plotjuggler/lab2_run.xml
+    cmd=(ros2 run plotjuggler plotjuggler --nosplash --disable_opengl
+         -d "$bag/metadata.yaml" -l src/lab/autosdv_waypoint_lab/config/plotjuggler/lab2_run.xml)
+    printf '\033[2m%s\033[0m\n' "${cmd[*]}"
+    [ "$dry" = 1 ] && exit 0
+    source scripts/env.sh
+    exec "${cmd[@]}"

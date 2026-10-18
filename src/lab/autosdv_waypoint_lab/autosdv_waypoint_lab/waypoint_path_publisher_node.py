@@ -5,7 +5,8 @@ course.yaml and its path CSV, tracks the car's progress along the course from
 /localization/kinematic_state, and publishes the window of the course around
 the car (window_behind metres back, window_ahead metres ahead) as an Autoware
 Trajectory at `rate`. Each point's velocity is the waypoint speed, capped so
-the car stops exactly at the end of the run (CoursePath.window).
+the car stops exactly at the end of the run, and 0 everywhere once the run is
+finished, so the car stays stopped (CoursePath.window).
 
 Progress and laps go out on ~/progress (WaypointProgress), which is what the
 grader counts laps from. ~/restart (std_srvs/Trigger) starts a new run from

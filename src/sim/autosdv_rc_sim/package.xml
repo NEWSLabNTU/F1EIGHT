@@ -1,0 +1,40 @@
+<?xml version="1.0"?>
+<?xml-model href="http://download.ros.org/schema/package_format3.xsd" schematypens="http://www.w3.org/2001/XMLSchema"?>
+<package format="3">
+  <name>autosdv_rc_sim</name>
+  <version>0.1.0</version>
+  <description>
+    AutoSDV RC car simulator: a PWM-level plant (ESC, motor, slip tyres, single-track
+    drift chassis) behind the real vehicle interface (hardware:=sim), a deterministic
+    lockstep grader for Lab 2 Part 1, a straight-track generator and a trace replay.
+    Design: docs/design/rc-sim-design.md.
+  </description>
+  <maintainer email="jerry73204@gmail.com">aeon</maintainer>
+  <license>Apache-2.0</license>
+
+  <depend>rclpy</depend>
+  <depend>autosdv_vehicle_interface</depend>
+  <depend>std_msgs</depend>
+  <depend>builtin_interfaces</depend>
+  <depend>rosgraph_msgs</depend>
+  <depend>geometry_msgs</depend>
+  <depend>nav_msgs</depend>
+  <depend>sensor_msgs</depend>
+  <depend>visualization_msgs</depend>
+  <depend>tf2_ros</depend>
+  <depend>autoware_vehicle_msgs</depend>
+  <depend>autoware_internal_debug_msgs</depend>
+  <exec_depend>python3-yaml</exec_depend>
+  <exec_depend>autosdv_vehicle_launch</exec_depend>
+  <exec_depend>autosdv_vehicle_description</exec_depend>
+  <exec_depend>autosdv_coach_lab</exec_depend>          <!-- sim_pose_init -->
+  <exec_depend>autoware_launch</exec_depend>
+  <exec_depend>autoware_imu_corrector</exec_depend>
+  <exec_depend>individual_params</exec_depend>
+
+  <test_depend>python3-pytest</test_depend>
+
+  <export>
+    <build_type>ament_python</build_type>
+  </export>
+</package>

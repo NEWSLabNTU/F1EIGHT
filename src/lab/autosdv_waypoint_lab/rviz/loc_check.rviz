@@ -105,8 +105,8 @@ Visualization Manager:
       Class: rviz_default_plugins/TopDownOrtho
       Name: Current View
       Scale: 60
-      X: 3
-      Y: 1
+      X: 5.3
+      Y: -1.5
       Angle: 0
       Target Frame: map
 Window Geometry:

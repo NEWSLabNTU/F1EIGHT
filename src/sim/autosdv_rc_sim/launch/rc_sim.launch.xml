@@ -1,0 +1,136 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<!--
+  The RC car simulator, interactive (`just sim rc`): Autoware in planning-simulator
+  mode, the REAL vehicle interface with hardware:=sim, and the rc_sim plant, all on
+  the plant's /clock. Design: docs/design/rc-sim-design.md.
+
+    Autoware: map, planning, control, system, API, RViz (no sensing, localization, perception)
+      /control/command/control_cmd -> actuator (SpeedPID, safety shell) -> /rc_sim/pwm -> rc_sim_plant
+      rc_sim_plant -> /rc_sim/hall_edges -> velocity_report -> /vehicle/status/velocity_status
+      rc_sim_plant -> /localization/kinematic_state, /localization/acceleration, TF map -> base_link
+      rc_sim_plant -> /sensing/camera/zedxm/imu/data -> imu_corrector -> /sensing/imu/imu_data
+
+  planning_simulator.launch.xml cannot drop simple_planning_simulator (only
+  scenario_simulation does), so this file composes autoware.launch.xml with
+  tier4_simulator_component.launch.xml and launch_dummy_vehicle:=false.
+  What it reproduces: the lab's 11 m/s straight (planning caps raised from the car's
+  4.17 m/s / 1.0 m/s^2 to 11.5 / 2.5 for this run only; the car's launch is untouched),
+  Autoware's own velocity planner deciding the profile. Results here are not graded: the speed
+  loop runs in lockstep with the clock (lockstep:=true), but the rest of Autoware still races
+  within a tick. `just sim grade` is the grade.
+-->
+<launch>
+  <arg name="track_dir" default="$(find-pkg-share autosdv_rc_sim)/tracks/straight_2_6_11"
+       description="a directory written by rc_sim_make_track (the map and track.yaml)"/>
+  <arg name="variant" default="nominal" description="vehicle model variant (vehicle.yaml)"/>
+  <arg name="speed_controller_params" default=""
+       description="the coefficients as a YAML mapping, e.g. {kp_speed: 15.0, max_pwm_offset: 100}"/>
+  <arg name="real_time_factor" default="1.0"/>
+  <arg name="lockstep" default="true"
+       description="clock handshake: /clock waits for velocity_report's and the actuator's acks (lockstep_sync.py)"/>
+  <arg name="lockstep_timeout" default="2.0" description="wall seconds before a silent participant invalidates the run"/>
+  <arg name="rviz" default="true"/>
+  <arg name="vehicle_model" default="autosdv_vehicle"/>
+  <arg name="sensor_model" default="autosdv_sensor_kit"/>
+  <arg name="vehicle_id" default="$(env VEHICLE_ID default)"/>
+  <arg name="data_path" default="$(env AUTOSDV_DATA_PATH ./data/autoware_data)"/>
+
+  <!-- tier4_simulator_component reads this from its including scope (planning_simulator declares it) -->
+  <arg name="scenario_simulation" default="false"/>
+
+  <set_parameter name="use_sim_time" value="true"/>
+
+  <include file="$(find-pkg-share autoware_launch)/launch/autoware.launch.xml">
+    <arg name="map_path" value="$(var track_dir)"/>
+    <arg name="vehicle_model" value="$(var vehicle_model)"/>
+    <arg name="sensor_model" value="$(var sensor_model)"/>
+    <arg name="data_path" value="$(var data_path)"/>
+    <arg name="launch_sensing" value="false"/>
+    <arg name="launch_localization" value="false"/>
+    <arg name="launch_perception" value="false"/>
+    <arg name="launch_planning" value="false"/>   <!-- composed below, with the raised caps -->
+    <arg name="launch_vehicle_interface" value="false"/>
+    <arg name="system_run_mode" value="planning_simulation"/>
+    <arg name="launch_system_monitor" value="false"/>
+    <arg name="launch_dummy_diag_publisher" value="true"/>
+    <arg name="diagnostic_graph_aggregator_graph_path"
+         value="$(find-pkg-share autosdv_rc_sim)/config/diagnostics/rc_sim_diagnostics.yaml"/>   <!-- autoware-main.yaml + 3 s timeouts on the 1 Hz /adapi diags -->
+    <arg name="is_simulation" value="true"/>
+    <arg name="use_sim_time" value="true"/>
+    <arg name="rviz" value="$(var rviz)"/>
+  </include>
+
+  <!-- planning: upstream's component with common.param.yaml swapped (max_vel 4.17 -> 11.5, acc 1.0 -> 2.5) -->
+  <include file="$(find-pkg-share autosdv_rc_sim)/launch/rc_sim_planning_component.launch.xml">
+    <arg name="module_preset" value="default"/>
+    <arg name="enable_all_modules_auto_mode" value="false"/>
+    <arg name="is_simulation" value="true"/>
+    <arg name="use_sim_time" value="true"/>
+    <arg name="vehicle_model" value="$(var vehicle_model)"/>
+  </include>
+  <node pkg="topic_tools" exec="relay" name="trajectory_relay">
+    <param name="input_topic" value="/planning/trajectory"/>
+    <param name="output_topic" value="/planning/scenario_planning/trajectory"/>
+  </node>
+
+  <!-- pose initializer (localization_sim_mode api) and dummy perception; no vehicle simulator -->
+  <include file="$(find-pkg-share autoware_launch)/launch/components/tier4_simulator_component.launch.xml">
+    <arg name="launch_dummy_perception" value="true"/>
+    <arg name="launch_dummy_vehicle" value="false"/>
+    <arg name="localization_sim_mode" value="api"/>
+    <arg name="launch_dummy_doors" value="false"/>
+    <arg name="launch_scenario_simulator_v2_adapter" value="false"/>
+    <arg name="perception/enable_detection_failure" value="false"/>
+    <arg name="perception/enable_object_recognition" value="false"/>
+    <arg name="perception/enable_traffic_light" value="false"/>
+    <arg name="perception/use_base_link_z" value="true"/>
+    <arg name="sensing/visible_range" value="300.0"/>
+    <arg name="vehicle_model" value="$(var vehicle_model)"/>
+    <arg name="initial_engage_state" value="true"/>
+    <arg name="vehicle_info_param_file"
+         value="$(find-pkg-share autosdv_vehicle_description)/config/vehicle_info.param.yaml"/>
+    <arg name="raw_vehicle_cmd_converter_param_path"
+         value="$(find-pkg-share autoware_launch)/config/vehicle/raw_vehicle_cmd_converter/raw_vehicle_cmd_converter.param.yaml"/>
+  </include>
+
+  <!-- the car's vehicle interface, unchanged, on the simulated hardware -->
+  <include file="$(find-pkg-share autosdv_vehicle_launch)/launch/vehicle_interface.launch.xml">
+    <arg name="hardware" value="sim"/>
+    <!-- explicit: play_launch lets autoware.launch.xml's launch_vehicle_interface:=false leak out of its include -->
+    <arg name="launch_vehicle_interface" value="true"/>
+    <arg name="is_simulation" value="false"/>
+    <arg name="vehicle_id" value="$(var vehicle_id)"/>
+    <arg name="speed_controller_params" value="$(var speed_controller_params)"/>
+    <arg name="speed_controller_dt_source" value="loop"/>
+    <arg name="actuator_param_overrides"
+         value="$(find-pkg-share autosdv_rc_sim)/config/actuator_rc_sim.param.yaml"/>
+  </include>
+
+  <!-- the plant owns /clock: the only node on wall time -->
+  <group scoped="true">
+    <set_parameter name="use_sim_time" value="false"/>
+    <node pkg="autosdv_rc_sim" exec="rc_sim_plant" name="rc_sim_plant" output="screen">
+      <param from="$(find-pkg-share individual_params)/config/$(var vehicle_id)/autosdv_sensor_kit/imu_corrector.param.yaml"/>
+      <param name="use_sim_time" value="false"/>
+      <param name="track_dir" value="$(var track_dir)"/>
+      <param name="variant" value="$(var variant)"/>
+      <param name="real_time_factor" value="$(var real_time_factor)"/>
+      <param name="lockstep" value="$(var lockstep)"/>
+      <param name="lockstep_timeout" value="$(var lockstep_timeout)"/>
+    </node>
+  </group>
+
+  <include file="$(find-pkg-share autoware_imu_corrector)/launch/imu_corrector.launch.xml">
+    <arg name="input_topic" value="/sensing/camera/zedxm/imu/data"/>
+    <arg name="output_topic" value="/sensing/imu/imu_data"/>
+    <arg name="param_file"
+         value="$(find-pkg-share individual_params)/config/$(var vehicle_id)/autosdv_sensor_kit/imu_corrector.param.yaml"/>
+  </include>
+
+  <!-- the track's start pose (generated tracks start at the origin, facing +x) -->
+  <node pkg="autosdv_coach_lab" exec="sim_pose_init" name="sim_pose_init" output="screen">
+    <param name="x" value="0.0"/>
+    <param name="y" value="0.0"/>
+    <param name="yaw" value="0.0"/>
+  </node>
+</launch>

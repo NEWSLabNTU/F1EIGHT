@@ -1,0 +1,132 @@
+# Lab 2 proof run (a screencast of `just lab2 run --bench --camera mock`): the
+# route from above, beside scripts/testing/lab2/proof_view.py (camera + status).
+# Needs loc_check running (launch/loc_check.launch.xml) for the route, trail and
+# fixes. Laid out for the left 1100 x 1080 of a 1920 x 1080 display.
+#   white      the route (path.csv)
+#   red        where the localizer has put the car (the trail)
+#   cyan       the bench's true pose (arrows every 0.15 m)
+#   green      the surveyed boards (the localizer's own map) and the latest fixes
+#   yellow     the car, at the EKF pose
+Panels: []
+Visualization Manager:
+  Class: ""
+  Displays:
+    - Class: rviz_default_plugins/Grid
+      Name: Grid (1 m)
+      Enabled: true
+      Cell Size: 1
+      Plane Cell Count: 30
+      Color: 80; 80; 80
+      Reference Frame: map
+    - Class: rviz_default_plugins/Path
+      Name: Course path
+      Enabled: true
+      Color: 255; 255; 255
+      Line Style: Billboards
+      Line Width: 0.06
+      Topic:
+        Depth: 1
+        Durability Policy: Transient Local
+        History Policy: Keep Last
+        Reliability Policy: Reliable
+        Value: /lab2/course_path
+    - Class: rviz_default_plugins/Path
+      Name: Trail (localized)
+      Enabled: true
+      Color: 255; 60; 60
+      Line Style: Billboards
+      Line Width: 0.05
+      Topic:
+        Depth: 1
+        Durability Policy: Volatile
+        History Policy: Keep Last
+        Reliability Policy: Reliable
+        Value: /lab2/trail
+    - Class: rviz_default_plugins/MarkerArray
+      Name: Markers (survey)
+      Enabled: true
+      Topic:
+        Depth: 1
+        Durability Policy: Transient Local
+        History Policy: Keep Last
+        Reliability Policy: Reliable
+        Value: /localization/pose_estimator/ar_tag_based_localizer/debug/mapped_tag
+    - Class: rviz_default_plugins/PoseArray
+      Name: Marker fixes
+      Enabled: true
+      Color: 60; 220; 60
+      Shape: Arrow (Flat)
+      Arrow Length: 0.3
+      Topic:
+        Depth: 1
+        Durability Policy: Volatile
+        History Policy: Keep Last
+        Reliability Policy: Reliable
+        Value: /lab2/fixes
+    - Class: rviz_default_plugins/Odometry
+      Name: True pose (bench)
+      Enabled: true
+      Keep: 400
+      Position Tolerance: 0.15
+      Angle Tolerance: 3.14
+      Shape:
+        Value: Arrow
+        Color: 60; 200; 255
+        Shaft Length: 0.12
+        Shaft Radius: 0.025
+        Head Length: 0.06
+        Head Radius: 0.05
+      Covariance:
+        Value: false
+      Topic:
+        Depth: 5
+        Durability Policy: Volatile
+        History Policy: Keep Last
+        Reliability Policy: Reliable
+        Value: /vehicle_bench_plant/odometry
+    - Class: rviz_default_plugins/Odometry
+      Name: Car (EKF)
+      Enabled: true
+      Keep: 1
+      Shape:
+        Value: Arrow
+        Color: 255; 200; 0
+        Shaft Length: 0.7
+        Shaft Radius: 0.1
+        Head Length: 0.35
+        Head Radius: 0.24
+      Covariance:
+        Value: false
+      Topic:
+        Depth: 5
+        Durability Policy: Volatile
+        History Policy: Keep Last
+        Reliability Policy: Best Effort
+        Value: /localization/kinematic_state
+  Enabled: true
+  Global Options:
+    Background Color: 30; 30; 34
+    Fixed Frame: map
+    Frame Rate: 20
+  Name: root
+  Tools:
+    - Class: rviz_default_plugins/MoveCamera
+    - Class: rviz_default_plugins/Measure
+  Views:
+    Current:
+      Class: rviz_default_plugins/TopDownOrtho
+      Name: Current View
+      Scale: 63
+      X: 5.3
+      Y: -1.5
+      Angle: 0
+      Target Frame: map
+Window Geometry:
+  Displays:
+    collapsed: true
+  Hide Left Dock: true
+  Hide Right Dock: true
+  X: 0
+  Y: 0
+  Width: 1100
+  Height: 1080

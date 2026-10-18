@@ -27,13 +27,37 @@ import sys
 import time
 
 
+def _descendants(root):
+    """PIDs of every process below `root`, by parent links."""
+    children = {}
+    for pid in os.listdir("/proc"):
+        if not pid.isdigit():
+            continue
+        try:
+            with open(f"/proc/{pid}/stat") as fh:
+                ppid = int(fh.read().rsplit(") ", 1)[1].split()[1])
+        except (FileNotFoundError, ProcessLookupError, PermissionError, IndexError):
+            continue
+        children.setdefault(ppid, []).append(int(pid))
+    found, todo = set(), [root]
+    while todo:
+        for child in children.get(todo.pop(), ()):
+            if child not in found:
+                found.add(child)
+                todo.append(child)
+    return found
+
+
 def match_processes(pattern, pgid=None):
     """RSS sum and CPU jiffies of the workload's processes.
 
     Selected either by a regex over the command line, or -- more reliably for a
-    launched stack -- by process group: play_launch puts every node and
-    container in its own group, and matching on names misses the ones whose
-    binary is named after neither the launcher nor the container.
+    launched stack -- by process group plus everything descended from the group
+    leader (pid == pgid): play_launch puts every node and container in a group
+    of its own, so the leader's group alone is only the launcher, and matching
+    on names misses nodes whose binary is named after neither the launcher nor
+    the container. Descendants are found through parent links, so a process
+    that double-forks and is re-parented to init escapes the count.
 
     Tracking the workload itself, rather than the machine, is what makes a
     number usable on a box that is also doing something else -- which is the
@@ -42,6 +66,7 @@ def match_processes(pattern, pgid=None):
     rss = 0
     jiffies = 0
     count = 0
+    tree = _descendants(pgid) if pgid is not None else None
     for pid in os.listdir("/proc"):
         if not pid.isdigit():
             continue
@@ -50,7 +75,9 @@ def match_processes(pattern, pgid=None):
                 stat = fh.read()
             fields_all = stat.rsplit(") ", 1)[1].split()
             if pgid is not None:
-                if int(fields_all[2]) != pgid:
+                # the group leader's own group, plus everything it spawned: play_launch
+                # puts each node in a group of its own, so the group alone is three processes
+                if int(fields_all[2]) != pgid and int(pid) not in tree:
                     continue
             else:
                 with open(f"/proc/{pid}/cmdline", "rb") as fh:
@@ -111,8 +138,9 @@ def main():
                     help="sample for this long; default is until the command exits")
     ap.add_argument("--label", default="")
     ap.add_argument("--pgid", type=int, default=0,
-                    help="track this process group instead of a name regex; a launched "
-                         "stack is one group, so nothing is missed and nothing else counted")
+                    help="track this process group leader's group and all its descendants "
+                         "instead of a name regex (a launcher puts each node in its own "
+                         "group); double-forked orphans re-parented to init are missed")
     ap.add_argument("--match", default="",
                     help="regex over cmdlines; reports those processes' own RSS and CPU "
                          "as well as the machine's, so a busy neighbour does not inflate it")

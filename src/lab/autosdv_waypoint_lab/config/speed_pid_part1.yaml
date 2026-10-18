@@ -1,0 +1,30 @@
+# Lab 2 Part 1 SpeedPID: the STARTING parameters (autosdv_waypoint_lab.stub.speed_pid_part1's
+# defaults, and the handout's lab2_speed/config/speed_pid.yaml, which is a copy of this file).
+# A starting point, not tuned: you are expected to tune them.
+#
+# A plain mapping. The actuator receives it as the one-line launch argument
+# speed_controller_params:="{kp: ..., ki: ...}" and merges it over its own motor parameters
+# (init_pwm, min_pwm, max_pwm, brake_pwm, rate, ...), so SpeedPID(params) sees both; these keys
+# win on a collision. Only the keys below are accepted (scripts/testing/lab2/submission.py
+# --part1 checks names, types and ranges; the handout's selfcheck.py has a copy of that table,
+# and the two must match).
+kp: 12.0                               # [counts per m/s], >= 0
+ki: 10.0                               # [counts per m], >= 0
+kd: 0.0                                # [counts per m/s^2], >= 0
+integral_limit: 5.0                    # |integral| clamp [counts], > 0
+error_limit: 5.0                       # |error| that P and I see while driving [m/s], (0, 20]
+integral_band: 20.0                    # integrate only when |error| <= this [m/s], (0, 20]; 20 = off on this course
+enable_conditional_integration: true   # freeze the integral while the output saturates
+derivative_filter_alpha: 0.15          # the derivative's EMA, (0, 1]; 1 = no filtering
+max_pwm_offset: 100                    # throttle authority above neutral [counts], 1 .. max_pwm - init_pwm (100)
+max_brake_offset: 10                   # brake authority below neutral [counts], 0 .. init_pwm - min_pwm (10)
+kp_brake: 6.0                          # brake request [counts per m/s too fast], 0 .. 1000
+brake_enter: 0.15                      # enter the braking mode when the car is this much too fast [m/s], (0, 5]
+brake_exit: 0.05                       # leave it when the excess falls below this [m/s], 0 .. < brake_enter
+brake_deadband: 5                      # counts below neutral the ESC ignores (its dead band), 0 .. 10
+# The feed-forward PWM = init_pwm + ff_deadband + v / ff_gain (v > 0). Given: you may change
+# them, and if you do, say why in the report. Calibrated on a fresh pack (12.4 V); the car runs
+# at 11.1 V nominal, so the feed-forward under-drives and the integral must make up the rest
+# (about 10 counts at 11 m/s on the nominal car, 13 on low_batt).
+ff_deadband: 5.27                      # d [counts], 0 .. 50
+ff_gain: 0.1433                        # g [m/s per count], > 0

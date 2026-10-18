@@ -62,3 +62,66 @@ coss-park:
         "just coss logging-sim" \
         "sleep 40 && ros2 bag play data/rosbags/outdoor_20251226_153115/ --clock -l -r 1.0" \
         "sleep 45 && ./scripts/rosbag/record_localization.sh"
+
+# The web UI address. Override for a shared host: RC_SIM_WEB_ADDR=127.0.0.1:8092 just sim rc
+web_addr := env_var_or_default('RC_SIM_WEB_ADDR', '0.0.0.0:8081')
+
+#   just sim make-track                                  2,6,11 m/s, 3 s holds, a 2.5, d 1.5
+#   just sim make-track --speeds 2,6,11 --hold 3 --accel 2.5 --decel 1.5 --out tmp/rc_sim/tracks/mine
+# Prints the segment table; refuses a profile the model cannot drive.
+# Size and write a straight track (lanelet2 map, point cloud, track.yaml) from a speed profile
+[positional-arguments]
+make-track *ARGS:
+    #!/usr/bin/env bash
+    source scripts/env.sh
+    exec ros2 run autosdv_rc_sim rc_sim_make_track "$@"
+
+#   just sim grade ~/lab2/B12345678_lab_2_1           every model variant; marks out of 15
+#   just sim grade DIR --variant nominal --jobs 4
+#   just sim grade DIR --view                         ... then watch the graded run in RViz
+# DIR holds speed_controller_params.yaml (the tunable keys only): docs/guides/rc-sim.md.
+# Grade a Lab 2 Part 1 submission in the deterministic simulator (headless, no GPU)
+[positional-arguments]
+grade *ARGS:
+    #!/usr/bin/env bash
+    source scripts/env.sh
+    exec ros2 run autosdv_rc_sim rc_sim_grade "$@"
+
+#   just sim rc                                       the default straight, production coefficients
+#   just sim rc submission:=~/lab2/B12345678_lab_2_1  a student's speed_controller_params.yaml
+#   just sim rc track:=tmp/rc_sim/tracks/mine variant:=low_mu rviz:=false
+# In RViz: 2D Goal Pose at the stop line, then Engage (or run scripts/testing/rc_sim/smoke.py).
+# Not graded (the processes race within a tick); `just sim grade` is the grade.
+# Interactive RC simulator: Autoware planning-simulator mode + the real vehicle interface + the plant
+[positional-arguments]
+rc *ARGS:
+    #!/usr/bin/env bash
+    source scripts/env.sh
+    args=()
+    for a in "$@"; do
+        v="${a#*:=}"   # no shell expands a ~ after name:=, so do it here: ~, ~/x, ~user/x
+        case "$v" in
+            "~" | "~/"*) v="$HOME${v#\~}" ;;
+            "~"*) u="${v%%/*}"; u="${u#\~}"; h=$(getent passwd "$u" | cut -d: -f6)
+                  [ -z "$h" ] || v="$h${v#\~"$u"}" ;;
+        esac
+        case "$a" in
+            submission:=*)
+                p=$(ros2 run autosdv_rc_sim rc_sim_grade "$v" --print-params) || exit 2
+                args+=("speed_controller_params:=$p") ;;
+            track:=*|map:=*) args+=("track_dir:=$(realpath "$v")") ;;
+            *) args+=("$a") ;;
+        esac
+    done
+    [ -n "${DISPLAY:-}" ] || args+=(rviz:=false)
+    cmd=(play_launch launch --web-addr '{{ web_addr }}' autosdv_rc_sim rc_sim.launch.xml "${args[@]}")
+    printf '\033[2m%s\033[0m\n' "${cmd[*]}"
+    exec "${cmd[@]}"
+
+# CSV columns t,v from a coast-down at neutral on the flat (e.g. exported from a bag's velocity_status)
+# Refit the RC simulator's rolling resistance and drag from a coast-down
+[positional-arguments]
+fit-coastdown CSV *ARGS:
+    #!/usr/bin/env bash
+    source scripts/env.sh
+    exec ros2 run autosdv_rc_sim rc_sim_fit coastdown "$@"

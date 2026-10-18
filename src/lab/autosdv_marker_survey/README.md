@@ -6,6 +6,13 @@ them as the origin, drive or push the car past all of them, stop: the course
 (`course.yaml`, the lanelet2 marker map, the localizer's marker settings) is
 written for you.
 
+That is **stage 1**: it fixes where the boards stand relative to one another,
+in the origin board's frame. For a taped route (Lab 2's `lab2_uturn`),
+**stage 2**, `just lab2 survey-align`, puts the result into the route's
+start-box frame from one straight drive along the taped first leg
+(`autosdv_marker_survey/align.py`; the field procedure is in
+`docs/guides/lab2-waypoint-stack.md`, "On the field").
+
 ```bash
 just lab2 survey courses/my_hall 24          # origin: marker 24 (one of the lab boards)
 #   ...drive slowly past every marker; the log names each new one...

@@ -28,6 +28,7 @@ setup(
             'lab2_marker_survey_solve = autosdv_marker_survey.finish:resolve_main',
             'lab2_marker_survey_synthetic_bag = autosdv_marker_survey.synthetic_bag:main',
             'lab2_marker_survey_compare = autosdv_marker_survey.synthetic_bag:compare_main',
+            'lab2_survey_align_solve = autosdv_marker_survey.align:solve_main',
         ],
     },
 )

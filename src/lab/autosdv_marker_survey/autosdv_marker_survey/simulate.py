@@ -87,3 +87,19 @@ def simulate(markers: Dict[int, np.ndarray], base_poses: List[np.ndarray], marke
             dets.append(Detection(mid, uv + rng.normal(0, pixel_sd, uv.shape)))
         sv.add(k * 0.1, T_odo @ T_BASE_CAM, dets)
     return sv
+
+
+def stage1_map(truth: Dict[int, Tuple[float, ...]], origin_id: int):
+    """What stage 1 (`just lab2 survey ORIGIN`) makes of boards whose TRUE poses are
+    `truth` = {id: (x, y, z, yaw, pitch, roll)} in a level world frame, noise aside:
+    the floor normal from the car's poses (the world's z), the origin below the
+    origin board's centre, x the horizontal part of the way it faces. Returns
+    (course.yaml marker entries, T_world_stage1)."""
+    from autosdv_marker_survey.survey import course_frame, to_course
+    Ts = {mid: marker_T(*p) for mid, p in truth.items()}
+    frame = course_frame(Ts[origin_id], np.zeros(3), np.array([0.0, 0.0, 1.0]))
+    surveyed = to_course(Ts, {}, frame)
+    markers = [{'id': m.id, 'x': round(m.x, 4), 'y': round(m.y, 4), 'z': round(m.z, 4),
+                'yaw': round(m.yaw, 5), 'pitch': round(m.pitch, 5), 'roll': round(m.roll, 5)}
+               for m in surveyed]
+    return markers, frame.T_world_course

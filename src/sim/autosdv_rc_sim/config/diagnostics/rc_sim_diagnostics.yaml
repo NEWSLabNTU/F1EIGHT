@@ -1,0 +1,94 @@
+# COPY of autoware_launch config/system/diagnostics/autoware-main.yaml (Autoware 1.5.0)
+# for the rc_sim interactive stack, with timeout: 3.0 on the three diagnostics that
+# the /adapi nodes publish once per second: /autoware/localization/state,
+# /autoware/planning/routing/state and /adapi/mrm_request/delegate.
+#
+# Why: those units default to a 1.0 s timeout and their publisher period is 1.0 s. On
+# the plant's simulated clock the publish and the aggregator's 10 Hz tick land on the
+# same simulated instant, the tick wins the wall-clock race every second, the unit
+# reads STALE for one tick, autonomous mode drops out, mrm_handler raises
+# EMERGENCY_STOP. Upstream's autoware-carla.yaml also sets 3.0 on
+# localization/state and the MRM delegate (not routing/state), for network latency, not for
+# tick alignment. Whether the wall-clock `just sim planning` flaps was not measured.
+# Re-diff against upstream after an Autoware upgrade (test_diagnostics_graph.py fails until you do).
+files:
+  - { path: $(find-pkg-share autoware_launch)/config/system/diagnostics/control.yaml }
+  - { path: $(find-pkg-share autoware_launch)/config/system/diagnostics/map.yaml }
+  - { path: $(find-pkg-share autoware_launch)/config/system/diagnostics/perception.yaml }
+  - { path: $(find-pkg-share autoware_launch)/config/system/diagnostics/system.yaml }
+  - { path: $(find-pkg-share autoware_launch)/config/system/diagnostics/vehicle.yaml }
+  - { path: $(dirname)/localization.yaml }
+  - { path: $(dirname)/planning.yaml }
+
+units:
+  - path: /autoware/modes/local
+    type: and
+    list:
+      - { type: link, link: /autoware/vehicle }
+      - { type: link, link: /autoware/system }
+      - { type: link, link: /autoware/control/local }
+      - { type: link, link: /adapi/mrm_request/delegate }
+
+  - path: /autoware/modes/remote
+    type: and
+    list:
+      - { type: link, link: /autoware/vehicle }
+      - { type: link, link: /autoware/system }
+      - { type: link, link: /autoware/control/remote }
+      - { type: link, link: /adapi/mrm_request/delegate }
+
+  - path: /autoware/modes/stop
+    type: and
+    list:
+      - { type: link, link: /adapi/mrm_request/delegate }
+
+  - path: /autoware/modes/autonomous
+    type: and
+    list:
+      - { type: link, link: /autoware/map }
+      - { type: link, link: /autoware/localization }
+      - { type: link, link: /autoware/planning }
+      - { type: link, link: /autoware/perception }
+      - { type: link, link: /autoware/control }
+      - { type: link, link: /autoware/vehicle }
+      - { type: link, link: /autoware/system }
+      - { type: link, link: /adapi/mrm_request/delegate }
+
+  - path: /autoware/modes/pull_over
+    type: and
+    list:
+      - { type: link, link: /autoware/map }
+      - { type: link, link: /autoware/localization }
+      - { type: link, link: /autoware/planning }
+      - { type: link, link: /autoware/perception }
+      - { type: link, link: /autoware/control }
+      - { type: link, link: /autoware/vehicle }
+      - { type: link, link: /autoware/system }
+
+  - path: /autoware/modes/comfortable_stop
+    type: and
+    list:
+      - { type: link, link: /autoware/map }
+      - { type: link, link: /autoware/localization }
+      - { type: link, link: /autoware/planning }
+      - { type: link, link: /autoware/perception }
+      - { type: link, link: /autoware/control }
+      - { type: link, link: /autoware/vehicle }
+      - { type: link, link: /autoware/system }
+
+  - path: /autoware/modes/emergency_stop
+    type: and
+    list:
+      - { type: link, link: /autoware/vehicle }
+      - { type: link, link: /autoware/system }
+
+  - path: /autoware/debug/tools
+    type: and
+    list:
+      - { type: link, link: /autoware/system/service_log_checker }
+
+  - path: /adapi/mrm_request/delegate
+    type: diag
+    node: /adapi/node/mrm_request
+    name: delegate
+    timeout: 3.0

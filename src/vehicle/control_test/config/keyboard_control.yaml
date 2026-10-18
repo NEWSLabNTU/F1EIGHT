@@ -1,11 +1,11 @@
 /**:
   ros__parameters:
     # Step sizes for control
-    speed_step_ms: 0.5       # Speed increment per keypress in m/s
+    speed_step_ms: 0.1       # Speed increment per keypress in m/s
     steering_step_deg: 1.0   # Steering increment per keypress in degrees
 
     # Maximum values
-    max_speed_ms: 10.0       # Maximum speed in m/s
+    max_speed_ms: 1.0        # Maximum speed in m/s (the small car; Lab 2 drives at 0.8)
     max_steer_deg: 22.5      # Maximum steering angle in degrees (0.3925 rad)
 
     # Publishing rate

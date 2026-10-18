@@ -100,3 +100,9 @@ units:
     type: diag
     node: /adapi/node/mrm_request
     name: delegate
+    # The default staleness timeout is 1 s, and this heartbeat comes from an
+    # AD API node that a loaded host can starve for longer: one late message
+    # turned /autoware/modes/autonomous ERROR for a tick, and the MRM handler
+    # answered with a COMFORTABLE_STOP that failed the bench gate (load ~55).
+    # Five seconds still catches a dead AD API node.
+    timeout: 5.0

@@ -9,7 +9,15 @@ Records bag_meta.RECORD_TOPICS plus two topics this tool makes itself:
     /lab2/record_meta               a latched JSON String: course name and
                                     hashes, car, team, git commit
 
-and writes the same JSON beside the bag as lab2_meta.json. The course is the
+and writes the same JSON beside the bag as lab2_meta.json.
+
+With --bench (the vehicle bench) the metadata says `"bench": true`, and the
+camera topic is filled from the bench's mock camera (`just lab2 bench
+camera:=mock`, boards rendered from the true pose) when it publishes, else
+with a SYNTHETIC frame: a grey 960 x 600 card reading "BENCH - simulated car
+- not a camera". lab2_check_bags rejects such a
+bag unless it is run with --bench (the TA integration test), so a bench run
+cannot be submitted as a run on the car. The course is the
 one the RUNNING stack drives (the path publisher's `course_dir` parameter), not
 one named on the command line, so a bag cannot describe a course it was not
 recorded on. Ctrl-C stops the recording.
@@ -22,6 +30,7 @@ building a Python message from each 656 kB frame at 15 Hz): 43.5 % of one core.
 """
 
 import argparse
+import array
 import json
 import os
 import signal
@@ -65,7 +74,22 @@ def resize_jpeg(data: bytes, size=bm.CAMERA_SIZE, quality: int = 80) -> Optional
     return enc.tobytes() if ok else None
 
 
-def make_node(meta_json: str, source: str, rate: float):
+def bench_frame(text: str, size=bm.CAMERA_SIZE, quality: int = 70) -> Optional[bytes]:
+    """The bench's synthetic camera frame: a labelled grey card, JPEG."""
+    import cv2
+    import numpy as np
+    w, h = size
+    img = np.full((h, w, 3), 90, np.uint8)
+    cv2.rectangle(img, (20, 20), (w - 20, h - 20), (0, 0, 200), 6)
+    cv2.putText(img, 'BENCH - simulated car - not a camera', (60, h // 2 - 30),
+                cv2.FONT_HERSHEY_SIMPLEX, 1.2, (255, 255, 255), 2, cv2.LINE_AA)
+    cv2.putText(img, text, (60, h // 2 + 40), cv2.FONT_HERSHEY_SIMPLEX, 1.0,
+                (220, 220, 220), 2, cv2.LINE_AA)
+    ok, enc = cv2.imencode('.jpg', img, [cv2.IMWRITE_JPEG_QUALITY, quality])
+    return enc.tobytes() if ok else None
+
+
+def make_node(meta_json: str, source: str, rate: float, bench: bool = False):
     import rclpy
     from rclpy.node import Node
     from rclpy.qos import DurabilityPolicy, QoSProfile, ReliabilityPolicy, qos_profile_sensor_data
@@ -86,16 +110,37 @@ def make_node(meta_json: str, source: str, rate: float):
             self.n_in = self.n_out = 0
             # raw=True: the callback gets the serialised bytes, so a thinned-away frame
             # costs no Python message construction
+            self.last_source = None
             self.create_subscription(CompressedImage, source, self.on_image,
                                      qos_profile_sensor_data, raw=True)
+            if bench:
+                # the bench without the mock camera has no image at all: a labelled
+                # synthetic frame at the same rate and size, while no real frame comes
+                self.create_timer(self.period, self.on_bench_frame)
             self.create_timer(1.0, self.on_timer)
             self.on_timer()
 
         def on_timer(self):
             self.pub_meta.publish(String(data=self.meta))
 
+        def on_bench_frame(self):
+            if self.last_source is not None and time.monotonic() - self.last_source < 1.0:
+                return
+            data = bench_frame(time.strftime('%H:%M:%S') + f'  frame {self.n_out}')
+            if data is None:
+                return
+            out = CompressedImage()
+            out.header.stamp = self.get_clock().now().to_msg()
+            out.header.frame_id = 'bench_synthetic_camera'
+            out.format = 'jpeg'
+            out.data = array.array('B', data)   # a buffer copy; bytes is checked per element
+            self.pub_img.publish(out)
+            self.n_in += 1
+            self.n_out += 1
+
         def on_image(self, raw):
             self.n_in += 1
+            self.last_source = time.monotonic()
             keep, slot = keep_slot(time.monotonic(), self.period, self.last_slot)
             if not keep:
                 return
@@ -107,7 +152,7 @@ def make_node(meta_json: str, source: str, rate: float):
             out = CompressedImage()
             out.header = msg.header
             out.format = 'jpeg'
-            out.data = data
+            out.data = array.array('B', data)   # a buffer copy; bytes is checked per element
             self.pub_img.publish(out)
             self.n_out += 1
 
@@ -149,7 +194,9 @@ def main(argv=None):
     ap.add_argument('--out-dir', default='rosbags')
     ap.add_argument('--course-dir', default=None,
                     help='only if the stack is not running (tests); default: asked of the path publisher')
-    ap.add_argument('--bench', action='store_true', help='also record the bench plant\'s true pose')
+    ap.add_argument('--bench', action='store_true',
+                    help='vehicle bench: also record the plant\'s true pose, publish a synthetic '
+                         'camera frame, and mark the bag as a bench bag')
     ap.add_argument('--camera-source', default=bm.CAMERA_SOURCE)
     args = ap.parse_args(argv)
 
@@ -175,13 +222,15 @@ def main(argv=None):
     meta = bm.build_meta(course, args.car, args.team, commit, time.time())
     meta['git_dirty'] = dirty
     meta['course_dir'] = os.path.abspath(course)
+    if args.bench:
+        meta['bench'] = True
     meta_json = json.dumps(meta, sort_keys=True)
     print(f'course {meta["course_name"]} ({meta["route_kind"]})  route_hash {meta["route_hash"][:12]}  '
           f'car {args.car}  team {args.team}  commit {commit[:10]}{"+dirty" if dirty else ""}')
 
     out = os.path.join(args.out_dir, 'lab2_' + (args.name or time.strftime('%Y%m%d_%H%M%S')))
     os.makedirs(args.out_dir, exist_ok=True)
-    node = make_node(meta_json, args.camera_source, bm.CAMERA_RATE)
+    node = make_node(meta_json, args.camera_source, bm.CAMERA_RATE, bench=args.bench)
     topics = list(bm.RECORD_TOPICS) + [bm.CAMERA_TOPIC, bm.META_TOPIC]
     if args.bench:
         topics.append(bm.TRUE_POSE)

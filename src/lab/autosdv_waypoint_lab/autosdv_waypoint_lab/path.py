@@ -78,6 +78,8 @@ class Path:
 
     def project(self, x: float, y: float) -> Projection:
         """Closest point on the polyline (not just the closest waypoint)."""
+        if not (math.isfinite(x) and math.isfinite(y)):
+            raise ValueError(f'cannot project a non-finite point ({x}, {y}) onto the path')
         best = None
         best_d = math.inf
         for i in range(len(self.x) - 1):
@@ -162,6 +164,30 @@ def curvatures(x: Sequence[float], y: Sequence[float]) -> List[float]:
     if n > 2:
         k[0], k[-1] = k[1], k[-2]
     return k
+
+
+def turn_spans(x: Sequence[float], y: Sequence[float], min_angle: float = 1e-3,
+               merge: float = 0.5) -> List[Tuple[float, float]]:
+    """Arc-length intervals [s0, s1] of an open polyline where it turns.
+
+    A vertex turns when the heading changes there by more than `min_angle`.
+    A run of turning vertices is one interval, from the first to the last of
+    them, so a straight-arc-straight polyline gives exactly the arc: its two
+    tangent points turn (by half a chord's angle) and every vertex between
+    them turns. Runs less than `merge` metres apart are joined.
+    """
+    s = arc_lengths(x, y)
+    spans: List[Tuple[float, float]] = []
+    for i in range(1, len(x) - 1):
+        a = math.atan2(y[i] - y[i - 1], x[i] - x[i - 1])
+        b = math.atan2(y[i + 1] - y[i], x[i + 1] - x[i])
+        if abs(wrap_angle(b - a)) <= min_angle:
+            continue
+        if spans and s[i] - spans[-1][1] <= merge:
+            spans[-1] = (spans[-1][0], s[i])
+        else:
+            spans.append((s[i], s[i]))
+    return spans
 
 
 def resample(x: Sequence[float], y: Sequence[float], v: Sequence[float],
@@ -309,6 +335,12 @@ class CoursePath:
 
         Each point's speed is the waypoint speed, capped so the car can stop by
         the end of the run at `decel`: v <= sqrt(2 * decel * remaining).
+
+        Once the run is finished every speed is 0. Progress is latched at the
+        end, but the localized pose is not: after the stop the EKF can settle
+        a few centimetres short of the end (a marker fix pulling back an
+        overshoot), where the ramp still reads ~0.2 m/s, and the car would
+        creep forward to the end again.
         """
         p = self.progress if self.progress is not None else 0.0
         s0 = max(p - behind, 0.0 if not self.closed else -math.inf)
@@ -322,13 +354,14 @@ class CoursePath:
         if not self.closed:
             i1 = min(i1, self.n - 1)
             i0 = min(i0, i1 - 1)
+        done = self.finished
         xs, ys, vs = [], [], []
         for i in range(i0, i1 + 1):
             a = i % self.n if self.closed else i
             remaining = max(0.0, self.run_length - i * self.spacing)
             v_stop = math.sqrt(2.0 * self.decel * remaining) if self.decel > 0 else math.inf
             v = min(self.v[a], v_stop)
-            if remaining < 0.05:
+            if remaining < 0.05 or done:
                 v = 0.0
             xs.append(self.x[a])
             ys.append(self.y[a])

@@ -15,6 +15,16 @@ It always publishes at `rate`, so the gate and the diagnostic graph see it
 alive: with no fresh trajectory or pose, or with the law disabled, the
 command is speed 0 with the last steering angle.
 
+`lockstep` (default false; Lab 2 Part 1 on the simulated car sets it): take part in
+the rc_sim plant's clock handshake (autosdv_vehicle_interface.hal). Each cycle is
+acknowledged on /rc_sim/lockstep/ack after its command is published, so the plant
+never lets a cycle be skipped on a loaded host, and the actuator can wait for the
+command of its instant. While the plant's lockstep is active a cycle also waits for
+the odometry of the latest odometry instant at or before the cycle's CLOCK time
+(learned from the stamps), which the plant publishes just after that /clock. Not the
+deadline: a 30 Hz deadline falls 39 ns before every third 100 ms mark, the plant's
+/clock lands on the mark, and the odometry stamped at the mark was then a race.
+
 `path_tracker: tracker_state` on /diagnostics stands in for
 trajectory_follower's control_state in the lab graph (control-waypoint.yaml):
 ERROR once the law is disabled, OK otherwise (a fault's message included).
@@ -59,6 +69,7 @@ class PathTrackerNode(Node):
             'trajectory_timeout': 0.5,
             'odom_timeout': 0.3,
             'max_faults': 3,
+            'lockstep': False,
             # vehicle_info.param.yaml, loaded by the launch file
             'wheel_base': 0.319,
             'max_steer_angle': 0.349,
@@ -99,7 +110,19 @@ class PathTrackerNode(Node):
                               durability=DurabilityPolicy.TRANSIENT_LOCAL)
         self.create_subscription(
             OperationModeState, gp('operation_mode_topic'), self.on_mode, mode_qos)
-        self.create_timer(1.0 / float(gp('rate')), self.on_timer)
+        self.timer = self.create_timer(1.0 / float(gp('rate')), self.on_timer)
+
+        # Lab 2 Part 1 only (see the module docstring); the hal import stays off the car's path
+        self.lockstep = None
+        self.held_ns = None          # the held cycle's deadline (for its ack)
+        self.held_at_ns = None       # and its clock time (what its odometry must reach)
+        self.odom_stamp_ns = None
+        self.odom_period_ns = None
+        if bool(gp('lockstep')):
+            from autosdv_vehicle_interface import hal
+            self._hal = hal
+            self.lockstep = hal.make_lockstep_participant(
+                hal.HARDWARE_SIM, self, hal.PATH_TRACKER, on_status=self.on_lockstep_status)
 
     def now_sec(self):
         return self.get_clock().now().nanoseconds * 1e-9
@@ -112,6 +135,29 @@ class PathTrackerNode(Node):
     def on_odom(self, msg):
         self.odom = msg
         self.odom_rx = self.now_sec()
+        if self.lockstep is not None:
+            stamp = msg.header.stamp.sec * 1_000_000_000 + msg.header.stamp.nanosec
+            if self.odom_stamp_ns is not None and stamp > self.odom_stamp_ns:
+                self.odom_period_ns = stamp - self.odom_stamp_ns
+            self.odom_stamp_ns = stamp
+            if self.held_ns is not None and not self.odom_awaiting(self.held_at_ns):
+                held, self.held_ns = self.held_ns, None
+                self.lockstep_cycle(held)
+
+    def odom_awaiting(self, clock_ns: int) -> bool:
+        """True while the odometry of the latest instant at or before ``clock_ns`` is missing."""
+        if self.odom_stamp_ns is None or self.odom_period_ns is None:
+            return False
+        return self.odom_stamp_ns + self.odom_period_ns <= clock_ns
+
+    def on_lockstep_status(self, active: bool) -> None:
+        if not active and self.held_ns is not None:
+            held, self.held_ns = self.held_ns, None
+            self.lockstep_cycle(held)
+
+    def lockstep_cycle(self, deadline_ns: int) -> None:
+        self.cycle()
+        self.lockstep.ack(deadline_ns, self.timer.timer_period_ns)
 
     def on_mode(self, msg):
         autonomous = msg.mode == OperationModeState.AUTONOMOUS
@@ -130,6 +176,20 @@ class PathTrackerNode(Node):
         return self.path
 
     def on_timer(self):
+        if self.lockstep is None:
+            self.cycle()
+            return
+        now_ns = self.get_clock().now().nanoseconds
+        deadline = self._hal.timer_deadline_ns(self.timer, now_ns)
+        if self.held_ns is not None:        # superseded (a lockstep timeout): run it late
+            held, self.held_ns = self.held_ns, None
+            self.lockstep_cycle(held)
+        if self.lockstep.active and self.odom_awaiting(now_ns):
+            self.held_ns, self.held_at_ns = deadline, now_ns
+            return
+        self.lockstep_cycle(deadline)
+
+    def cycle(self):
         now = self.now_sec()
         dt = 0.0 if self.t_prev is None else now - self.t_prev
         self.t_prev = now
@@ -205,7 +265,6 @@ class PathTrackerNode(Node):
         dbg.steering = float(steer)
         dbg.speed_command = float(speed)
         self.pub_dbg.publish(dbg)
-
 
     def on_diag(self):
         arr = DiagnosticArray()

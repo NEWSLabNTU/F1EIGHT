@@ -13,7 +13,22 @@
 
   Replaced: the ZED (launch_camera:=false), the AR-tag localizer
   (use_ar_tag_localizer:=false), velocity_report and the PCA9685
-  (is_simulation:=true). The EKF, the student tracker and SpeedPID, the gate
+  (is_simulation:=true).
+
+  camera:=mock keeps the REAL AR-tag localizer instead: mock_aruco_camera
+  renders the course's boards from the plant's true pose onto the ZED's image
+  topics (camera_info, the optical frame from the kit's URDF), and the stock
+  ar_tag_based_localizer reads them, as on the car:
+
+    vehicle_bench_plant/odometry (the TRUE pose) + course.yaml boards
+      -> mock_aruco_camera -> /sensing/camera/zedxm/rgb/color/rect/image (+ camera_info)
+      -> ar_tag_based_localizer -> /localization/pose_estimator/pose_with_covariance
+
+  Slower and costlier than the model (a 960x600 frame at 15 Hz, rendered and
+  detected), so the default stays camera:=virtual; the TA integration test
+  (`just lab2 integration-test`) runs camera:=mock.
+
+  The EKF, the student tracker and SpeedPID, the gate
   and the actuator's safety shell are the car's.
 -->
 <launch>
@@ -26,7 +41,7 @@
 
   <arg name="tracker_class" default="autosdv_waypoint_lab.reference.path_tracker:PathTracker"/>
   <arg name="tracker_param_file" default="$(find-pkg-share autosdv_waypoint_lab)/config/path_tracker.param.yaml"/>
-  <arg name="speed_controller_class" default="autosdv_waypoint_lab.stub.speed_pid:SpeedPID"/>
+  <arg name="speed_controller_class" default="autosdv_waypoint_lab.stub.speed_pid_part1:SpeedPID"/>
   <arg name="speed_controller_params" default=""/>
   <arg name="speed_controller_dt_source" default="loop"/>
   <arg name="actuator_param_overrides"
@@ -44,6 +59,12 @@
   <arg name="gyro_bias_error_z" default="0.0"
        description="[rad/s] gyro bias left after imu_corrector, for a drift test"/>
 
+  <!-- the camera: virtual (marker_sim's model of camera + localizer) or mock
+       (rendered boards into the real localizer) -->
+  <arg name="camera" default="virtual" description="virtual | mock"/>
+  <let name="mock_camera" value="$(eval &quot;'true' if '$(var camera)' == 'mock' else 'false'&quot;)"/>
+  <arg name="camera_rate" default="15.0" description="mock camera frame rate [Hz]"/>
+
   <!-- the camera model -->
   <arg name="marker_noise_file"
        default="$(find-pkg-share autosdv_waypoint_lab)/config/virtual_marker_localizer.param.yaml"/>
@@ -55,7 +76,7 @@
     <arg name="laps" value="$(var laps)"/>
     <arg name="is_simulation" value="true"/>
     <arg name="launch_camera" value="false"/>
-    <arg name="use_ar_tag_localizer" value="false"/>
+    <arg name="use_ar_tag_localizer" value="$(var mock_camera)"/>
     <arg name="launch_velocity_report" value="false"/>
     <arg name="tracker_class" value="$(var tracker_class)"/>
     <arg name="tracker_param_file" value="$(var tracker_param_file)"/>
@@ -80,8 +101,14 @@
     <param name="start_pose_file" value="$(var course_dir)/course.yaml"/>
   </node>
 
+  <node pkg="autosdv_waypoint_lab" exec="mock_aruco_camera" name="mock_aruco_camera" output="screen"
+        if="$(var mock_camera)">
+    <param name="course_dir" value="$(var course_dir)"/>
+    <param name="rate" value="$(var camera_rate)"/>
+  </node>
+
   <node pkg="autosdv_waypoint_lab" exec="virtual_marker_localizer" name="virtual_marker_localizer"
-        namespace="localization/pose_estimator" output="screen">
+        namespace="localization/pose_estimator" output="screen" unless="$(var mock_camera)">
     <param from="$(find-pkg-share autosdv_waypoint_lab)/config/ar_tag_based_localizer.param.yaml"/>
     <param from="$(var course_dir)/ar_tag.param.yaml" allow_substs="true"/>
     <param from="$(var marker_noise_file)"/>
