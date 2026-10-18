@@ -103,10 +103,11 @@ vehicle *ARGS:
     exec "${cmd[@]}"
 
 #   just lab2 gate                     the config's submission
-#   just lab2 gate submission:=DIR     DIR = your <student_id>_lab_2_1 (or lab2_waypoint) directory:
-#       its speed_pid.py, config/speed_pid.yaml and config/calibration.yaml are loaded for you
-#       (same for `bench` and `vehicle`; scripts/testing/lab2/submission.py shows what is passed)
-#   just lab2 gate speed_controller_class:=lab2_waypoint.speed_pid:SpeedPID "speed_controller_params:={kp: 15.0}"
+#   just lab2 gate submission:=DIR     DIR = your <student_id>_lab_2_1 (or lab2_speed) directory:
+#       its lab2_speed/speed_pid.py, config/speed_pid_car.yaml and config/calibration.yaml are
+#       loaded for you (same for `bench` and `vehicle`; scripts/testing/lab2/submission.py shows
+#       what is passed)
+#   just lab2 gate speed_controller_class:=lab2_speed.speed_pid:SpeedPID "speed_controller_params:={kp: 20.0}"
 #   just lab2 gate --only hall_demo ...        another course instead of lab2_uturn
 # Gate before car time: your SpeedPID on the graded route (lab2_uturn), full stack; PASS/FAIL
 [positional-arguments]

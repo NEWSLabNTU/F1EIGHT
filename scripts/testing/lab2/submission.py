@@ -5,22 +5,26 @@
     python3 scripts/testing/lab2/submission.py DIR --pythonpath
     python3 scripts/testing/lab2/submission.py DIR --launch-args   # one per line
 
-DIR is the `<student_id>_lab_2_1/` directory (holding `lab2_waypoint/`), or the
-`lab2_waypoint/` package itself (the one with `package.xml`). It must hold
+DIR is the `<student_id>_lab_2_1/` directory (holding `lab2_speed/`), or the
+`lab2_speed/` package itself (the one with `package.xml`): the same package and
+the same SpeedPID as Part 1, driving the real car. It must hold
 
-    lab2_waypoint/speed_pid.py          the SpeedPID (and any helper module beside it)
-    config/speed_pid.yaml               the gains
+    lab2_speed/speed_pid.py             the SpeedPID (and any helper module beside it)
+    config/speed_pid_car.yaml           the real car's parameters
     config/calibration.yaml             deadband and gain from the car's speed-step CSV
 
 and the result is
 
-    PYTHONPATH                  the package directory, so `lab2_waypoint.speed_pid` imports
-    speed_controller_class      lab2_waypoint.speed_pid:SpeedPID
-    speed_controller_params     speed_pid.yaml, with ff_deadband / ff_gain from the
-                                calibration unless speed_pid.yaml sets them itself
+    PYTHONPATH                  the package directory, so `lab2_speed.speed_pid` imports
+    speed_controller_class      lab2_speed.speed_pid:SpeedPID
+    speed_controller_params     speed_pid_car.yaml, checked as Part 1's speed_pid.yaml is,
+                                with ff_deadband / ff_gain from the calibration unless
+                                speed_pid_car.yaml sets them itself (an uncalibrated
+                                gain, 0, gives 0 for both: no feed-forward)
 
-The merge is the handout's `params.speed_pid_params()`, re-implemented here on
-purpose: the gate must not import code out of the student's copy of the bench.
+The merge is the handout's `bench/params.py speed_pid_params()`, re-implemented
+here on purpose: the gate must not import code out of the student's copy of the
+bench. The retired `lab2_waypoint/` layout is refused with the new name.
 
 `just lab2 gate|bench|vehicle submission:=DIR` calls this; see
 scripts/testing/lab2/submission.sh.
@@ -59,7 +63,6 @@ from pathlib import Path
 
 import yaml
 
-CLASS = 'lab2_waypoint.speed_pid:SpeedPID'
 CARS = ('A', 'B', 'C')
 REPO = Path(__file__).resolve().parents[3]
 TRACKER_DEFAULT = REPO / 'src/lab/autosdv_waypoint_lab/config/path_tracker.param.yaml'
@@ -75,6 +78,9 @@ class SubmissionError(ValueError):
 
 PART1_PACKAGE = 'lab2_speed'
 PART1_CLASS = 'lab2_speed.speed_pid:SpeedPID'
+CLASS = PART1_CLASS            # Part 2 drives the same class, with the car file
+CAR_YAML = 'speed_pid_car.yaml'
+FF_KEYS = ('ff_deadband', 'ff_gain')
 ACTUATOR_YAML = REPO / 'src/vehicle/autosdv_vehicle_launch/autosdv_vehicle_interface/params/actuator.yaml'
 _PWM_FALLBACK = {'init_pwm': 370, 'min_pwm': 360, 'max_pwm': 470}
 
@@ -166,7 +172,7 @@ def check_part1_yaml(path: Path, pwm: dict = None):
     out, warnings = {}, []
     for key, (kind, lo, hi, lo_incl) in keys.items():
         if key not in data:
-            warnings.append(f'speed_pid.yaml: {key} is not set; the class falls back to its '
+            warnings.append(f'{path.name}: {key} is not set; the class falls back to its '
                             "default (or the actuator's value of the same name)")
             continue
         v = data[key]
@@ -204,13 +210,19 @@ def resolve_part1(path):
 
 
 def package_dir(path) -> Path:
-    root = Path(path).expanduser().resolve()
-    for cand in (root, root / 'lab2_waypoint'):
-        if (cand / 'lab2_waypoint' / 'speed_pid.py').is_file():
-            return cand
-    raise SubmissionError(
-        f'{root}: no lab2_waypoint/lab2_waypoint/speed_pid.py inside; give the '
-        '<student_id>_lab_2_1 directory or the lab2_waypoint package directory')
+    """The lab2_speed package of a Part 2 submission (the Part 1 package, plus the car file)."""
+    try:
+        return part1_package_dir(path)
+    except SubmissionError:
+        root = Path(path).expanduser().resolve()
+        old = any((c / 'lab2_waypoint' / 'speed_pid.py').is_file()
+                  for c in (root, root / 'lab2_waypoint'))
+        raise SubmissionError(
+            f'{root}: no {PART1_PACKAGE}/{PART1_PACKAGE}/speed_pid.py inside'
+            + ('; lab2_waypoint/ is retired: Part 2 drives the Part 1 package' if old else '')
+            + f'; give the <student_id>_lab_2_1 directory or the {PART1_PACKAGE} package '
+            f'directory, holding {PART1_PACKAGE}/speed_pid.py, config/{CAR_YAML} and '
+            'config/calibration.yaml') from None
 
 
 def _load(path: Path) -> dict:
@@ -223,9 +235,11 @@ def _load(path: Path) -> dict:
 
 
 def params(pkg: Path):
-    """(merged speed_controller_params mapping, [warnings])."""
-    warnings = []
-    data = dict(_load(pkg / 'config' / 'speed_pid.yaml'))
+    """(merged speed_controller_params mapping, [warnings]): the checked car file, then the
+    calibration's feed-forward under it."""
+    data, warnings = check_part1_yaml(pkg / 'config' / CAR_YAML)
+    # the car file leaves the feed-forward to calibration.yaml on purpose
+    warnings = [w for w in warnings if not any(w.startswith(f'{CAR_YAML}: {k} ') for k in FF_KEYS)]
     cal = _load(pkg / 'config' / 'calibration.yaml')
     try:
         deadband, gain = float(cal['deadband']), float(cal['gain'])
@@ -237,7 +251,10 @@ def params(pkg: Path):
     if str(cal.get('car', '')).strip().upper() not in CARS:
         warnings.append(f'calibration.yaml: car is {cal.get("car")!r}, expected one of A, B, C')
     if gain <= 0.0:
-        warnings.append('calibration.yaml: gain is 0, the calibration is not done')
+        # as the handout's speed_pid_params(): not calibrated -> no feed-forward at all
+        warnings.append('calibration.yaml: gain is 0, the calibration is not done '
+                        '(no feed-forward)')
+        deadband, gain = 0.0, 0.0
     data.setdefault('ff_deadband', deadband)
     data.setdefault('ff_gain', gain)
     return data, warnings
@@ -269,7 +286,7 @@ def team_controller(team: Path) -> Path:
         names = ', '.join(d.name for d in found) or 'none'
         raise SubmissionError(
             f'{team}: expected exactly one <student_id>_lab_2_1 directory holding '
-            f'lab2_waypoint/, found {names}')
+            f'{PART1_PACKAGE}/, found {names}')
     return found[0]
 
 

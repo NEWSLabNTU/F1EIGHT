@@ -40,8 +40,9 @@ verdict: the bag is not accepted, but the student sees a traceback). Exit
 status 1 if any case is MISSED, FALSE, METRIC or CRASH. Results also go to OUT/results.json.
 
 --gate also runs the full-stack bench gate (`just lab2 gate`) on mutant
-SpeedPID submissions built from tmp/sub_ref (sign flip, always neutral, max PWM
-always, NaN every 50th call), each one inside
+SpeedPID submissions built from tmp/lab2/ref_sub (a lab2_speed package holding the
+reference SpeedPID; sign flip, always neutral, max PWM always, NaN every 50th
+call), each one inside
 `ROS_DOMAIN_ID=73 flock tmp/bench.lock`, and expects FAIL with a matching
 reason. --no-bags skips the bag catalogue.
 
@@ -67,7 +68,7 @@ from typing import Callable, Dict, List, Optional, Tuple
 REPO = Path(__file__).resolve().parents[3]
 TEMPLATE = REPO / 'src/lab/autosdv_waypoint_lab/config/courses/lab2_uturn'
 HALL = REPO / 'src/lab/autosdv_waypoint_lab/config/courses/hall_demo'
-SUB_REF = REPO / 'tmp/sub_ref'
+SUB_REF = REPO / 'tmp/lab2/ref_sub'
 
 # topic names, as bag_meta has them (kept here so the pure part imports without ROS)
 KIN = '/localization/kinematic_state'
@@ -845,7 +846,7 @@ def make_mutant(out: Path, name: str, body: str) -> Path:
     if d.exists():
         shutil.rmtree(d)
     shutil.copytree(SUB_REF, d, ignore=shutil.ignore_patterns('__pycache__', 'build', 'install', 'log'))
-    f = next(d.rglob('lab2_waypoint/speed_pid.py'))
+    f = next(d.rglob('lab2_speed/speed_pid.py'))
     f.write_text(f.read_text() + (
         f'\n\n# --- fuzz_bags.py mutant: {name}\n'
         '_orig = SpeedPID.update\n\n\n'

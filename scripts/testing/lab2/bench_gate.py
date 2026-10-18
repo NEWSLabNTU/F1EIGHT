@@ -7,8 +7,9 @@ plant model for the car), engages, waits for the run to finish and prints one
 PASS or FAIL line. Exit status is the number of FAILs. A team has to pass
 before it gets car time.
 
-    just lab2 gate speed_controller_class:=lab2_waypoint.speed_pid:SpeedPID \\
-                   "speed_controller_params:={kp: 15.0, ki: 5.0}"
+    just lab2 gate submission:=~/lab2/B12345678_lab_2_1   # lab2_speed + car file + calibration
+    just lab2 gate speed_controller_class:=lab2_speed.speed_pid:SpeedPID \\
+                   "speed_controller_params:={kp: 20.0, ki: 25.0}"
     just lab2 gate --only hall_demo              # another course instead
     just lab2 gate --list
 
