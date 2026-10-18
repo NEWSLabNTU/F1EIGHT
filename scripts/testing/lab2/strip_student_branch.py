@@ -32,6 +32,7 @@ DELETE = [
     'scripts/testing/lab2/part1_calibrate.py',                    # limits from the reference
     'scripts/testing/lab2/part1_tolerance.py',                    # load tolerance of the reference
     'docs/superpowers/plans/2026-10-18-lab2-part1-sim.md',        # the TA implementation plan
+    'docs/superpowers/plans/2026-10-18-lab2-one-stack.md',        # the one-controller plan (quotes the reference)
     'scripts/testing/lab2/strip_student_branch.py',               # this script (names the above)
 ]
 
