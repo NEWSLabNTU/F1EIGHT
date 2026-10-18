@@ -302,11 +302,13 @@ The largest spreads: `stepdown_undershoot` 0.10 % (allowed 0.5), `stop_error` 0.
 its allowance (at most 0.004 against 0.5 for `estop_resume_overshoot`).
 `stepdown_lag`, evaluated afterwards on the same six traces: 0.5416-0.5481 m/s, spread
 0.0065 (allowed max(2 % of 0.88, 0.01) = 0.018).
-Re-run 2026-10-19 on the shared launch (the same round, busy loops ×1): **PASS**, all 6 runs
-valid 16/16, quiet runs bit-identical and equal to the old composition's values. The
-largest spreads: `stepdown_undershoot` 0.057 % (allowed 0.5), `estop_resume_overshoot`
-0.038 % (0.5), `stop_error` 0.0017 m (0.03), `stop_kappa` 0.0015 (0.01), `hold_rmse_11b`
-0.0014 m/s (0.01); every other check 0.0005 or less.
+Re-run 2026-10-19 on the shared launch, at the documented load (busy loops ×2, 3 quiet + 3
+loaded interleaved): **PASS**, all 6 runs valid 16/16, quiet runs bit-identical (and equal
+to the old composition's values). The largest spreads, against what is allowed:
+`stepdown_undershoot` 0.31 % (0.5), `estop_resume_overshoot` 0.032 % (0.5), `stepdown_lag`
+0.0074 m/s (0.0176), `hold_rmse_6` 0.0029 m/s (0.01), `stop_error` 0.0019 m (0.03),
+`stop_kappa` 0.0014 (0.01), `hold_rmse_11b` 0.00067 m/s (0.01); every other check 0.001 or
+less. `stepdown_undershoot` is the one to watch: ×2 load moved it from 0.057 % (×1) to 0.31 %.
 
 **Calibration** (`scripts/testing/lab2/part1_calibrate.py --repeats 2`: the reference live on
 nominal, low_batt and low_mu, 6 runs, all passing, repeats bit-identical). Limit = 1.5 × the
