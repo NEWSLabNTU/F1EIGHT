@@ -42,12 +42,19 @@
                                  the one without the marker checks. Something
                                  else (rc_sim_plant) publishes
                                  /localization/kinematic_state and TF
-                                 map -> base_link.
+                                 map -> base_link. Only with hardware:=sim;
+                                 refused on the car.
     hardware:=sim                the actuator on hardware:=sim (the rc_sim
                                  plant's PWM and hall edges), the vehicle
                                  description from tier4_vehicle_launch instead
                                  of autosdv.launch.yaml's sensor kit, the
                                  system component in planning_simulation mode.
+                                 With localization:=aruco, something must
+                                 provide the camera images or the marker fixes
+                                 (as the bench's mock camera or
+                                 virtual_marker_localizer do).
+
+  Any other value of either switch refuses to parse, naming the value.
 
   The rest are parameters a simulated run changes and the car never does:
   path_param_file, vehicle_cmd_gate_param_path, output_emergency_cmd,
@@ -69,8 +76,15 @@
   <!-- the switches (see the header) -->
   <arg name="localization" default="aruco" description="aruco | ground_truth"/>
   <arg name="hardware" default="car" description="car | sim"/>
-  <let name="use_aruco" value="$(eval &quot;'$(var localization)' == 'aruco'&quot;)"/>
-  <let name="hardware_sim" value="$(eval &quot;'$(var hardware)' == 'sim'&quot;)"/>
+  <!-- lookups, not comparisons: a misspelt value is a KeyError naming it, never
+       the other stack (hardware:=simulator would otherwise drive real PWM) -->
+  <let name="use_aruco"
+       value="$(eval &quot;{'localization:=aruco': True, 'localization:=ground_truth': False}['localization:=$(var localization)']&quot;)"/>
+  <let name="hardware_sim"
+       value="$(eval &quot;{'hardware:=car': False, 'hardware:=sim': True}['hardware:=$(var hardware)']&quot;)"/>
+  <!-- on the car nothing publishes the pose without the markers -->
+  <let name="switches_ok"
+       value="$(eval &quot;'true' if $(var use_aruco) or $(var hardware_sim) else {}['localization:=ground_truth needs hardware:=sim: on the car nothing publishes the pose']&quot;)"/>
 
   <!-- the car -->
   <arg name="sensor_suite" default="robin_zed" description="autosdv.launch.yaml sensor suite"/>
@@ -171,7 +185,7 @@
     </include>
   </group>
 
-  <let name="launch_zed" value="$(eval &quot;'$(var launch_camera)'.lower() == 'true' and $(var use_aruco)&quot;)"/>
+  <let name="launch_zed" value="$(eval &quot;'$(var launch_camera)'.lower() in ('true', '1') and $(var use_aruco)&quot;)"/>
   <include file="$(find-pkg-share autosdv_waypoint_lab)/launch/zed_aruco.launch.xml" if="$(var launch_zed)"/>
 
   <let name="run_mode" value="$(eval &quot;'planning_simulation' if $(var hardware_sim) else 'online'&quot;)"/>
@@ -206,8 +220,8 @@
 
   <!-- with the camera, the localizer runs in its container, so the images
        never go through the network stack -->
-  <let name="ar_tag_container" value="/sensing/camera/zedxm/zed_container" if="$(var launch_camera)"/>
-  <let name="ar_tag_container" value="" unless="$(var launch_camera)"/>
+  <let name="ar_tag_container" value="/sensing/camera/zedxm/zed_container" if="$(var launch_zed)"/>
+  <let name="ar_tag_container" value="" unless="$(var launch_zed)"/>
   <include file="$(find-pkg-share autosdv_waypoint_lab)/launch/waypoint_localization.launch.xml" if="$(var use_aruco)">
     <arg name="course_dir" value="$(var course_dir)"/>
     <arg name="use_ar_tag_localizer" value="$(var use_ar_tag_localizer)"/>
