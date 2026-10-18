@@ -154,8 +154,12 @@ The handout's bench takes the same `--plant`. Then write the values into the
 `MotorPlantParams` defaults in
 `src/vehicle/autosdv_vehicle_launch/autosdv_vehicle_interface/autosdv_vehicle_interface/motor_plant.py`,
 together with the date, the car and the bag name, and remove the PROVISIONAL
-note. Copy the file unchanged to the handout's
-`lab2_pursuit/bench/vendor/motor_plant.py`. Keep the two copies identical.
+note. Copy the file unchanged to the course repository's
+`2026/labs/Lab2/handout/lab2_speed/lab2_speed/bench/vendor/motor_plant.py`, then
+update that entry in `SOURCES` of the `vendor/__init__.py` beside it: the
+vehicle repository's commit (second field) and the sha256 of the copy (last
+field, `sha256sum` of the file). The self-check compares the hash. Keep the two
+copies identical.
 
 ## 2. Braking and reaction
 
