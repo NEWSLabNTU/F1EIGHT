@@ -176,7 +176,7 @@ What is given and what you write:
 
 | Given | TODO |
 |---|---|
-| reading the parameters, `reset()`, `feed_forward()`, `filter_derivative()`, `brake_pwm()`, `clamp_pwm()`, `debug_terms()` | 1 the error and the clamped driving error, 2 P, 3 D on the measurement (filtered), 4 the braking mode, 5 driving: I with clamp and conditional integration, the command and its throttle limit |
+| reading the parameters, `reset()`, `feed_forward()`, `filter_derivative()`, `brake_pwm()`, `clamp_pwm()`, `debug_terms()` | 1 the error and the clamped driving error, 2 P, 3 D on the measurement (filtered), 4 the braking mode, 5 driving: I with clamp, the integral band and conditional integration, the command and its throttle limit |
 
 `config/speed_pid.yaml`, checked when the run starts (`scripts/testing/lab2/submission.py
 --part1`): unknown keys, wrong types and out-of-range values stop the run with the key
@@ -188,6 +188,7 @@ course but fails several checks. Tuning is your work.
 | `kp`, `ki`, `kd` | driving gains [counts per m/s, per m, per m/s²] | 0..1000, 0..1000, 0..100 | 12, 10, 0 |
 | `integral_limit` | the integral's clamp [counts] | (0, 1000] | 5 |
 | `error_limit` | the largest error P and I see while driving [m/s] | (0, 20] | 5 |
+| `integral_band` | integrate only when \|e\| ≤ this [m/s]; 20 is off on this course | (0, 20] | 20 |
 | `enable_conditional_integration` | freeze the integral while the output saturates | bool | true |
 | `derivative_filter_alpha` | the derivative's EMA | (0, 1] | 0.15 |
 | `max_pwm_offset` | throttle authority above neutral [counts] | 1..100 | 100 |
@@ -202,6 +203,14 @@ under-drives: about 10 counts short at 11 m/s, which the integral must make up.
 
 `python3 selfcheck.py` in the package checks the rules, the yaml and each TODO (no ROS, no
 grading).
+
+Part 2 drives the same class on the real car with `config/speed_pid_car.yaml` (given: kp 20,
+ki 25, integral_limit 10, error_limit 0.5, integral_band 0.25, brake mode on) plus the
+team's `config/calibration.yaml` as `ff_deadband`/`ff_gain`; `selfcheck.py --car` runs the
+offline car bench on it, and `just lab2 gate submission:=DIR` loads it
+(`lab2-waypoint-stack.md`, "Running a student's submission"). The car gives about 0.03 m/s
+per count against the simulated car's 0.143, so its gains are about five times larger; the
+band, off here, stops the integral charging while the bench holds the wheels.
 
 ## Physics you need
 

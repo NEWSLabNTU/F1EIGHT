@@ -702,14 +702,18 @@ just lab2 vehicle submission:=~/lab2/B12345678_lab_2_1 course_dir:=...
 python3 scripts/testing/lab2/submission.py DIR     # shows what it passes
 ```
 
-`DIR` is the `<student_id>_lab_2_1/` directory or the `lab2_waypoint/` package
-itself. `scripts/testing/lab2/submission.py` puts the package on `PYTHONPATH`,
-sets `speed_controller_class:=lab2_waypoint.speed_pid:SpeedPID` and builds
-`speed_controller_params` from `config/speed_pid.yaml` with `ff_deadband` and
-`ff_gain` from `config/calibration.yaml` (the keys `speed_pid.yaml` sets itself
-win). It reads the files itself instead of importing the student's bench, so a
-modified bench changes nothing. An uncalibrated file (gain 0) is a warning, not an
-error; the stub then fails the gate by not moving the car. Do not
+`DIR` is the `<student_id>_lab_2_1/` directory or the `lab2_speed/` package
+itself: the same package and `SpeedPID` class as Part 1, with the real car's
+parameter file. `scripts/testing/lab2/submission.py` puts the package on `PYTHONPATH`,
+sets `speed_controller_class:=lab2_speed.speed_pid:SpeedPID` and builds
+`speed_controller_params` from `config/speed_pid_car.yaml` (checked against the
+Part 1 key table) with `ff_deadband` and `ff_gain` from `config/calibration.yaml`
+(the keys `speed_pid_car.yaml` sets itself win). It reads the files itself instead
+of importing the student's bench, so a modified bench changes nothing. The retired
+`lab2_waypoint/` layout is refused with the new name. A calibration that is missing,
+does not load or has gain 0 is a warning, not an error: the car then runs with no
+feed-forward. The stub fails the gate by not moving the car (`config/speed_pid.yaml`,
+the simulated car's file, is not read here; `just lab2 sim` uses it). Do not
 combine it with explicit `speed_controller_*:=` arguments. The shell side is `scripts/testing/lab2/submission.sh`.
 
 ## The bench
