@@ -34,6 +34,25 @@
   owns operation-mode availability), plus actuator_param_overrides: the lab's
   steering ratio, which must be MEASURED per car (actuator_lab2.param.yaml).
 
+  Two switches, both defaulting to the car, so Lab 2 Part 1 (the simulated
+  car) can run this same stack:
+
+    localization:=ground_truth   no zed_aruco, waypoint_localization or
+                                 localization_monitor; the graph defaults to
+                                 the one without the marker checks. Something
+                                 else (rc_sim_plant) publishes
+                                 /localization/kinematic_state and TF
+                                 map -> base_link.
+    hardware:=sim                the actuator on hardware:=sim (the rc_sim
+                                 plant's PWM and hall edges), the vehicle
+                                 description from tier4_vehicle_launch instead
+                                 of autosdv.launch.yaml's sensor kit, the
+                                 system component in planning_simulation mode.
+
+  The rest are parameters a simulated run changes and the car never does:
+  path_param_file, vehicle_cmd_gate_param_path, output_emergency_cmd,
+  tracker_control_topic, tracker_lockstep, use_sim_time.
+
   Design: ntu-sdv-course 2026/labs/Lab2/lab2-system-design.md.
   What runs and why: docs/guides/lab2-waypoint-stack.md.
 -->
@@ -46,6 +65,12 @@
   <arg name="course_dir" default="$(find-pkg-share autosdv_waypoint_lab)/config/courses/$(var course)"
        description="or any course directory, e.g. one surveyed on site"/>
   <arg name="laps" default="0" description="0: the course's own"/>
+
+  <!-- the switches (see the header) -->
+  <arg name="localization" default="aruco" description="aruco | ground_truth"/>
+  <arg name="hardware" default="car" description="car | sim"/>
+  <let name="use_aruco" value="$(eval &quot;'$(var localization)' == 'aruco'&quot;)"/>
+  <let name="hardware_sim" value="$(eval &quot;'$(var hardware)' == 'sim'&quot;)"/>
 
   <!-- the car -->
   <arg name="sensor_suite" default="robin_zed" description="autosdv.launch.yaml sensor suite"/>
@@ -63,7 +88,22 @@
   <arg name="speed_controller_params" default=""
        description="its parameters, a YAML mapping string: {kp: 20.0, ki: 4.0}"/>
   <arg name="speed_controller_dt_source" default="loop"/>
-  <arg name="is_simulation" default="false" description="actuator dry run: no PWM"/>
+  <arg name="is_simulation" default="false" description="actuator dry run: no PWM (hardware:=sim ignores it)"/>
+  <arg name="vehicle_model" default="autosdv_vehicle"/>
+  <arg name="sensor_model" default="autosdv_sensor_kit" description="hardware:=sim only (the vehicle description)"/>
+  <arg name="vehicle_id" default="$(env VEHICLE_ID default)"/>
+  <arg name="use_sim_time" default="false"/>
+
+  <!-- parameter files and topics a simulated run changes; the defaults are the car's -->
+  <arg name="path_param_file"
+       default="$(find-pkg-share autosdv_waypoint_lab)/config/waypoint_path_publisher.param.yaml"/>
+  <arg name="vehicle_cmd_gate_param_path"
+       default="$(find-pkg-share autoware_launch)/config/control/vehicle_cmd_gate/vehicle_cmd_gate.param.yaml"
+       description="loaded after autoware_launch's; the default is that file again (no change)"/>
+  <arg name="output_emergency_cmd" default="/control/command/emergency_cmd"
+       description="vehicle_cmd_gate's emergency verdict, which the actuator brakes on"/>
+  <arg name="tracker_control_topic" default="/control/trajectory_follower/control_cmd"/>
+  <arg name="tracker_lockstep" default="false" description="path_tracker in the simulator's clock handshake"/>
 
   <!-- Hardware switches, for the vehicle bench (waypoint_follow_bench.launch.xml).
        All default to the car. -->
@@ -72,8 +112,9 @@
        description="false: something else publishes the marker fixes (the bench's virtual_marker_localizer)"/>
   <arg name="launch_velocity_report" default="true"/>
 
+  <!-- ground_truth: the waypoint graph without the marker checks (Part 1's) -->
   <arg name="diagnostic_graph_aggregator_graph_path"
-       default="$(find-pkg-share autosdv_launch)/config/system/diagnostics/autosdv-waypoint-main.yaml"/>
+       default="$(eval &quot;'$(find-pkg-share autosdv_launch)/config/system/diagnostics/autosdv-waypoint-main.yaml' if $(var use_aruco) else '$(find-pkg-share autosdv_waypoint_lab)/config/part1/part1-diagnostics.yaml'&quot;)"/>
   <arg name="component_state_monitor_topic_path"
        default="$(find-pkg-share autosdv_launch)/config/system/component_state_monitor/topics-waypoint.yaml"/>
 
@@ -84,11 +125,13 @@
   <let name="launch_vehicle_velocity_converter" value="false"/>
   <let name="launch_gyro_bias_estimator" value="false"/>
 
+  <set_parameter name="use_sim_time" value="true" if="$(var use_sim_time)"/>
+
   <!-- The kit with its drivers off: no LiDAR, and the ZED driver is
        zed_aruco.launch.xml below. camera_model zedxm keeps the ZED's URDF
        frames and its left camera -> IMU edge (zed_tf_only.launch.xml), and
        stops the kit starting its own IMU-only ZED driver. -->
-  <include file="$(find-pkg-share autosdv_launch)/launch/autosdv.launch.yaml">
+  <include file="$(find-pkg-share autosdv_launch)/launch/autosdv.launch.yaml" unless="$(var hardware_sim)">
     <arg name="sensor_suite" value="$(var sensor_suite)"/>
     <arg name="camera_model" value="zedxm"/>
     <arg name="imu_source" value="zed"/>
@@ -108,19 +151,47 @@
     <arg name="is_simulation" value="$(var is_simulation)"/>
   </include>
 
-  <include file="$(find-pkg-share autosdv_waypoint_lab)/launch/zed_aruco.launch.xml" if="$(var launch_camera)"/>
+  <!-- hardware:=sim: the vehicle description alone (TF base_link -> sensors),
+       and vehicle_info's global parameters, which autosdv.launch.yaml would set
+       before the vehicle interface starts -->
+  <group scoped="false" if="$(var hardware_sim)">
+    <include file="$(find-pkg-share autoware_global_parameter_loader)/launch/global_params.launch.py">
+      <arg name="use_sim_time" value="$(var use_sim_time)"/>
+      <arg name="vehicle_model" value="$(var vehicle_model)"/>
+    </include>
+  </group>
+  <group if="$(var hardware_sim)">
+    <include file="$(find-pkg-share tier4_vehicle_launch)/launch/vehicle.launch.xml">
+      <arg name="use_sim_time" value="$(var use_sim_time)"/>
+      <arg name="launch_vehicle_interface" value="false"/>
+      <arg name="vehicle_model" value="$(var vehicle_model)"/>
+      <arg name="sensor_model" value="$(var sensor_model)"/>
+      <arg name="vehicle_id" value="$(var vehicle_id)"/>
+      <arg name="config_dir" value="$(find-pkg-share individual_params)/config/$(var vehicle_id)/$(var sensor_model)"/>
+    </include>
+  </group>
 
+  <let name="launch_zed" value="$(eval &quot;'$(var launch_camera)'.lower() == 'true' and $(var use_aruco)&quot;)"/>
+  <include file="$(find-pkg-share autosdv_waypoint_lab)/launch/zed_aruco.launch.xml" if="$(var launch_zed)"/>
+
+  <let name="run_mode" value="$(eval &quot;'planning_simulation' if $(var hardware_sim) else 'online'&quot;)"/>
   <include file="$(find-pkg-share autosdv_launch)/launch/components/autosdv_pursuit_system_component.launch.xml">
-    <arg name="run_mode" value="online"/>
+    <arg name="use_sim_time" value="$(var use_sim_time)"/>
+    <arg name="run_mode" value="$(var run_mode)"/>
     <arg name="diagnostic_graph_aggregator_graph_path" value="$(var diagnostic_graph_aggregator_graph_path)"/>
     <arg name="component_state_monitor_topic_path" value="$(var component_state_monitor_topic_path)"/>
   </include>
 
   <include file="$(find-pkg-share autosdv_launch)/launch/components/autosdv_pursuit_api_component.launch.xml"/>
 
+  <!-- sim: the plant is the hardware, so no dry run -->
+  <let name="vi_hardware" value="$(eval &quot;'sim' if $(var hardware_sim) else 'real'&quot;)"/>
+  <let name="vi_is_simulation" value="$(eval &quot;'false' if $(var hardware_sim) else '$(var is_simulation)'&quot;)"/>
   <include file="$(find-pkg-share autosdv_vehicle_launch)/launch/vehicle_interface.launch.xml">
+    <arg name="hardware" value="$(var vi_hardware)"/>
     <arg name="launch_vehicle_interface" value="true"/>
-    <arg name="is_simulation" value="$(var is_simulation)"/>
+    <arg name="is_simulation" value="$(var vi_is_simulation)"/>
+    <arg name="vehicle_id" value="$(var vehicle_id)"/>
     <arg name="speed_controller_class" value="$(var speed_controller_class)"/>
     <arg name="speed_controller_params" value="$(var speed_controller_params)"/>
     <arg name="speed_controller_dt_source" value="$(var speed_controller_dt_source)"/>
@@ -137,14 +208,19 @@
        never go through the network stack -->
   <let name="ar_tag_container" value="/sensing/camera/zedxm/zed_container" if="$(var launch_camera)"/>
   <let name="ar_tag_container" value="" unless="$(var launch_camera)"/>
-  <include file="$(find-pkg-share autosdv_waypoint_lab)/launch/waypoint_localization.launch.xml">
+  <include file="$(find-pkg-share autosdv_waypoint_lab)/launch/waypoint_localization.launch.xml" if="$(var use_aruco)">
     <arg name="course_dir" value="$(var course_dir)"/>
     <arg name="use_ar_tag_localizer" value="$(var use_ar_tag_localizer)"/>
     <arg name="ar_tag_container" value="$(var ar_tag_container)"/>
   </include>
 
   <include file="$(find-pkg-share autosdv_launch)/launch/components/autosdv_pursuit_control_component.launch.xml">
+    <arg name="vehicle_model" value="$(var vehicle_model)"/>
+    <arg name="vehicle_id" value="$(var vehicle_id)"/>
+    <arg name="use_sim_time" value="$(var use_sim_time)"/>
     <arg name="launch_trajectory_follower" value="false"/>
+    <arg name="output_emergency_cmd" value="$(var output_emergency_cmd)"/>
+    <arg name="vehicle_cmd_gate_param_path" value="$(var vehicle_cmd_gate_param_path)"/>
   </include>
 
   <include file="$(find-pkg-share autosdv_waypoint_lab)/launch/waypoint_nodes.launch.xml">
@@ -152,5 +228,12 @@
     <arg name="laps" value="$(var laps)"/>
     <arg name="tracker_class" value="$(var tracker_class)"/>
     <arg name="tracker_param_file" value="$(var tracker_param_file)"/>
+    <arg name="path_param_file" value="$(var path_param_file)"/>
+    <arg name="vehicle_info_param_file"
+         value="$(find-pkg-share $(var vehicle_model)_description)/config/vehicle_info.param.yaml"/>
+    <arg name="control_topic" value="$(var tracker_control_topic)"/>
+    <arg name="lockstep" value="$(var tracker_lockstep)"/>
+    <arg name="launch_localization_monitor" value="$(var use_aruco)"/>
+    <arg name="use_sim_time" value="$(var use_sim_time)"/>
   </include>
 </launch>

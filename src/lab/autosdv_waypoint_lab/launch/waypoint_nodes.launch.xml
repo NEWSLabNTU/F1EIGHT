@@ -6,7 +6,8 @@
                                                       /planning/waypoint_path_publisher/progress
     /planning/trajectory + /localization/kinematic_state
         -> path_tracker [the student PathTracker] -> /control/trajectory_follower/control_cmd
-    localization_monitor -> /diagnostics (marker fix age, path deviation)
+    localization_monitor -> /diagnostics (marker fix age, path deviation; not with
+                            launch_localization_monitor:=false)
 
   tracker_class picks the law by import path. A student package ships its
   PathTracker and, optionally, a param file whose tracker.* entries reach the
@@ -27,6 +28,11 @@
   <arg name="vehicle_info_param_file"
        default="$(find-pkg-share autosdv_vehicle_description)/config/vehicle_info.param.yaml"/>
   <arg name="use_sim_time" default="false"/>
+  <arg name="control_topic" default="/control/trajectory_follower/control_cmd"
+       description="where path_tracker publishes (the gate's AUTO input)"/>
+  <arg name="lockstep" default="false" description="path_tracker in the simulator's clock handshake (sim only)"/>
+  <arg name="launch_localization_monitor" default="true"
+       description="false: no marker fixes to monitor (localization:=ground_truth)"/>
 
   <node pkg="autosdv_waypoint_lab" exec="waypoint_path_publisher" name="waypoint_path_publisher"
         namespace="planning" output="screen">
@@ -41,11 +47,13 @@
     <param from="$(var vehicle_info_param_file)"/>
     <param from="$(var tracker_param_file)"/>
     <param name="tracker_class" value="$(var tracker_class)"/>
+    <param name="control_topic" value="$(var control_topic)"/>
+    <param name="lockstep" value="$(var lockstep)"/>
     <param name="use_sim_time" value="$(var use_sim_time)"/>
   </node>
 
   <node pkg="autosdv_waypoint_lab" exec="localization_monitor" name="localization_monitor"
-        namespace="localization" output="screen">
+        namespace="localization" output="screen" if="$(var launch_localization_monitor)">
     <param from="$(var monitor_param_file)"/>
     <param name="use_sim_time" value="$(var use_sim_time)"/>
   </node>
