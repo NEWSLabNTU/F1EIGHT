@@ -249,7 +249,8 @@ just --list             # Show all available commands
 ```
 
 Grouped commands live in justfile modules under `just/`, so the top-level list
-stays short: `arbiter`, `bag`, `control`, `map`, `sim`, `tool`, plus `demo` in `demo/`.
+stays short: `arbiter`, `aruco-map`, `bag`, `coach`, `control`, `coss`, `lab2`, `map`,
+`sim`, `tool`, plus `demo` in `demo/`.
 `just <module>` lists that module's recipes, and both spellings work —
 `just bag play` and `just bag::play`.
 
@@ -320,6 +321,20 @@ just map grid-from-bag <bag> <map_dir>   # accumulate scans instead, for a site 
 `pose_source:=mcl` needs an occupancy grid rather than a PCD; `just map check`
 verifies the grid is in the lanelet2 map's frame, which is the failure class
 that otherwise costs days. See `docs/design/map-handling-per-localization-method.md`.
+
+### ArUco map
+```bash
+just aruco-map survey 24 [DIR] [vehicle_id:=car_c]   # drive past the boards, Ctrl-C solves
+just aruco-map check [DIR]                           # drive by hand, watch the localization
+just aruco-map align [DIR] --route NAME              # optional: into a route's start-box frame
+just aruco-map solve [DIR] [--origin ID]             # re-solve the recording, no car
+```
+A survey's map is in the **origin board's frame**: origin on the floor below
+that board, x the way it faces, z up, y = z × x. Lab-independent (settings on
+the command line only, default `vehicle_id:=sim`; nothing drives). Packages:
+`src/localization/autosdv_marker_survey`, `src/localization/autosdv_aruco_localization`;
+Lab 2 depends on them (`just lab2 survey|survey-align|loc-check` are wrappers),
+never the reverse. Guide: `docs/guides/aruco-map.md`.
 
 ### Rosbag
 ```bash
@@ -980,6 +995,7 @@ recipes that no longer exist.
 | [docs/known-config-defects.md](docs/known-config-defects.md) | Configuration that is wrong on every run until someone edits a file |
 | [docs/guides/vehicle_calibration.md](docs/guides/vehicle_calibration.md) | PWM control, PID tuning, testing tools |
 | [docs/guides/zed_camera.md](docs/guides/zed_camera.md) | ZED setup, troubleshooting |
+| [docs/guides/aruco-map.md](docs/guides/aruco-map.md) | ArUco board survey and localization (`just aruco-map`): commands, frame, outputs |
 | [docs/guides/lidar_integration.md](docs/guides/lidar_integration.md) | Robin-W, Velodyne, TensorRT |
 | [docs/guides/control_testing.md](docs/guides/control_testing.md) | Control system testing procedures |
 | [docs/guides/mrm_configuration.md](docs/guides/mrm_configuration.md) | MRM (emergency stop) configuration |
