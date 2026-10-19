@@ -382,12 +382,15 @@ loc-check *ARGS:
         echo "error: no course directory '$dir': run \`just lab2 survey ORIGIN_ID\` first, or name one" >&2; exit 1
     fi
     dir=$(realpath "$dir")
+    # car (settings file or car:=) -> car_profile:=car_<car>; refuses without one
+    source scripts/testing/lab2/lab2_config.sh
+    lab2_config loc-check "$@" || exit 2
     # The ZED never gets a DISPLAY (camera_display.sh says why); viewers get it back.
     source scripts/testing/lab2/camera_display.sh
     lab2_camera_display
     rviz=false; [ -n "$VIEWER_DISPLAY" ] && rviz=true
     cmd=(play_launch launch --web-addr '{{ web_addr }}' autosdv_launch waypoint_loc_check.launch.xml
-         "course_dir:=$dir" "rviz:=$rviz" "viewer_display:=$VIEWER_DISPLAY" "$@")
+         "course_dir:=$dir" "rviz:=$rviz" "viewer_display:=$VIEWER_DISPLAY" "${LAB2_ARGS[@]}")
     printf '\033[2m%s\033[0m\n' "${cmd[*]}"
     source scripts/env.sh
     exec "${cmd[@]}"
