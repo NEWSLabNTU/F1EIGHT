@@ -60,6 +60,7 @@ Arguments before `--` go to the actuator as ROS overrides; after `--`, to
 | Overspeed | 1.0 m/s in 3 consecutive velocity reports (150 ms; a single late edge reads high for about two) | `--overspeed`, `--overspeed-reports` |
 | Stall | PWM at or above `forward_start_pwm + 3` with < 0.05 m/s for 1.5 s | `--stall-pwm`, `--stall-time` |
 | Lost speed | no report for 0.5 s, or none within 2 s | `step_test.py` |
+| Ramp | none (steps); `--ramp A` slews the command at A m/s², as the planner does | `--ramp` |
 | Run time | 20 s, and the step test is killed at 30 s | `--max-run`, `run_trial.sh` |
 | Watchdog | brake, then neutral, 0.3 s after commands stop | the actuator's own `control_cmd_timeout` |
 

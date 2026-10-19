@@ -34,6 +34,9 @@ VI=install/autosdv_vehicle_interface/share/autosdv_vehicle_interface/params
 IP=install/individual_params/share/individual_params/config/$VEHICLE_ID/autosdv_vehicle/actuator.param.yaml
 VINFO=install/autosdv_vehicle_description/share/autosdv_vehicle_description/config/vehicle_info.param.yaml
 if [ ! -f "$IP" ]; then echo "no profile for vehicle_id '$VEHICLE_ID': $IP"; exit 2; fi
+# The car's speed-controller tuning, loaded after the PWM profile as the launch does
+TUNING=${IP%/actuator.param.yaml}/speed_controller.param.yaml
+TUNING_ARGS=(); [ -f "$TUNING" ] && TUNING_ARGS=(--params-file "$TUNING")
 
 read -r INIT_PWM FWD_START < <(python3 - "$IP" <<'EOF'
 import sys, yaml
@@ -60,7 +63,7 @@ $L/velocity_report --ros-args -r __ns:=/autosdv -r __node:=velocity_report_node 
   > "$OUT/$NAME.velocity.log" 2>&1 &
 VPID=$!
 $L/actuator --ros-args -r __ns:=/autosdv -r __node:=actuator_node \
-  --params-file $VI/actuator.yaml --params-file $VINFO --params-file "$IP" -p vehicle_id:=$VEHICLE_ID "${ACT_ARGS[@]}" \
+  --params-file $VI/actuator.yaml --params-file $VINFO --params-file "$IP" "${TUNING_ARGS[@]}" -p vehicle_id:=$VEHICLE_ID "${ACT_ARGS[@]}" \
   -p max_pwm:=$MAX_PWM \
   -r '~/input/control_cmd:=/control/command/control_cmd' -r '~/input/velocity_status:=/vehicle/status/velocity_status' \
   > "$OUT/$NAME.actuator.log" 2>&1 &

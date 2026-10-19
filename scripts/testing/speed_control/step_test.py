@@ -15,6 +15,8 @@ Guards (any one ends the run with a zero command):
   no report -- no velocity report for 0.5 s
   distance  -- integrated measured distance reaches --max-distance minus
                --stop-margin (room left to stop)
+--ramp A limits how fast the command follows the profile [m/s^2], as
+Autoware's planner does; 0 = steps. An abort still commands 0 at once.
 After the profile or an abort, commands 0 for 2 s; when this process stops
 publishing, the actuator's own watchdog brakes and returns to neutral.
 """
@@ -55,6 +57,7 @@ class StepTest(Node):
         self.over_reports = 0
         self.rows = []; self.abort = None; self.done = False
         self.t0 = None; self.stop_until = None
+        self.command = 0.0; self.last_tick = None
         self.create_timer(0.02, self.tick)
 
     def on_vel(self, m):
@@ -107,12 +110,20 @@ class StepTest(Node):
                 self.stop_until = now + 2.0; tgt = 0.0
         elif now >= self.stop_until:
             self.done = True; return
+        dt = 0.0 if self.last_tick is None else now - self.last_tick
+        self.last_tick = now
+        if self.a.ramp > 0.0 and not self.abort:
+            step = self.a.ramp * dt
+            self.command += max(-step, min(step, tgt - self.command))
+        else:
+            self.command = tgt
         msg = Control()
         msg.stamp = self.get_clock().now().to_msg()
-        msg.longitudinal.velocity = float(tgt)
+        msg.longitudinal.velocity = float(self.command)
         msg.lateral.steering_tire_angle = 0.0
         self.pub.publish(msg)
-        self.rows.append([round(t, 3), tgt, self.speed, self.pwm, *self.pid, self.mode, self.esc])
+        self.rows.append([round(t, 3), tgt, self.speed, self.pwm, *self.pid, self.mode, self.esc,
+                          round(self.command, 4)])
 
 
 def metrics(rows, profile):
@@ -143,6 +154,8 @@ def main():
     p.add_argument('--stop-margin', type=float, default=0.3)
     p.add_argument('--max-run', type=float, default=20.0)
     p.add_argument('--overspeed', type=float, default=1.0)
+    p.add_argument('--ramp', type=float, default=0.0,
+                   help='command slew limit [m/s^2], as the planner ramps speed; 0 = steps')
     p.add_argument('--overspeed-reports', type=int, default=3,
                    help='consecutive velocity reports above --overspeed that abort (20 Hz: 3 = 150 ms)')
     p.add_argument('--stall-pwm', type=float, default=388.0)
@@ -157,7 +170,7 @@ def main():
         pass
     finally:
         with open(a.out, 'w', newline='') as f:
-            w = csv.writer(f); w.writerow(['t', 'target', 'speed', 'pwm', 'p', 'i', 'd', 'mode', 'esc'])
+            w = csv.writer(f); w.writerow(['t', 'target', 'speed', 'pwm', 'p', 'i', 'd', 'mode', 'esc', 'command'])
             w.writerows(n.rows)
         print(('ABORTED: ' + n.abort if n.abort else 'completed') + f'  distance={n.distance:.2f} m')
         for m in metrics(n.rows, n.profile):
