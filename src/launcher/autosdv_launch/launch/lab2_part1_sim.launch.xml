@@ -10,12 +10,13 @@
       -> waypoint_path_publisher -> /planning/trajectory
     /planning/trajectory + /localization/kinematic_state
       -> path_tracker (the TA's pure pursuit; speed = the path's)
-      -> lab2_part1_scenario (test fixture: 0 during the e-stop, a 2.5 m/s^2 ramp after it)
+      -> lab2_part1_scenario (test fixture: 0 until the aligned start)
       -> vehicle_cmd_gate
       -> /control/command/control_cmd -> actuator (hardware:=sim, the STUDENT SpeedPID)
       -> /rc_sim/pwm -> rc_sim_plant (owns /clock) -> /rc_sim/hall_edges -> velocity_report
     rc_sim_plant -> /localization/kinematic_state + TF map->base_link: the TRUE pose
-    lab2_part1_scenario: engage, the e-stop at the course's trigger, release
+    lab2_part1_scenario: engage, align the start (an e-stop only if the profile has one: the
+                         course has none)
     lab2_part1_grader: live checks -> /lab2/part1/status, trace.csv, marks.json in out_dir
     lab2_part1_dashboard (gui:=true; saves dashboard.png in out_dir on exit), RViz (rviz:=true)
 
@@ -42,15 +43,12 @@
   /control/part1/tracker_cmd (tracker_control_topic) and the scenario passes it on to
   /control/trajectory_follower/control_cmd, the gate's AUTO input; the gate's emergency
   verdict goes to /control/command/emergency_cmd_gate (output_emergency_cmd) and the
-  scenario forwards it to /control/command/emergency_cmd, OR-ed with the e-stop. Taking the
-  e-stop through the gate's external-emergency service instead was measured and kept the
-  scenario (D11, docs/design/lab2-part1-sim-design.md "The e-stop"):
-    the e-stop tick   the gate's e-stop acted 0.02 or 0.06 s after the call, through the
-                      actuator's 0.5 s wall guard: not the same actuator tick every run
-    the resume        the gate steps straight back to 6 m/s; without the 2.5 m/s^2 ramp
-                      the rear wheel slips 4.3-4.6 m/s (limit 0.5)
-    the start         without the scenario's start alignment launch_slip spread 0.027 m/s
-                      across runs, over the 0.02 the grading allows
+  scenario forwards it to /control/command/emergency_cmd (OR-ed with an e-stop when the
+  profile asks for one; the course does not, so the verdict passes through unchanged). The
+  scenario stays in the command path for the start alone: without its start alignment
+  launch_slip spread 0.027 m/s across runs, over the 0.02 the grading allows. The e-stop it
+  can still run, and why it went through this node rather than the gate's external-emergency
+  service: D11, docs/design/lab2-part1-sim-design.md.
 -->
 <launch>
   <arg name="variant" default="nominal" description="vehicle model variant: nominal, low_batt, low_mu (rc_sim vehicle.yaml)"/>
@@ -68,7 +66,7 @@
   <arg name="gui" default="true" description="the dashboard window"/>
   <arg name="grader" default="true" description="false: no grader (stack debugging only; nothing is graded)"/>
   <arg name="real_time_factor" default="1.0" description="the plant's pace; lower on a slow host"/>
-  <arg name="lockstep" default="true" description="the plant waits for velocity_report, the actuator, path_tracker and the scenario's emergency timer (sim only)"/>
+  <arg name="lockstep" default="true" description="the plant waits for velocity_report, the actuator and path_tracker (and the scenario's emergency timer, which exists only for a profile with an e-stop; sim only)"/>
   <arg name="lockstep_timeout" default="2.0"
        description="[s wall] a participant silent this long invalidates the run; raise it on a host that stalls at startup"/>
   <arg name="vehicle_model" default="autosdv_vehicle"/>
@@ -114,7 +112,7 @@
     <param name="profile_file" value="$(var profile_file)"/>
     <param name="wait_for_topic" value="$(var grader_status)"/>
     <param name="use_sim_time" value="true"/>
-    <!-- its emergency timer in the clock handshake: the e-stop acts on the same actuator tick every run -->
+    <!-- with an e-stop in the profile, its emergency timer joins the clock handshake (the course has none) -->
     <param name="lockstep" value="$(var lockstep)"/>
     <remap from="~/input/gate_emergency" to="/control/command/emergency_cmd_gate"/>
     <remap from="~/output/emergency" to="/control/command/emergency_cmd"/>

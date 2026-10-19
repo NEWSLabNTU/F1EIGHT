@@ -126,3 +126,12 @@ def test_keep_hint_names_the_way_to_keep_a_run(tmp_path):
     assert '--name LABEL' in R.keep_hint(tmp_path, chosen=False)
     assert 'overwrites' in R.keep_hint(tmp_path, chosen=False)
     assert R.keep_hint(tmp_path, chosen=True).strip() == f'outputs in {tmp_path}'
+
+
+def test_checks_per_run_is_the_metrics_check_list():
+    import importlib.util
+    path = R.REPO / 'src/lab/autosdv_waypoint_lab/autosdv_waypoint_lab/part1/metrics.py'
+    spec = importlib.util.spec_from_file_location('part1_metrics_for_test', path)
+    m = importlib.util.module_from_spec(spec)
+    spec.loader.exec_module(m)
+    assert R.CHECKS_PER_RUN == len(m.CHECK_NAMES)

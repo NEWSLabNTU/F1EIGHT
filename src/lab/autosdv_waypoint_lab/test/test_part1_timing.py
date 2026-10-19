@@ -35,20 +35,47 @@ def test_tracker_waits_for_the_odometry_of_its_clock_time_not_its_deadline():
                                                              odom_period_ns=None), clock)
 
 
-@pytest.fixture
-def scenario():
+def _make_scenario(profile_file, **params):
     rclpy = pytest.importorskip('rclpy')
     os.environ.setdefault('ROS_DOMAIN_ID', '73')
     from rclpy.parameter import Parameter
     from autosdv_waypoint_lab.part1.scenario_node import Part1Scenario
     rclpy.init()
     node = Part1Scenario(parameter_overrides=[
-        Parameter('profile_file', value=str(PROFILE)), Parameter('wait_for_topic', value='')])
+        Parameter('profile_file', value=str(profile_file)), Parameter('wait_for_topic', value='')]
+        + [Parameter(k, value=v) for k, v in params.items()])
     events = []
     node.event = lambda name, t=None, **extra: events.append((name, t))
     node.publish_emergency = lambda stamp=None: None
+    return node, events
+
+
+@pytest.fixture
+def estop_profile(tmp_path):
+    """The course with an e-stop asked for (the committed course has none)."""
+    import yaml
+    from autosdv_waypoint_lab.part1 import course as C
+    f = tmp_path / 'part1_profile.yaml'
+    f.write_text(yaml.safe_dump(C.make_profile(estop_hold_index=1, estop_offset=10.0)))
+    return f
+
+
+@pytest.fixture
+def scenario(estop_profile):
+    node, events = _make_scenario(estop_profile)
     yield node, events
     node.destroy_node()
+    import rclpy
+    rclpy.try_shutdown()
+
+
+@pytest.fixture
+def plain_scenario():
+    """The committed course: no e-stop."""
+    node, events = _make_scenario(PROFILE, lockstep=True)
+    yield node, events
+    node.destroy_node()
+    import rclpy
     rclpy.try_shutdown()
 
 
@@ -111,3 +138,31 @@ def test_forwarded_gate_verdict_keeps_the_last_tick_stamp(scenario):
     verdict.stamp.nanosec = 30 * MS                              # the gate's own, later stamp
     node.on_gate(verdict)
     assert published[-1][0] == 5_000 * MS                        # not 5.030
+
+
+def test_without_an_estop_there_is_no_emergency_timer_or_participant(plain_scenario):
+    node, _ = plain_scenario
+    assert node.trigger_s is None
+    assert node.em_timer is None and node.lockstep is None
+
+
+def test_without_an_estop_the_run_goes_straight_to_done(plain_scenario):
+    node, events = plain_scenario
+    node.phase = 'running'
+    for k in range(20):
+        state(node, 5.0 + 0.1 * k, 50.0 + k, 11.0)       # far past where an e-stop could be
+    assert node.pending is None and node.phase == 'running' and not node.estop
+    for k in range(40):                                  # at rest on the stop line
+        state(node, 20.0 + 0.1 * k, node.stop_line_s, 0.0)
+    assert node.phase == 'done' and events == []
+
+
+def test_without_an_estop_the_gate_verdict_is_forwarded_at_once(plain_scenario):
+    from tier4_vehicle_msgs.msg import VehicleEmergencyStamped
+    node, _ = plain_scenario
+    published = []
+    node.publish_emergency = lambda stamp=None: published.append(stamp)
+    verdict = VehicleEmergencyStamped(emergency=True)
+    verdict.stamp.sec = 5
+    node.on_gate(verdict)
+    assert node.gate_emergency and published[-1].sec == 5

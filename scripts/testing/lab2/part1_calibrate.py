@@ -52,9 +52,8 @@ DEFAULT_PROFILE = (REPO / 'src/lab/autosdv_waypoint_lab/config/courses/lab2_part
 FACTOR = 1.5
 MARGIN = 0.9
 # the least each calibrated limit may be, in its own unit
-FLOOR = {'hold_rmse_2': 0.05, 'hold_rmse_6': 0.05, 'hold_rmse_11': 0.05, 'hold_rmse_11b': 0.05,
-         'overshoot': 2.0, 'reach_s': 0.2, 'launch_accel': 1.0, 'stepdown_undershoot': 2.0,
-         'estop_resume_overshoot': 2.0, 'stepdown_lag': 0.3}
+FLOOR = {'hold_rmse_4': 0.05, 'hold_rmse_11': 0.05, 'overshoot': 2.0, 'reach_s': 0.2,
+         'launch_accel': 1.0, 'stop_lag': 0.3}
 
 
 def up2(x: float) -> float:

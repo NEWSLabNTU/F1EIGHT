@@ -1,22 +1,21 @@
 """The Lab 2 Part 1 course: one straight whose speed column is the speed profile. No ROS.
 
-    lab2_make_part1_course [--out DIR] [--speeds 2,6,11,6,11] [--holds 3,3,3,8,3]
-                           [--accel 2.5] [--decel-brake 2.5] [--runout 10] [--estop-offset 15]
+    lab2_make_part1_course [--out DIR] [--speeds 4,11] [--holds 4,4]
+                           [--accel 2.5] [--decel-brake 2.5] [--runout 10]
+                           [--estop-hold K --estop-offset M]
 
 `just lab2 make-part1-course` runs it; the default output is the package's
 config/courses/lab2_part1 (committed, so `just lab2 sim` needs no generation step).
 Segments, in order (docs/design/lab2-part1-sim-design.md, "The course and the run"):
 
-    accel 0 -> 2, hold 2 m/s 3 s       launch from rest, low-speed hold
-    accel 2 -> 6, hold 3 s             step response
-    accel 6 -> 11, hold 3 s            full throttle, hold at 40 km/h
-    decel 11 -> 6, hold 8 s            active braking; the e-stop fires in this hold
-    accel 6 -> 11, hold 3 s
+    accel 0 -> 4, hold 4 m/s 4 s       launch from rest, low-speed hold
+    accel 4 -> 11, hold 4 s            the speed change: full throttle, hold at 40 km/h
     brake 11 -> 0 onto the stop line, run-out 10 m
 
-Accelerations are planned at `accel` (2.5 m/s^2), the two braking segments (the step
-down and the final stop) at `decel_brake` (2.5 m/s^2, under every variant's full rear
-brake of 2.98-3.36 m/s^2); each segment carries its own `rate`. The written files:
+About 17 s of driving (nominal_duration 16.8 s). Accelerations are planned at `accel`
+(2.5 m/s^2), braking (the final stop, and any step down a custom --speeds asks for) at
+`decel_brake` (2.5 m/s^2, under every variant's full rear brake of 2.98-3.36 m/s^2); each
+segment carries its own `rate`. The written files:
 
     path.csv              x, y, v every 0.1 m: the waypoint path publisher's input
     course.yaml           the waypoint lab's course header (open, one lap, no markers)
@@ -25,18 +24,18 @@ brake of 2.98-3.36 m/s^2); each segment carries its own `rate`. The written file
     map_projector_info.yaml   projector_type: local
     track.yaml            the start and goal poses, which rc_sim_plant reads (track_dir)
     part1_profile.yaml    THE CONTRACT with the scenario node and the grader: the holds,
-                          every segment's [s0, s1] and speeds, the stop line, the e-stop
-                          trigger. Positions are metres along the path from the start pose.
+                          every segment's [s0, s1] and speeds, the stop line (and the e-stop
+                          trigger, when one is asked for). Positions are metres along the
+                          path from the start pose.
 
 The first waypoint's speed is floored at ENGAGE_VELOCITY: a profile that starts at
 exactly 0 m/s would command 0 to a car at rest forever.
 
-The e-stop trigger is a position in hold `estop_hold_index` (3, the 6 m/s hold after the
-step down), `--estop-offset` metres into it (15 m: 2.5 s into the 8 s hold), after the
-car has settled from the step down's undershoot. The car brakes to rest, the emergency clears 1 s
-later, and lab2_part1_scenario ramps the target from 0 back to 6 m/s at `resume_accel`
-(2.5 m/s^2); the hold is long enough that the nominal car re-reaches 6 m/s and holds it
-about 2 s before the 6 -> 11 segment. `estop` in the profile records those positions.
+The course has no e-stop. One is optional: `--estop-hold K --estop-offset M` puts a trigger
+M metres into hold K, and the profile then carries `estop` (and estop_trigger_s,
+estop_hold_index); lab2_part1_scenario raises the emergency there, clears it 1 s after the
+car is at rest and ramps the target back up at `resume_accel` (2.5 m/s^2). Without the
+block the scenario never raises one. The graded checks (metrics.py) do not use it.
 """
 import argparse
 import math
@@ -48,11 +47,9 @@ import yaml
 
 ENGAGE_VELOCITY = 0.25    # [m/s] rc_sim's floor (track.make_profile engage_velocity)
 SPACING = 0.1             # [m] path.csv; the path publisher resamples to its own `spacing`
-DEFAULT_SPEEDS = (2.0, 6.0, 11.0, 6.0, 11.0)
-DEFAULT_HOLDS = (3.0, 3.0, 3.0, 8.0, 3.0)
-ESTOP_HOLD_INDEX = 3
-DEFAULT_ESTOP_OFFSET = 15.0   # [m] into the e-stop hold
-RESUME_ACCEL = 2.5      # [m/s^2] the scenario's target ramp after the e-stop clears
+DEFAULT_SPEEDS = (4.0, 11.0)
+DEFAULT_HOLDS = (4.0, 4.0)
+RESUME_ACCEL = 2.5      # [m/s^2] the scenario's target ramp after an (optional) e-stop clears
 COURSE_NAME = 'lab2_part1'
 
 
@@ -118,20 +115,12 @@ def v_profile(segs, s):
 
 
 def make_profile(speeds=DEFAULT_SPEEDS, holds=DEFAULT_HOLDS, accel=2.5, decel_brake=2.5,
-                 runout=10.0, estop_hold_index=ESTOP_HOLD_INDEX, estop_offset=DEFAULT_ESTOP_OFFSET,
+                 runout=10.0, estop_hold_index=None, estop_offset=None,
                  resume_accel=RESUME_ACCEL):
-    """The part1_profile.yaml mapping."""
+    """The part1_profile.yaml mapping; an e-stop only when estop_hold_index is given."""
     segs = make_segments(speeds, holds, accel, decel_brake, runout)
-    held = [seg for seg in segs if seg['kind'] == 'hold']
-    if not 0 <= estop_hold_index < len(held):
-        raise CourseError(f'estop_hold_index {estop_hold_index}: there are {len(held)} holds')
-    h = held[estop_hold_index]
-    if not 0.0 < estop_offset < h['s1'] - h['s0']:
-        raise CourseError(f'--estop-offset {estop_offset} m: must fall inside the '
-                          f'{h["s1"] - h["s0"]:g} m hold')
     brake = segs[-2]
-    trigger = round(h['s0'] + estop_offset, 4)
-    return {
+    out = {
         'speeds': [float(v) for v in speeds],
         'holds': [float(x) for x in holds],
         'accel': float(accel),
@@ -141,13 +130,26 @@ def make_profile(speeds=DEFAULT_SPEEDS, holds=DEFAULT_HOLDS, accel=2.5, decel_br
         'segments': segs,
         'stop_line_s': brake['s1'],
         'length': segs[-1]['s1'],
+        'nominal_duration': brake['t1'],   # [s] from the engage to the stop line
+    }
+    if estop_hold_index is None:
+        return out
+    held = [seg for seg in segs if seg['kind'] == 'hold']
+    if not 0 <= estop_hold_index < len(held):
+        raise CourseError(f'estop_hold_index {estop_hold_index}: there are {len(held)} holds')
+    h = held[estop_hold_index]
+    if estop_offset is None or not 0.0 < estop_offset < h['s1'] - h['s0']:
+        raise CourseError(f'--estop-offset {estop_offset} m: must fall inside the '
+                          f'{h["s1"] - h["s0"]:g} m hold')
+    trigger = round(h['s0'] + estop_offset, 4)
+    out.update({
         'estop_hold_index': estop_hold_index,
         'estop_trigger_s': trigger,
         'estop': {'hold_index': estop_hold_index, 'hold_s0': h['s0'], 'hold_s1': h['s1'],
                   'speed': h['v0'], 'trigger_s': trigger, 'rest_time': 1.0,
                   'resume_accel': float(resume_accel)},
-        'nominal_duration': brake['t1'],   # [s] without the e-stop's stop, rest and ramp
-    }
+    })
+    return out
 
 
 def check_feasible(profile, variant='nominal'):
@@ -259,9 +261,9 @@ def table(profile):
             name = 'run-out'
         rows.append(f'| {seg["group"]} | {name} | {seg["s0"]:.2f} | {seg["s1"]:.2f} | '
                     f'{seg["t1"] - seg["t0"]:.1f} |')
-    rows.append(f'stop line {profile["stop_line_s"]:.2f} m, '
-                f'e-stop at {profile["estop_trigger_s"]:.2f} m '
-                f'(hold {profile["estop_hold_index"]}), '
+    estop = (f'e-stop at {profile["estop_trigger_s"]:.2f} m (hold '
+             f'{profile["estop_hold_index"]}), ' if 'estop' in profile else 'no e-stop, ')
+    rows.append(f'stop line {profile["stop_line_s"]:.2f} m, {estop}'
                 f'nominal {profile["nominal_duration"]:.1f} s')
     return '\n'.join(rows)
 
@@ -280,12 +282,12 @@ def main(argv=None):
     ap.add_argument('--decel-brake', type=float, default=2.5,
                     help='the step down and the final stop [m/s^2]')
     ap.add_argument('--resume-accel', type=float, default=RESUME_ACCEL,
-                    help='the target ramp after the e-stop clears [m/s^2]')
+                    help='the target ramp after an e-stop clears [m/s^2]')
     ap.add_argument('--runout', type=float, default=10.0)
-    ap.add_argument('--estop-hold', type=int, default=ESTOP_HOLD_INDEX,
-                    help='the hold (0..) the e-stop fires in')
-    ap.add_argument('--estop-offset', type=float, default=DEFAULT_ESTOP_OFFSET,
-                    help='where in that hold: metres after its start')
+    ap.add_argument('--estop-hold', type=int, default=None,
+                    help='optional: the hold (0..) an e-stop fires in (default: no e-stop)')
+    ap.add_argument('--estop-offset', type=float, default=None,
+                    help='with --estop-hold: where in that hold, metres after its start')
     ap.add_argument('--variant', default='nominal', help='vehicle model variant to check against')
     args = ap.parse_args(argv)
     try:

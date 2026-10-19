@@ -11,20 +11,22 @@ metrics.py as their windows close, and publishes:
     /lab2/part1/trace       std_msgs/Float64MultiArray, the new trace rows (TRACE_FIELDS,
                             row-major), 10 Hz: what the dashboard plots
     /lab2/part1/violations  visualization_msgs/MarkerArray in map: where each check failed
-    /lab2/part1/markers     the stop line and the e-stop trigger (latched)
+    /lab2/part1/markers     the stop line (and the e-stop trigger, if the profile has one; latched)
     /lab2/part1/course_path nav_msgs/Path of path.csv (latched)
     /lab2/part1/car         the car glyph and live readout (rc_sim's replay glyph)
 
 On finish (at rest for 2 s in the final brake segment or past it), an early valid end (the car
 did not move or stopped for 10 s with a target; or run_timeout sim s after the engage: the
 unreached checks fail, with a student-facing `message`) or invalidity (MRM, controller fault,
-actuator not running, lockstep invalidated, scenario aborted, e-stop never raised, no engage within engage_timeout)
+actuator not running, lockstep invalidated, scenario aborted, a profile's e-stop never raised, no
+engage within engage_timeout)
 it writes
 out_dir/trace.csv, then out_dir/marks.json (the runner waits for that file), publishes
 the final status and stays alive.
 
 Trace alignment: a row at t is held until the stamped streams have reached t (a control
-command and an emergency message stamped after t) or ALIGN_LAG (50 ms) of simulated time has
+command stamped after t, and with an e-stop in the profile an emergency message too: the
+scenario's emergency timer exists only then) or ALIGN_LAG (50 ms) of simulated time has
 passed, then `target` is the command with the latest stamp <= t (vehicle_cmd_gate and the
 forwarder keep path_tracker's stamp, and the actuator's tick at t uses exactly that command)
 and `emergency` is the e-stop state at t from the scenario's events (estop_on / estop_off
@@ -141,8 +143,9 @@ class RowAligner:
     Pure (no ROS): rows are dicts with 't' [s] and 'mode'; stamps are seconds.
     """
 
-    def __init__(self, lag: float = ALIGN_LAG):
+    def __init__(self, lag: float = ALIGN_LAG, need_emergency: bool = True):
         self.lag = lag
+        self.need_emergency = need_emergency    # wait for the emergency stream too
         self.rows = deque()
         self.cmd_t, self.cmd_v = [], []         # control_cmd stamps (ascending) and speeds
         self.em_last = -math.inf                # the newest emergency message stamp
@@ -176,7 +179,8 @@ class RowAligner:
         out = []
         while self.rows:
             t = self.rows[0]['t']
-            reached = (self.cmd_t and self.cmd_t[-1] > t + 1e-9 and self.em_last > t + 1e-9)
+            reached = (self.cmd_t and self.cmd_t[-1] > t + 1e-9
+                       and (self.em_last > t + 1e-9 or not self.need_emergency))
             if not (flush or reached or state_t >= t + self.lag - 1e-9):
                 break
             row = self.rows.popleft()
@@ -228,7 +232,7 @@ class Part1Grader(Node):
         self.pwm_levels = {k: int(gp(k)) for k in ('init_pwm', 'min_pwm', 'max_pwm', 'brake_pwm')}
 
         self.trace = M.Trace()
-        self.aligner = RowAligner()
+        self.aligner = RowAligner(need_emergency=self.profile.estop_trigger_s is not None)
         self.state_t = 0.0                  # the newest /rc_sim/state time
         self.next_g: Optional[int] = None   # next grid sample, in SAMPLE_DT units
         self.prev_state = None
@@ -284,10 +288,11 @@ class Part1Grader(Node):
         self.publish_course()
         steady = Clock(clock_type=ClockType.STEADY_TIME)
         self.create_timer(0.1, self.tick, clock=steady)
+        trigger = self.profile.estop_trigger_s
         self.get_logger().info(
             f'lab2_part1_grader: variant {self.variant}, stop line at s = '
             f'{self.profile.stop_line_s:.2f} m, '
-            f'e-stop at s = {self.profile.estop_trigger_s:.2f} m, '
+            + ('no e-stop, ' if trigger is None else f'e-stop at s = {trigger:.2f} m, ') +
             f"limits {'calibrated' if M.LIMITS_CALIBRATED else 'UNCALIBRATED (placeholders)'}, "
             f'out_dir {self.out_dir}')
 
@@ -598,8 +603,6 @@ class Part1Grader(Node):
         self.pub_violations.publish(array)
 
     def _fallback_s(self, name: str) -> float:
-        if name.startswith('estop_'):
-            return self.profile.estop_trigger_s
         if name.startswith('stop'):
             return self.profile.stop_line_s
         return self.trace['s'][-1] if len(self.trace) else 0.0
@@ -607,8 +610,10 @@ class Part1Grader(Node):
     def publish_course(self) -> None:
         p = self.profile
         array = MarkerArray()
-        for i, (s, rgb, text) in enumerate(((p.stop_line_s, (1.0, 1.0, 1.0), 'stop line'),
-                                            (p.estop_trigger_s, (1.0, 0.8, 0.0), 'e-stop'))):
+        marks = [(p.stop_line_s, (1.0, 1.0, 1.0), 'stop line')]
+        if p.estop_trigger_s is not None:
+            marks.append((p.estop_trigger_s, (1.0, 0.8, 0.0), 'e-stop'))
+        for i, (s, rgb, text) in enumerate(marks):
             array.markers.append(self._marker('lab2_part1_course', 2 * i, Marker.CUBE, s, 0.0,
                                               0.02, (0.15, 1.2, 0.04), rgb))
             array.markers.append(self._marker('lab2_part1_course', 2 * i + 1,

@@ -81,7 +81,19 @@ VEHICLE_YAML = REPO / 'src/sim/autosdv_rc_sim/autosdv_rc_sim/vehicle.yaml'
 STUB_CLASS = 'autosdv_waypoint_lab.stub.speed_pid_part1:SpeedPID'
 STUB_PARAMS = REPO / 'src/lab/autosdv_waypoint_lab/config/speed_pid_part1.yaml'
 VARIANTS_FINAL = ('nominal', 'low_batt', 'low_mu')
-CHECKS_PER_RUN = 16          # autosdv_waypoint_lab.part1.metrics.CHECK_NAMES
+METRICS = REPO / 'src/lab/autosdv_waypoint_lab/autosdv_waypoint_lab/part1/metrics.py'
+
+
+def _check_names():
+    """metrics.CHECK_NAMES, read from the source (metrics.py imports no ROS)."""
+    import importlib.util
+    spec = importlib.util.spec_from_file_location('lab2_part1_metrics', METRICS)
+    mod = importlib.util.module_from_spec(spec)
+    spec.loader.exec_module(mod)
+    return mod.CHECK_NAMES
+
+
+CHECKS_PER_RUN = len(_check_names())   # the final marks' denominator: never hard-coded
 FINAL_POINTS = 25.0
 GRADER_ENGAGE_TIMEOUT = 300.0   # [s sim] lab2_part1_grader: launch to engage
 GRADER_RUN_TIMEOUT = 150.0      # [s sim] lab2_part1_grader: engage to the end of the run

@@ -1,4 +1,10 @@
-"""lab2_part1_scenario: engage the simulated car, inject the e-stop, release it.
+"""lab2_part1_scenario: engage the simulated car and align its start (and run an e-stop, if asked).
+
+The course has no e-stop: part1_profile.yaml carries an `estop` block only when the course
+generator was asked for one (--estop-hold/--estop-offset). Without it this node engages,
+holds the start (below) and forwards the gate's emergency verdict; it raises no emergency,
+has no emergency timer and takes no part in the lockstep handshake. Everything about the
+e-stop below applies only to a profile with the block.
 
     in   /rc_sim/state                       the plant's true state (x is s on the straight)
          /api/operation_mode/state           availability and the mode
@@ -114,13 +120,14 @@ class Part1Scenario(Node):
                 'profile_file is required (config/courses/lab2_part1/part1_profile.yaml)')
         with open(gp('profile_file')) as f:
             prof = yaml.safe_load(f)
-        self.trigger_s = float(prof['estop_trigger_s'])
+        estop = prof.get('estop') or {}
+        trigger = prof.get('estop_trigger_s') if estop else None
+        self.trigger_s = None if trigger is None else float(trigger)   # None: no e-stop
         self.stop_line_s = float(prof['stop_line_s'])
         self.wait_for_timeout = float(gp('wait_for_timeout'))
         self.engage_timeout = float(gp('engage_timeout'))
         self.run_timeout = float(gp('run_timeout'))
         self.rest_speed = float(gp('rest_speed'))
-        estop = prof.get('estop') or {}
         self.rest_time = float(estop.get('rest_time', gp('rest_time')))
         self.resume_accel = float(gp('resume_accel')) or float(estop.get('resume_accel', 2.5))
         self.ramp_v = None         # the resume ramp's speed while it limits the command
@@ -169,15 +176,20 @@ class Part1Scenario(Node):
             ChangeOperationMode, '/api/operation_mode/change_to_autonomous')
         # Engage and its watchdog on WALL time: before the engage nothing guarantees /clock runs
         self.create_timer(0.5, self.on_wall_tick, clock=self.wall)
-        self.em_timer = self.create_timer(
-            1.0 / float(gp('emergency_rate')), self.on_emergency_timer)
+        # The emergency timer, and its place in the lockstep handshake, exist for the e-stop alone
+        self.em_timer = None
         self.lockstep = None
-        if bool(gp('lockstep')):
-            from autosdv_vehicle_interface import hal
-            self._hal = hal
-            self.lockstep = hal.make_lockstep_participant(hal.HARDWARE_SIM, self, hal.EMERGENCY)
+        if self.trigger_s is not None:
+            self.em_timer = self.create_timer(
+                1.0 / float(gp('emergency_rate')), self.on_emergency_timer)
+            if bool(gp('lockstep')):
+                from autosdv_vehicle_interface import hal
+                self._hal = hal
+                self.lockstep = hal.make_lockstep_participant(hal.HARDWARE_SIM, self,
+                                                              hal.EMERGENCY)
+        where = ('no e-stop' if self.trigger_s is None else f'e-stop at s = {self.trigger_s:.2f} m')
         self.get_logger().info(
-            f'e-stop at s = {self.trigger_s:.2f} m, stop line {self.stop_line_s:.2f} m; '
+            f'{where}, stop line {self.stop_line_s:.2f} m; '
             f'waiting for {gp("wait_for_topic") or "nothing"}, then autonomous availability')
 
     # ------------------------------------------------------------------ helpers
@@ -278,12 +290,13 @@ class Part1Scenario(Node):
             self.rest_since = None
         if self.pending is not None:
             pass                    # an e-stop change is scheduled: wait for it
-        elif self.phase == 'running' and s >= self.trigger_s:
+        elif self.phase == 'running' and self.trigger_s is not None and s >= self.trigger_s:
             self.schedule('estop_on', t)
         elif self.phase == 'estop' and self.rest_since is not None \
                 and t - self.rest_since >= self.rest_time:
             self.schedule('estop_off', t)
-        elif self.phase == 'resumed' and self.finished() and t - self.rest_since >= 2.0:
+        elif self.phase in ('running', 'resumed') and self.finished() \
+                and t - self.rest_since >= 2.0:
             self.phase = 'done'
             self.get_logger().info(f'at rest past the stop line at s = {s:.2f} m: scenario done')
         if not self.grader_watched and self.phase in ('running', 'estop', 'resumed') \

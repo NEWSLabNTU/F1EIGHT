@@ -7,8 +7,8 @@ reloads trace.csv so a late start loses nothing. Sim time on the x axis.
     speed      target (dashed), measured (velocity_report), true (the plant)
     motor PWM  with neutral and the brake zone [min_pwm, neutral) shaded
     distance to the stop line
-    red spans  each failed check's window; grey spans the e-stop
-    the table  the 16 checks, live (pending until their window closes), then the marks
+    red spans  each failed check's window; grey spans an e-stop (the course has none)
+    the table  the checks, live (pending until their window closes), then the marks
 
 Needs a display: without DISPLAY / WAYLAND_DISPLAY it exits with a message (launch
 with gui:=false for batch runs). QT_QPA_PLATFORM=offscreen renders without one,

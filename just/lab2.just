@@ -151,7 +151,7 @@ plot-sim *ARGS:
     exec python3 scripts/testing/lab2/plot_part1.py "$@"
 
 #   just lab2 make-part1-course                    rewrite config/courses/lab2_part1 (committed)
-#   just lab2 make-part1-course --estop-offset 12 --out tmp/lab2/part1/course
+#   just lab2 make-part1-course --holds 5,4 --out tmp/lab2/part1/course
 # Prints the segment table; part1_profile.yaml is what the scenario node and the grader read.
 # Regenerate the Part 1 straight (path, map, part1_profile.yaml) from its speed profile
 [positional-arguments]

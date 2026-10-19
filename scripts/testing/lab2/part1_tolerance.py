@@ -44,12 +44,12 @@ REL_SPREAD = 0.02       # of the limit: the allowed spread, unless the floor is 
 # noise of the measurement itself (one 10 ms control tick at the speed involved, one hall
 # marker, the slip estimator's quantum), not a load effect.
 FLOORS = {
-    'hold_rmse_2': 0.01, 'hold_rmse_6': 0.01, 'hold_rmse_11': 0.01, 'hold_rmse_11b': 0.01,   # m/s
-    'overshoot': 0.5, 'stepdown_undershoot': 0.5, 'estop_resume_overshoot': 0.5,            # %
+    'hold_rmse_4': 0.01, 'hold_rmse_11': 0.01,                                              # m/s
+    'overshoot': 0.5,                                                                       # %
     'reach_s': 0.02,                                                                        # s
-    'launch_slip': 0.02, 'estop_resume_slip': 0.02, 'estop_reverse': 0.01,                  # m/s
+    'launch_slip': 0.02,                                                                    # m/s
     'launch_accel': 0.1,                                                                    # m/s^2
-    'stepdown_kappa': 0.01, 'stop_kappa': 0.01,                                             # slip
+    'stop_kappa': 0.01,                                                                     # slip
     'stop_error': 0.03,                                                                     # m
 }
 DEFAULT_FLOOR = 0.01

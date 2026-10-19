@@ -16,33 +16,29 @@ Trace columns (trace.csv, in this order):
     mode       the actuator's longitudinal mode (~/debug/mode: active, override_brake:emergency)
     slip_r     rear wheel surface speed minus ground speed [m/s] (spin > 0, lock < 0)
     kappa_r    rear longitudinal slip ratio (lock below about -0.2 is past the tyre's peak)
-    emergency  1 while the scenario's e-stop is raised
+    emergency  1 while the scenario's e-stop is raised (always 0: the course has none; an
+               e-stop is optional in part1_profile.yaml and no check reads it)
     segment    the profile segment the car is in, '<index>:<kind>' ('start' before it)
 
-Sixteen checks, one window each, all read off the profile (no positions are hard-coded):
+The course: rise 0 -> 4 m/s, hold 4 s; 4 -> 11 m/s, hold 4 s; brake 11 -> 0 onto the stop line.
+Nine checks per run, one window each, all read off the profile (no positions are hard-coded):
 
-    hold_rmse_2/6/11   RMSE of true speed - hold speed over the first hold at each speed,
-                       from HOLD_SETTLE s after entering it to its end
-    hold_rmse_11b      the same over the second 11 m/s hold
-    overshoot          worst over the three steps up (holds 0..2): peak true speed in the
-                       hold above the hold speed, % of the step
+    hold_rmse_4/11     RMSE of true speed - hold speed over the hold (0, 1), from HOLD_SETTLE s
+                       after entering it to its end
+    overshoot          worst over the two steps up (holds 0, 1): peak true speed in the hold
+                       above the hold speed, % of the step
     reach_s            worst over the same steps: time from entering the hold until the true
                        speed is within 10 % of the step below the hold speed
     launch_slip        max rear slip over LAUNCH_WINDOW s from the first motion (wheel or car)
     launch_accel       max true acceleration (mean over LAUNCH_ACCEL_WINDOW) in that window
-    stepdown_undershoot  the decel into the e-stop hold and that hold until the e-stop:
-                       lowest true speed below the hold speed, % of the step down
-    stepdown_kappa     min rear slip ratio there (speed > LOCK_MIN_SPEED)
-    stepdown_lag       max (true speed - commanded target) [m/s] over the decel segment into
-                       the e-stop hold, up to the same window end: a car that cannot slow down
-    estop_reverse      lowest true speed from the e-stop to the end of the resume window
-    resume window      from the clear (estop_off) until the stack's ramped target reaches the
-                       hold speed, + RESUME_SETTLE s; cut where the car leaves the e-stop hold
-    estop_resume_slip  max rear slip over the resume window
-    estop_resume_overshoot  peak true speed in the resume window above the resume speed,
-                       % of the resume speed
+    stop_lag           max (true speed - commanded target) [m/s] over the final brake segment
+                       (its s0 to the stop line): a car that cannot slow down
     stop_error         |s - stop_line_s| where the final rest (true speed < REST_SPEED) began
-    stop_kappa         min rear slip ratio in the final brake segment (speed > LOCK_MIN_SPEED)
+    stop_kappa         min rear slip ratio from the final brake on (speed > LOCK_MIN_SPEED)
+
+No undershoot check at the stop: below a target of 0 is reversing, which the ESC allows only
+after the car has stopped and sat at neutral (esc.py), and stopping short or long of the line
+is stop_error's.
 """
 import bisect
 import csv
@@ -60,52 +56,40 @@ _STR_COLUMNS = {'mode', 'segment'}
 _INT_COLUMNS = {'pwm', 'emergency'}
 
 CHECK_NAMES = (
-    'hold_rmse_2', 'hold_rmse_6', 'hold_rmse_11',
+    'hold_rmse_4', 'hold_rmse_11',
     'overshoot', 'reach_s',
     'launch_slip', 'launch_accel',
-    'stepdown_undershoot', 'stepdown_kappa', 'stepdown_lag',
-    'estop_reverse', 'estop_resume_slip', 'estop_resume_overshoot',
-    'stop_error', 'stop_kappa',
-    'hold_rmse_11b',
+    'stop_lag', 'stop_error', 'stop_kappa',
 )
+HOLD_CHECKS = (('hold_rmse_4', 0), ('hold_rmse_11', 1))   # (check, hold_index)
 
-# Limits. Calibrated 2026-10-18 by scripts/testing/lab2/part1_calibrate.py --repeats 2:
-# the reference (reference/speed_pid_part1.py and its parameters in config/) live on nominal,
-# low_batt and low_mu, 6 runs, all valid, the repeats bit-identical (stepdown_lag, added
-# later, from the same 6 traces). A calibrated limit
+# Limits. Calibrated 2026-10-19 by scripts/testing/lab2/part1_calibrate.py --repeats 2 on the
+# simplified course (4 m/s and 11 m/s holds, the final brake; no e-stop): the reference
+# (reference/speed_pid_part1.py and its parameters in config/) live on nominal, low_batt and
+# low_mu, 6 runs, all valid, the repeats bit-identical. A calibrated limit
 # is 1.5 x the reference's worst case (2 significant figures up), never below its floor in
-# part1_calibrate.py FLOOR (hold RMSE 0.05 m/s, reach 0.2 s, undershoot 2 %): worst case and
+# part1_calibrate.py FLOOR (hold RMSE 0.05 m/s, reach 0.2 s, stop lag 0.3 m/s): worst case and
 # its variant beside each. Fixed limits are physical or the stop error, not calibrated.
 LIMITS_CALIBRATED = True
 LIMITS: Dict[str, float] = {
-    'hold_rmse_2': 0.05,              # m/s; worst 0.0227 (floor 0.05 applies)
-    'hold_rmse_6': 0.05,              # m/s; worst 0.0275 (floor 0.05 applies)
-    'hold_rmse_11': 0.13,             # m/s; worst 0.0846, low_batt
-    'hold_rmse_11b': 0.13,            # m/s; worst 0.0838, low_batt
-    'overshoot': 7.2,                 # % of the step; worst 4.77, nominal
-    'reach_s': 0.2,                   # s; worst 0.07 (floor 0.2 applies)
-    'launch_slip': 0.5,               # m/s, PHYSICAL (reference 0.106)
+    'hold_rmse_4': 0.05,              # m/s; worst 0.0274, low_mu (floor 0.05 applies)
+    'hold_rmse_11': 0.15,             # m/s; worst 0.0984, low_batt
+    'overshoot': 3.8,                 # % of the step; worst 2.49, nominal
+    'reach_s': 0.2,                   # s; worst 0.00 (floor 0.2 applies)
+    'launch_slip': 0.5,               # m/s, PHYSICAL (reference 0.125, low_mu)
     'launch_accel': 4.5,              # m/s^2 over 50 ms; worst 2.94, nominal
-    'stepdown_undershoot': 2.0,       # % of the step; worst 0.554 (floor 2 applies)
-    'stepdown_kappa': -0.2,           # PHYSICAL: past the tyre's peak (reference -0.074)
-    'stepdown_lag': 0.88,             # m/s above the target; worst 0.586, low_mu
-    'estop_reverse': -0.05,           # m/s, PHYSICAL (reference 0.000)
-    'estop_resume_slip': 0.5,         # m/s, PHYSICAL (reference 0.266, low_mu)
-    'estop_resume_overshoot': 2.4,    # % of the resume speed; worst 1.59, low_mu
-    'stop_error': 0.5,                # m, FIXED (reference 0.066, low_mu)
-    'stop_kappa': -0.2,               # PHYSICAL (reference -0.074)
+    'stop_lag': 0.88,                 # m/s above the target; worst 0.581, low_mu
+    'stop_error': 0.5,                # m, FIXED (reference 0.062, low_mu)
+    'stop_kappa': -0.2,               # PHYSICAL: past the tyre's peak (reference -0.075)
 }
-# Fixed limits: physical (spin, lock, reversing) and the stop error. The rest are calibrated.
-FIXED = ('launch_slip', 'stepdown_kappa', 'estop_reverse', 'estop_resume_slip', 'stop_error',
-         'stop_kappa')
+# Fixed limits: physical (spin, lock) and the stop error. The rest are calibrated.
+FIXED = ('launch_slip', 'stop_error', 'stop_kappa')
 CALIBRATED = tuple(n for n in CHECK_NAMES if n not in FIXED)
 # A check passes when value <= limit, except these (value >= limit)
-LOWER_BOUND = ('stepdown_kappa', 'estop_reverse', 'stop_kappa')
-UNITS = {'hold_rmse_2': 'm/s', 'hold_rmse_6': 'm/s', 'hold_rmse_11': 'm/s',
-         'hold_rmse_11b': 'm/s', 'overshoot': '%', 'reach_s': 's', 'launch_slip': 'm/s',
-         'launch_accel': 'm/s^2', 'stepdown_undershoot': '%', 'stepdown_kappa': '',
-         'estop_reverse': 'm/s', 'estop_resume_slip': 'm/s', 'estop_resume_overshoot': '%',
-         'stop_error': 'm', 'stop_kappa': '', 'stepdown_lag': 'm/s'}
+LOWER_BOUND = ('stop_kappa',)
+UNITS = {'hold_rmse_4': 'm/s', 'hold_rmse_11': 'm/s', 'overshoot': '%', 'reach_s': 's',
+         'launch_slip': 'm/s', 'launch_accel': 'm/s^2', 'stop_lag': 'm/s', 'stop_error': 'm',
+         'stop_kappa': ''}
 
 HOLD_SETTLE = 1.0            # s into a hold before its RMSE counts (rc_sim's hold_metrics)
 REACH_BAND = 0.1             # fraction of the step: "reached" within 10 % of it
@@ -113,12 +97,10 @@ LAUNCH_WINDOW = 1.0          # s from the first motion
 LAUNCH_MOVE = 0.02           # m/s of car speed or rear slip that counts as motion
 LAUNCH_ACCEL_WINDOW = 0.05   # s; rc_sim's: a lurch, not the per-ms contact impulses
 LOCK_MIN_SPEED = 0.3         # m/s; below it the slip ratio is a standstill artifact (< -0.2)
-RESUME_SETTLE = 2.0          # s after the ramped resume target reaches the hold speed
-RESUME_TARGET_TOL = 0.01     # m/s: the ramp has reached the hold speed
 REST_SPEED = 0.05            # m/s of true speed: at rest (a threshold, not zero)
 FINISH_REST = 2.0            # s at rest in the final brake segment or later = finished
 # Decelerations are not assumed: every window comes from the profile's per-segment s0/s1/v0/v1
-# (braking segments at decel_brake 3.5 m/s^2, the rest at accel 2.5, are equally fine).
+# (braking at decel_brake 3.5 m/s^2, the rest at accel 2.5, would be equally fine).
 
 
 # ---------------------------------------------------------------- profile
@@ -144,8 +126,8 @@ class Profile:
     holds: Tuple[float, ...]
     segments: Tuple[Segment, ...]
     stop_line_s: float
-    estop_trigger_s: float
-    estop_hold_index: int = 3
+    estop_trigger_s: Optional[float] = None     # the optional e-stop (none on the course)
+    estop_hold_index: Optional[int] = None
 
     def hold(self, k: int) -> Segment:
         for seg in self.segments:
@@ -173,20 +155,13 @@ class Profile:
 
     @property
     def first_up_holds(self) -> Tuple[int, ...]:
-        """Holds entered by accelerating from below, before the e-stop hold: the steps up."""
+        """Holds entered by accelerating from below: the steps up."""
         out = []
-        for k in range(self.estop_hold_index):
+        for k in range(len(self.speeds)):
             prev = self.before(self.hold(k))
             if prev is not None and prev.kind == 'accel':
                 out.append(k)
         return tuple(out)
-
-    @property
-    def hold_11b_index(self) -> int:
-        """The second hold at the top speed (the last hold with the first top hold's speed)."""
-        top = max(self.speeds)
-        ks = [k for k, v in enumerate(self.speeds) if v == top]
-        return ks[1] if len(ks) > 1 else ks[0]
 
 
 def profile_from_dict(d: dict) -> Profile:
@@ -202,9 +177,10 @@ def profile_from_dict(d: dict) -> Profile:
             hi = None
         segs.append(Segment(i, kind, float(raw['s0']), float(raw['s1']), float(raw['v0']),
                             float(raw['v1']), None if hi is None else int(hi)))
+    trigger, k = d.get('estop_trigger_s'), d.get('estop_hold_index')
     return Profile(tuple(float(v) for v in d['speeds']), tuple(float(h) for h in d['holds']),
-                   tuple(segs), float(d['stop_line_s']), float(d['estop_trigger_s']),
-                   int(d.get('estop_hold_index', 3)))
+                   tuple(segs), float(d['stop_line_s']),
+                   None if trigger is None else float(trigger), None if k is None else int(k))
 
 
 def load_profile(path) -> Profile:
@@ -380,89 +356,15 @@ def launch(tr: Trace) -> Tuple[dict, dict]:
     return _result(slip[i_slip], i_slip, tr, t0, t1), _result(a, i_a, tr, t0, t1)
 
 
-def stepdown_end_s(profile: Profile) -> float:
-    """Where the step-down window ends: the e-stop trigger, or the hold's end if earlier."""
-    return min(profile.estop_trigger_s, profile.hold(profile.estop_hold_index).s1)
-
-
-def _stepdown_window(tr: Trace, profile: Profile) -> Tuple[List[int], Segment, Segment]:
-    hold = profile.hold(profile.estop_hold_index)
-    dec = profile.before(hold)
-    on, _ = estop_times(tr)
-    end = on if on is not None else len(tr)
-    s_end = stepdown_end_s(profile)
-    idx = [i for i in range(end) if dec.s0 <= tr['s'][i] < s_end]
-    return idx, dec, hold
-
-
-def stepdown(tr: Trace, profile: Profile) -> Tuple[dict, dict]:
-    t, v, kappa = tr['t'], tr['speed'], tr['kappa_r']
-    idx, dec, hold = _stepdown_window(tr, profile)
-    step = dec.v0 - hold.v0
-    if not idx or step <= 0.0:
-        return _none(), _none()
-    t0, t1 = t[idx[0]], t[idx[-1]]
-    low = min(idx, key=lambda i: v[i])
-    under = _result(max(0.0, (hold.v0 - v[low]) / step * 100.0), low, tr, t0, t1)
-    fast = [i for i in idx if v[i] > LOCK_MIN_SPEED]
-    if not fast:
-        return under, _result(0.0, None, tr, t0, t1)
-    i_k = min(fast, key=lambda i: kappa[i])
-    return under, _result(kappa[i_k], i_k, tr, t0, t1)
-
-
-def stepdown_lag(tr: Trace, profile: Profile) -> dict:
-    """Max (true speed - commanded target) over the decel segment into the e-stop hold."""
+def stop_lag(tr: Trace, profile: Profile) -> dict:
+    """Max (true speed - commanded target) over the final brake segment, s0 to the stop line."""
     t, v, target, s = tr['t'], tr['speed'], tr['target'], tr['s']
-    hold = profile.hold(profile.estop_hold_index)
-    dec = profile.before(hold)
-    on, _ = estop_times(tr)
-    end = on if on is not None else len(tr)
-    s_end = stepdown_end_s(profile)
-    idx = [i for i in range(end) if dec.s0 <= s[i] < s_end]
+    brake = profile.first('brake')
+    idx = [i for i in range(len(t)) if brake.s0 <= s[i] < brake.s1]
     if not idx:
         return _none()
     worst = max(idx, key=lambda i: v[i] - target[i])
     return _result(v[worst] - target[worst], worst, tr, t[idx[0]], t[idx[-1]])
-
-
-def _resume_end(tr: Trace, profile: Profile, start: int) -> int:
-    """One past the last row of the resume window that begins at row `start` (the clear).
-
-    The window ends RESUME_SETTLE s after the ramped target first reaches the hold speed, or
-    where the car leaves the e-stop hold, whichever is first; len(tr) while still open.
-    """
-    t, s, target = tr['t'], tr['s'], tr['target']
-    hold = profile.hold(profile.estop_hold_index)
-    out = _first(s, lambda i: s[i] >= hold.s1, start)
-    reach = _first(target, lambda i: target[i] >= hold.v0 - RESUME_TARGET_TOL, start)
-    if reach is not None:
-        settled = _first(t, lambda i: t[i] > t[reach] + RESUME_SETTLE + 1e-9, reach)
-        if settled is not None and (out is None or settled < out):
-            out = settled
-    return len(tr) if out is None else out
-
-
-def estop(tr: Trace, profile: Profile) -> Tuple[dict, dict, dict]:
-    """(reverse: min speed, resume slip, resume overshoot %)."""
-    t, v, slip = tr['t'], tr['speed'], tr['slip_r']
-    on, off = estop_times(tr)
-    if on is None:
-        return _none(), _none(), _none()
-    end = _resume_end(tr, profile, off if off is not None else on)
-    window = list(range(on, max(end, on + 1)))
-    low = min(window, key=lambda i: v[i])
-    reverse = _result(v[low], low, tr, t[on], t[window[-1]])
-    if off is None:
-        return reverse, _none(t[on]), _none(t[on])
-    t_off = t[off]
-    ow = list(range(off, max(end, off + 1)))
-    i_s = max(ow, key=lambda i: slip[i])
-    rslip = _result(slip[i_s], i_s, tr, t_off, t[ow[-1]])
-    v_res = profile.speeds[profile.estop_hold_index]
-    peak = max(ow, key=lambda i: v[i])
-    rover = _result(max(0.0, (v[peak] - v_res) / v_res * 100.0), peak, tr, t_off, t[ow[-1]])
-    return reverse, rslip, rover
 
 
 def stop(tr: Trace, profile: Profile) -> Tuple[dict, dict]:
@@ -491,9 +393,8 @@ def stop(tr: Trace, profile: Profile) -> Tuple[dict, dict]:
 def metrics(tr: Trace, profile: Profile) -> Dict[str, dict]:
     """Every check's measured value (with where and over which window), before limits."""
     out = {}
-    speeds = profile.speeds
-    for k, name in ((0, 'hold_rmse_2'), (1, 'hold_rmse_6'), (2, 'hold_rmse_11')):
-        out[name] = hold_rmse(tr, profile.hold(k)) if k < len(speeds) else _none()
+    for name, k in HOLD_CHECKS:
+        out[name] = hold_rmse(tr, profile.hold(k)) if k < len(profile.speeds) else _none()
     overs, reaches = [], []
     for k in profile.first_up_holds:
         o, r = step_up(tr, profile, k)
@@ -501,12 +402,8 @@ def metrics(tr: Trace, profile: Profile) -> Dict[str, dict]:
         reaches.append(r)
     out['overshoot'], out['reach_s'] = worst(overs), worst(reaches)
     out['launch_slip'], out['launch_accel'] = launch(tr)
-    out['stepdown_undershoot'], out['stepdown_kappa'] = stepdown(tr, profile)
-    out['stepdown_lag'] = stepdown_lag(tr, profile)
-    (out['estop_reverse'], out['estop_resume_slip'],
-     out['estop_resume_overshoot']) = estop(tr, profile)
+    out['stop_lag'] = stop_lag(tr, profile)
     out['stop_error'], out['stop_kappa'] = stop(tr, profile)
-    out['hold_rmse_11b'] = hold_rmse(tr, profile.hold(profile.hold_11b_index))
     for name, r in out.items():
         if not _window_finite(tr, r, NAN_COLUMNS[name]):
             out[name] = _none(r['t0'], r['t1'])
@@ -516,13 +413,9 @@ def metrics(tr: Trace, profile: Profile) -> Dict[str, dict]:
 # the trace columns each check reads; a non-finite sample in its window makes it None (fail)
 _SPEED = ('t', 's', 'speed')
 NAN_COLUMNS = {
-    'hold_rmse_2': _SPEED, 'hold_rmse_6': _SPEED, 'hold_rmse_11': _SPEED,
-    'hold_rmse_11b': _SPEED, 'overshoot': _SPEED, 'reach_s': _SPEED,
+    'hold_rmse_4': _SPEED, 'hold_rmse_11': _SPEED, 'overshoot': _SPEED, 'reach_s': _SPEED,
     'launch_slip': _SPEED + ('slip_r',), 'launch_accel': _SPEED + ('slip_r',),
-    'stepdown_undershoot': _SPEED, 'stepdown_kappa': _SPEED + ('kappa_r',),
-    'stepdown_lag': _SPEED + ('target',),
-    'estop_reverse': _SPEED, 'estop_resume_slip': _SPEED + ('slip_r', 'target'),
-    'estop_resume_overshoot': _SPEED + ('target',), 'stop_error': _SPEED,
+    'stop_lag': _SPEED + ('target',), 'stop_error': _SPEED,
     'stop_kappa': _SPEED + ('kappa_r',),
 }
 
@@ -553,8 +446,8 @@ def closed_checks(tr: Trace, profile: Profile, finished: bool) -> set:
         return set()
     s_max, t_now = max(tr['s']), tr['t'][-1]
     out = set()
-    for k, name in ((0, 'hold_rmse_2'), (1, 'hold_rmse_6'), (2, 'hold_rmse_11')):
-        if s_max >= profile.hold(k).s1:
+    for name, k in HOLD_CHECKS:
+        if k < len(profile.speeds) and s_max >= profile.hold(k).s1:
             out.add(name)
     ups = profile.first_up_holds
     if ups and s_max >= profile.hold(ups[-1]).s1:
@@ -562,14 +455,7 @@ def closed_checks(tr: Trace, profile: Profile, finished: bool) -> set:
     i0 = launch_start(tr)
     if i0 is not None and t_now >= tr['t'][i0] + LAUNCH_WINDOW:
         out.update(('launch_slip', 'launch_accel'))
-    on, off = estop_times(tr)
-    if on is not None or s_max >= stepdown_end_s(profile):
-        out.update(('stepdown_undershoot', 'stepdown_kappa', 'stepdown_lag'))
-    if off is not None and _resume_end(tr, profile, off) < len(tr):
-        out.update(('estop_reverse', 'estop_resume_slip', 'estop_resume_overshoot'))
-    if s_max >= profile.hold(profile.hold_11b_index).s1:
-        out.add('hold_rmse_11b')
-    return out
+    return out   # stop_lag, stop_error and stop_kappa close at the finish
 
 
 def passes(name: str, value, limit: float) -> bool:
@@ -580,7 +466,7 @@ def passes(name: str, value, limit: float) -> bool:
 
 def evaluate(tr: Trace, profile: Profile, finished: bool = True,
              limits: Dict[str, float] = LIMITS, unclosed: str = 'pending') -> Dict[str, dict]:
-    """The 16 checks: {name: {value, limit, pass, unit, t, s, t0, t1}}.
+    """The checks (CHECK_NAMES): {name: {value, limit, pass, unit, t, s, t0, t1}}.
 
     `finished`: the run reached its end, every window is closed. Otherwise a check whose window
     has not closed has value None and pass None (`unclosed` 'pending': live, or an invalid run)
@@ -709,7 +595,12 @@ def stall_message(tr: Trace, t_engaged: float) -> Optional[str]:
 
 
 def estop_missing(tr: Trace, profile: Profile) -> Optional[str]:
-    """The car passed the e-stop trigger and no e-stop was raised (a stack fault)."""
+    """The car passed the e-stop trigger and no e-stop was raised (a stack fault).
+
+    Never on a profile without an e-stop (the course has none).
+    """
+    if profile.estop_trigger_s is None:
+        return None
     if not len(tr) or max(tr['s']) < profile.estop_trigger_s + ESTOP_MARGIN:
         return None
     if any(tr['emergency']):
