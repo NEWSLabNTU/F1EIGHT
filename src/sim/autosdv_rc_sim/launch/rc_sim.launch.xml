@@ -127,10 +127,15 @@
          value="$(find-pkg-share individual_params)/config/$(var vehicle_id)/autosdv_sensor_kit/imu_corrector.param.yaml"/>
   </include>
 
-  <!-- the track's start pose (generated tracks start at the origin, facing +x) -->
+  <!-- the track's start pose (generated tracks start at the origin, facing +x).
+       Not before the lane departure checker subscribes to the route: in Autoware
+       1.5.0 that subscription is VOLATILE, so a route set before it exists never
+       reaches it (no lane departure check, and a 1 Hz diagnostic that flapped the
+       graph to MRM). The route can only be set after this initialization. -->
   <node pkg="autosdv_coach_lab" exec="sim_pose_init" name="sim_pose_init" output="screen">
     <param name="x" value="0.0"/>
     <param name="y" value="0.0"/>
     <param name="yaw" value="0.0"/>
+    <param name="wait_for_route_subscriber" value="lane_departure_checker_node"/>
   </node>
 </launch>

@@ -12,7 +12,10 @@ waits until autonomous mode is available, engages, and watches /rc_sim/state.
 PASS: the car exceeded 9 m/s (the lab profile peaks at 11), then came to rest
 (|v| < 0.05 m/s for 2 s of simulated time) within STOP_TOLERANCE (1 m) of the stop line,
 in the lane (|y| < 0.5 m),
-with no MRM and no loss of autonomous availability after the engage (Task 18b). Everything
+with no MRM and no loss of autonomous availability after the engage (Task 18b), and with the
+lane departure checker running at its own rate (LANE_DEPARTURE_MIN_HZ) from the engage on: at the
+diagnostic_updater's 1 Hz fallback it has no route (it subscribed after the route was set; see
+sim_pose_init's wait_for_route_subscriber), which used to flap the graph. Everything
 is stopped by process group: SIGINT, SIGTERM, SIGKILL. Refuses ROS_DOMAIN_ID 0.
 """
 import argparse
@@ -44,6 +47,23 @@ SPEED_CONTROLLER_PARAMS = reference_params()
 # leaves room for simulated-clock races without hiding a regression (the hall-speed bug of
 # Task 18c gave 28 m past).
 STOP_TOLERANCE = 1.0
+# The lane departure checker's diagnostic during the drive, per simulated second. ~10 with a
+# route; 1 (the diagnostic_updater's fallback period) when it never received the route.
+LANE_DEPARTURE_DIAG = 'lane_departure_checker_node: lane_departure'
+LANE_DEPARTURE_MIN_HZ = 5.0
+
+
+def level_of(diag):
+    """A diagnostic's level as an int: rclpy gives a ROS `byte` as a 1-byte bytes object."""
+    lv = diag.level
+    return lv[0] if isinstance(lv, (bytes, bytearray)) else int(lv)
+
+
+def diag_rate(stamps):
+    """Messages per second over the span of `stamps` (simulated seconds), or None."""
+    if len(stamps) < 2 or stamps[-1] <= stamps[0]:
+        return None
+    return (len(stamps) - 1) / (stamps[-1] - stamps[0])
 
 
 def stop_group(proc, label):
@@ -65,6 +85,7 @@ def drive(track, timeout, on_ready, stack):
     import rclpy
     from autoware_adapi_v1_msgs.msg import LocalizationInitializationState, MrmState, OperationModeState
     from autoware_adapi_v1_msgs.srv import ChangeOperationMode, SetRoutePoints
+    from diagnostic_msgs.msg import DiagnosticArray
     from rclpy.node import Node
     from rclpy.qos import DurabilityPolicy, QoSProfile
     from std_msgs.msg import Float64MultiArray
@@ -96,8 +117,9 @@ def drive(track, timeout, on_ready, stack):
         names, status = graph['names'], graph['status']
         if names is None or status is None or len(names) != len(status.diags):
             return ['(diagnostic graph not seen)']
-        return [f'{n} ({DIAG_LEVELS.get(d.level, d.level)})'
-                for n, d in zip(names, status.diags) if d.level != 0]
+        levels = [level_of(d) for d in status.diags]
+        return [f'{n} ({DIAG_LEVELS.get(lv, lv)})'
+                for n, lv in zip(names, levels) if lv != 0]
 
     def on_mrm(m):
         if flaps['armed'] and m.state != MrmState.NORMAL:
@@ -114,6 +136,14 @@ def drive(track, timeout, on_ready, stack):
                              lambda m: graph.__setitem__('status', m), 10)
     node.create_subscription(Float64MultiArray, '/rc_sim/state',
                              lambda m: seen.__setitem__('state', list(m.data)), 10)
+    lane_departure = []   # simulated time of each checker diagnostic after the engage
+
+    def on_diagnostics(m):
+        if flaps['armed'] and seen['state'] is not None:
+            lane_departure.extend(seen['state'][0] for st in m.status
+                                  if st.name == LANE_DEPARTURE_DIAG)
+
+    node.create_subscription(DiagnosticArray, '/diagnostics', on_diagnostics, 100)
     deadline = time.monotonic() + timeout
 
     def spin_until(predicate, what):
@@ -186,8 +216,10 @@ def drive(track, timeout, on_ready, stack):
         x, y = last[1], last[2]
         ok = (vmax >= 9.0 and still_since is not None
               and abs(x - track['stop_line_s']) <= STOP_TOLERANCE and abs(y) < 0.5)
+        ld_hz = diag_rate(lane_departure)
+        checking = ld_hz is not None and ld_hz >= LANE_DEPARTURE_MIN_HZ
         steady = flaps['mrm'] == 0 and flaps['unavailable'] == 0
-        print(f"{'PASS' if ok and steady else 'FAIL'}  vmax {vmax:.2f} m/s, at rest at x {x:.2f} m "
+        print(f"{'PASS' if ok and steady and checking else 'FAIL'}  vmax {vmax:.2f} m/s, at rest at x {x:.2f} m "
               f"(stop line {track['stop_line_s']:.2f}), y {y:+.2f} m")
         if not steady:
             print(f"FAIL  after engage: {flaps['mrm']} MRM state changes (last {flaps['last_mrm']}), "
@@ -195,7 +227,12 @@ def drive(track, timeout, on_ready, stack):
                   f"(first at x {flaps.get('first_x', 0.0):.1f} m)")
             for name, n in flaps['culprits'].most_common(5):
                 print(f"      not OK at {n} of those: {name}")
-        ok = ok and steady
+        if not checking:
+            print(f"FAIL  the lane departure checker had no route: '{LANE_DEPARTURE_DIAG}' at "
+                  + (f'{ld_hz:.1f} Hz' if ld_hz is not None else f'{len(lane_departure)} messages')
+                  + f' after engage ({LANE_DEPARTURE_MIN_HZ:.0f} Hz or more expected); the route '
+                  'was set before it subscribed (sim_pose_init wait_for_route_subscriber)')
+        ok = ok and steady and checking
         return 0 if ok else 1
     finally:
         node.destroy_node()
