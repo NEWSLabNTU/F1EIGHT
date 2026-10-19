@@ -137,7 +137,7 @@
   <arg name="diagnostic_graph_aggregator_graph_path" default="" description="diagnostic graph config; empty resolves it from pose_source"/>
   <let name="resolved_diagnostic_graph_path" value="$(eval &quot;'$(var diagnostic_graph_aggregator_graph_path)' or '$(var diagnostic_graph_default)'&quot;)"/>
   <let name="component_state_monitor_topic_default"
-       value="$(eval &quot;'$(find-pkg-share autosdv_launch)/config/system/component_state_monitor/topics-mcl.yaml' if '$(var pose_source)' == 'mcl' else '$(find-pkg-share autoware_launch)/config/system/component_state_monitor/topics.yaml'&quot;)"/>
+       value="$(eval &quot;'$(find-pkg-share autosdv_launch)/config/system/component_state_monitor/topics-mcl.yaml' if '$(var pose_source)' == 'mcl' else '$(find-pkg-share autosdv_launch)/config/system/component_state_monitor/topics.yaml'&quot;)"/>
   <arg name="component_state_monitor_topic_path" default="" description="component state monitor topic list; empty resolves it from pose_source"/>
   <let name="resolved_component_state_monitor_topic_path" value="$(eval &quot;'$(var component_state_monitor_topic_path)' or '$(var component_state_monitor_topic_default)'&quot;)"/>
   <!-- Tools -->
@@ -296,9 +296,10 @@
     </include>
   </group>
 
-  <!-- API -->
+  <!-- API. AutoSDV: our fork of tier4_autoware_api_component, without the
+       vehicle door adapter (the vehicle has no doors). -->
   <group if="$(var launch_api)">
-    <include file="$(find-pkg-share autoware_launch)/launch/components/tier4_autoware_api_component.launch.xml">
+    <include file="$(find-pkg-share autosdv_launch)/launch/components/autosdv_api_component.launch.xml">
       <arg name="use_sim_time" value="$(var use_sim_time)"/>
       <arg name="vehicle_model" value="$(var vehicle_model)"/>
     </include>

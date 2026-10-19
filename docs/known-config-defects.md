@@ -78,7 +78,7 @@ The golf cart measured this one live: ERROR on 100% of 3,219 reports.
 
 ---
 
-## 3. Autoware's `system_monitor` runs on stock defaults, which assume a desktop
+## 3. Autoware's `system_monitor` runs on stock defaults, which assume a desktop — FIXED 2026-10-19 (needs a relaunch to confirm)
 
 We do ship `config/system/system_monitor/*.param.yaml`, but
 `components/autosdv_system_component.launch.xml` passes
@@ -101,8 +101,20 @@ monitors a parameter cannot fix, which needed a local copy of
 `tier4_system_component.launch.xml`, because `tier4_system_launch` hardcodes its
 include of `autoware_system_monitor` and takes no per-monitor argument.
 
-Not fixed here, because the fix should be checked against a running graph on the
-board rather than reasoned about: the numbers above are the golf cart's.
+Measured on cars A, B and C (AGX Orin, 2026-10-19), which matched the table, plus
+two more: `cpu_monitor`'s "CPU Thermal Throttling" is ERROR "No message was set"
+(the installed `arm_cpu_monitor` build does not implement it), and the
+`voltage_monitor` reading is the Tegra RTC printing no `batt_status` line, not
+the coin cell. The installed `gpu_monitor` is the `unknown_gpu_monitor` build.
+
+**Fix.** `autosdv_system_component.launch.xml` passes `launch_system_monitor:=false`
+to `tier4_system_launch` and runs `components/jetson_system_monitor.launch.xml`
+instead (same namespace, container and node names), with our parameter files,
+refreshed from 1.5.0. It starts cpu, mem, net, ntp and process monitors;
+`launch_hdd_monitor`, `launch_gpu_monitor` and `launch_voltage_monitor` default
+to false. `net_monitor` watches `lo` and `eno1` only. Left: "CPU Thermal
+Throttling" stays ERROR (no parameter turns it off). None of these items is in
+the diagnostic graph, so none ever gated autonomous mode.
 
 ---
 

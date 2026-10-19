@@ -1,9 +1,18 @@
 /**:
   ros__parameters:
-      devices: ["*"]
-      monitor_program: "greengrass"
-      enable_traffic_monitor: true
-      crc_error_check_duration: 1
-      crc_error_count_threshold: 1
-      reassembles_failed_check_duration: 1
-      reassembles_failed_check_count: 1
+    # AutoSDV: autoware_launch 1.5.0's file, except for `devices`. The stock
+    # ["*"] checks every interface, and any one without IFF_RUNNING turns
+    # "Network Usage" ERROR for good; an AGX Orin always has some down
+    # (l4tbr0, docker0, usb0/usb1, can0/can1). Name only the interfaces every
+    # car has and uses: lo (DDS) and eno1 (the LiDAR link). A listed interface
+    # that does not exist is a WARN ("no such device") under "Network
+    # Connection", so do not list one a car may lack (Wi-Fi names differ).
+    devices: ["lo", "eno1"]
+    monitor_program: "greengrass"
+    enable_traffic_monitor: true
+    crc_error_check_duration: 1
+    crc_error_count_threshold: 1
+    reassembles_failed_check_duration: 1
+    reassembles_failed_check_count: 1
+    udp_buf_errors_check_duration: 1
+    udp_buf_errors_check_count: 1
