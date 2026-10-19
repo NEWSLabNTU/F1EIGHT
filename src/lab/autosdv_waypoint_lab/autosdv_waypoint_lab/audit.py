@@ -281,6 +281,8 @@ class Audit:
     bag: str
     car: str = ''
     team: str = ''
+    vehicle_model: str = ''      # the bag's model and its source commit ('' before it was recorded)
+    vehicle_model_commit: str = ''
     bench: bool = False
     check_ok: bool = False
     check_reasons: List[str] = field(default_factory=list)
@@ -320,7 +322,8 @@ def build_audit(bag: str, verdict, m: rg.RouteMetrics, sc: Optional[rg.RouteScor
     meta = meta or {}
     a = Audit(os.path.basename(os.path.normpath(bag)), car=str(meta.get('car_id') or ''),
               team=str(meta.get('team_id') or ''), bench=bool(meta.get('bench')),
-              reference=reference)
+              reference=reference, vehicle_model=str(meta.get('vehicle_model') or ''),
+              vehicle_model_commit=str(meta.get('vehicle_model_commit') or ''))
     a.check_ok, a.check_reasons, a.check_warnings = verdict.ok, list(verdict.reasons), list(verdict.warnings)
     a.notes = list(m.notes)
     if sc is None and m.ungraded:
@@ -380,8 +383,16 @@ def _run_violations(a: Audit, m: rg.RouteMetrics, s: Series) -> None:
             a.violations.append(f'disengaged at {t - m.t_engage:.1f} s after engage, before the finish')
 
 
+def model_label(a: Audit) -> str:
+    """'  model team3_vehicle@1a2b3c4' for the header, '' for a bag recorded before models."""
+    if not a.vehicle_model:
+        return ''
+    return f'  model {a.vehicle_model}' + (f'@{a.vehicle_model_commit[:7]}' if a.vehicle_model_commit else '')
+
+
 def format_audit(a: Audit, m: Optional[rg.RouteMetrics] = None) -> str:
-    who = f'car {a.car or "?"}  team {a.team or "?"}' + ('   BENCH RUN (simulated car)' if a.bench else '')
+    who = f'car {a.car or "?"}  team {a.team or "?"}' + model_label(a) \
+        + ('   BENCH RUN (simulated car)' if a.bench else '')
     out = [f'AUDIT  {a.bag}   {who}']
     check = 'ACCEPT' if a.check_ok else 'REJECT'
     grade = 'valid' if a.grade_valid else 'INVALID'
@@ -493,7 +504,7 @@ def plot_audit(png: str, a: Audit, m: rg.RouteMetrics, sc: Optional[rg.RouteScor
         why = a.violations[0] if a.violations else 'invalid'
         more = f'  (+{len(a.violations) - 1} more)' if len(a.violations) > 1 else ''
         head = f'INVALID: 0 points (the metrics alone {a.raw_total:.2f} / {a.max_total:g})\n{why}{more}'
-    fig.suptitle(f'{a.bag}   car {a.car or "?"}  team {a.team or "?"}{mode}\n{head}',
+    fig.suptitle(f'{a.bag}   car {a.car or "?"}  team {a.team or "?"}{model_label(a)}{mode}\n{head}',
                  fontsize=14, fontweight='bold', color=C_TARGET if a.valid else C_BAD, y=0.95)
 
     # ---- panel 1: speed vs time

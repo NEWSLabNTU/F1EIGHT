@@ -72,8 +72,24 @@ ros2 launch autosdv_launch autosdv.launch.yaml imu_source:=zed camera_model:=zed
 ```bash
 just launch "lidar_model:=robin-w"   # Robin-W Solid-State (default)
 just launch "lidar_model:=vlp32c"    # Velodyne VLP-32C
+just launch "lidar_model:=vlp16"     # Velodyne VLP-16
 just launch "lidar_model:=cube1"     # Blickfeld Cube1
 ```
+
+The VLP-16 driver publishes in the `vlp16` frame. The sensor kit defines a
+fixed transform from `sensor_kit_base_link` to `vlp16` in
+`src/sensor_kit/autosdv_sensor_kit_launch/autosdv_sensor_kit_description/urdf/sensor_kit.xacro`.
+For the default vehicle, adjust the `sensor_kit_base_link.vlp16` entry in
+`src/param/autoware_individual_params/individual_params/config/default/autosdv_sensor_kit/sensor_kit_calibration.yaml`.
+Translation (`x`, `y`, `z`) is in metres; rotation (`roll`, `pitch`, `yaw`) is
+in radians. The current values copy the VLP-32C pose: zero translation, roll,
+and pitch, with yaw `-0.2210`. Replace these initial values with the measured
+VLP-16 mounting pose.
+
+The description package's `config/sensor_kit_calibration.yaml` also contains
+a VLP-16 entry, with an all-zero pose. Normal vehicle launch loads the
+`individual_params` calibration from `config/<vehicle_id>/<sensor_model>/`,
+so edit that vehicle's configuration and restart the launch to apply it.
 
 ### Camera Models
 
@@ -174,4 +190,3 @@ just launch  # cuda_ndt is the default pose_source
 - Tuned for VLP-32C LiDAR on COSS map (NTU Campus)
 - Resolution: 2.0m, Score threshold: 2.2, Voxel size: 0.5m, Points: 3000
 - See `docs/research/localization/ndt_parameter_tuning_coss_map.md` for tuning details
-

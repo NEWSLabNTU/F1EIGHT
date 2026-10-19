@@ -131,11 +131,11 @@ def test_localization_quality_against_the_true_pose():
     assert au.localization_quality({g.KINEMATIC: ekf}) is None     # no true pose: a car bag
 
 
-# ---- the mock camera
+# ---- the mock camera (autosdv_aruco_localization's) on a Lab 2 course
 
 def test_mock_camera_renders_boards_the_detector_reads():
     cv2 = pytest.importorskip('cv2')
-    from autosdv_waypoint_lab import mock_camera_node as mc
+    from autosdv_aruco_localization import mock_camera_node as mc
     from autosdv_waypoint_lab.course import load_course
     c = load_course(COURSE)
     d = mc.aruco_dictionary(c.dictionary)
@@ -146,7 +146,7 @@ def test_mock_camera_renders_boards_the_detector_reads():
     # the boards the coverage model (marker_sim) puts in view from the start box;
     # the layout guarantees at least two there
     from autosdv_waypoint_lab.course import make_osm, parse_osm_landmarks
-    from autosdv_waypoint_lab.marker_sim import CameraModel, visible
+    from autosdv_aruco_localization.marker_sim import CameraModel, visible
     model = CameraModel(marker_size=c.marker_size)
     in_view = {int(k) for k, lms in parse_osm_landmarks(make_osm(c)).items()
                if any(visible(model, pose[0], pose[1], pose[3], lm) for lm in lms)}
@@ -167,22 +167,6 @@ def test_mock_camera_renders_boards_the_detector_reads():
             continue
         _, _, tv = cv2.solvePnP(obj, cs[0], k, None, flags=cv2.SOLVEPNP_IPPE_SQUARE)
         assert np.linalg.norm(tv.ravel() - true) < 0.1, (i, tv.ravel(), true)
-
-
-def test_mock_camera_skips_boards_behind_or_facing_away():
-    from autosdv_waypoint_lab import mock_camera_node as mc
-    from autosdv_waypoint_lab.course import Marker
-    cam = mc.Camera(960, 600, 403.0)
-    ahead = Marker(1, 3.0, 0.0, 0.25, math.pi)       # 3 m ahead, facing the car
-    away = Marker(2, 3.0, 0.0, 0.25, 0.0)            # 3 m ahead, facing away
-    behind = Marker(3, -3.0, 0.0, 0.25, 0.0)         # behind, facing the car
-    pose = (0.0, 0.0, 0.0, 0.0)
-    assert mc.board_in_view(cam, pose, ahead, 12.0)
-    assert not mc.board_in_view(cam, pose, away, 12.0)
-    assert not mc.board_in_view(cam, pose, ahead, 2.0)
-    pats = mc.marker_patterns(mc.aruco_dictionary('DICT_5X5_1000'), [1, 2, 3])
-    _, drawn = mc.render(cam, pose, [ahead, away, behind], 0.38, pats)
-    assert drawn == [1]
 
 
 def test_bench_frame_is_the_recorded_size():

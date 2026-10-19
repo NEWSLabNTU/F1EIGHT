@@ -21,7 +21,7 @@ Everything else follows from (R, leg), and this module derives all of it:
 
 The boards come from a coverage search with marker_sim's camera (the bench's
 detector model: 100 deg hfov, 5 m = ar_tag distance_threshold, 60 deg
-incidence, 0.38 m marker). Candidates stand on a GRID-metre grid, facing every
+incidence, 0.4667 m marker). Candidates stand on a GRID-metre grid, facing every
 YAW_STEP, at least CLEARANCE from the path. The goals, in order:
 
   1. every start-box placement (+-0.3 m, +-10 deg) sees >= START_BOX_MIN boards,
@@ -60,7 +60,7 @@ from typing import Dict, List, Optional, Tuple
 import numpy as np
 
 from autosdv_waypoint_lab import course as course_mod
-from autosdv_waypoint_lab.marker_sim import CameraModel, coverage, visible
+from autosdv_aruco_localization.marker_sim import CameraModel, coverage, visible
 from autosdv_waypoint_lab.path import CoursePath, Path, turn_spans
 
 COURSE_NAME = 'lab2_uturn'
@@ -70,8 +70,8 @@ V_REF = 0.8
 DECEL = 0.3                 # m/s^2, waypoint_path_publisher's end ramp (for the header)
 SPACING_LEG = 0.25          # m between waypoints on the legs
 SPACING_ARC = 0.10          # m (at most) between waypoints on the arc
-MARKER_SIZE = 0.38
-MARKER_HEIGHT = 0.25
+MARKER_SIZE = 0.4667
+MARKER_HEIGHT = 0.30
 DICTIONARY = 'DICT_5X5_1000'
 FIRST_ID = 24               # placeholder ids; the survey writes the real ones
 
@@ -588,13 +588,13 @@ def course_yaml(lay: Layout) -> str:
         f'#   stop line    ({ex:.2f}, {ey:.2f}): level with the start box, in the other lane',
         f'# Floor: x {x0:.1f} to {x1:.1f}, y {y0:.1f} to {y1:.1f} (route and boards), clear.',
         '#',
-        '# Boards (DICT_5X5_1000, 0.38 m black square on a 500 mm plate standing on',
-        f'# the floor, so the marker centre is 0.25 m up), measured from the start box. {n} boards:',
+        '# Boards (DICT_5X5_1000, 0.4667 m black square on a 600 mm board standing on',
+        f'# the floor, so the marker centre is {MARKER_HEIGHT:g} m up), measured from the start box. {n} boards:',
     ]
     h += board_lines(lay, '#   ')
     h += [
         f'# Why {n}: a coverage search (marker_sim.visible: hfov 100 deg, range 5 m =',
-        '# ar_tag distance_threshold, 60 deg incidence limit, 0.38 m marker) over',
+        '# ar_tag distance_threshold, 60 deg incidence limit, 0.4667 m marker) over',
         f'# boards on a {GRID} m grid facing every {YAW_STEP:g} deg, each at least {CLEARANCE} m from',
         '# the car\'s track (1 m clear of the car), for the fewest that give: the start box',
         f'# (+-0.3 m, +-10 deg) sees >= {START_BOX_MIN} boards; no blind stretch over {GAP_MAX:g} m;',
@@ -625,7 +625,7 @@ def course_yaml(lay: Layout) -> str:
         f'start_pose: {{x: {sx:.3f}, y: {sy:.3f}, yaw: {lay.start[2]:.4f}}}',
         f'marker_size: {MARKER_SIZE}',
         f'dictionary: {DICTIONARY}',
-        '# 500 mm plate standing on the floor, the 0.38 m black square centred on it',
+        '# 600 mm board standing on the floor, the 0.4667 m black square centred on it',
         f'marker_height: {MARKER_HEIGHT}',
         '# what make-uturn generated this course from (the tests read it; the stack does not)',
         f'uturn: {{radius: {r:g}, leg: {L:g}}}',
@@ -688,7 +688,7 @@ def spec_block(lay: Layout) -> str:
         f'Start box (rear axle): ({sx:.2f}, {sy:.2f}), car facing +x. '
         f'Stop line (rear axle): ({ex:.2f}, {ey:.2f}). '
         f'Turn centre ({cx:.2f}, {cy:.2f}), apex ({ax:.2f}, {ay:.2f}).',
-        f'Boards: {len(lay.boards)} (0.38 m DICT_5X5_1000 on 500 mm floor plates; ids are placeholders):',
+        f'Boards: {len(lay.boards)} (0.4667 m DICT_5X5_1000 on 600 mm floor boards; ids are placeholders):',
         *rows,
     ])
 

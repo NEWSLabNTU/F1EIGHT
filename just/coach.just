@@ -143,7 +143,7 @@ speed-steps STEPS="0,0.3,0.6,0" HOLD="4.0" MAX_DISTANCE="2.5":
 record-part1 *ARGS:
     #!/usr/bin/env bash
     source scripts/env.sh
-    unset DISPLAY                       # the ZED (its IMU) cannot have one: scripts/testing/lab2/camera_display.sh
+    unset DISPLAY                       # the ZED (its IMU) cannot have one: scripts/camera_display.sh
     exec python3 scripts/testing/lab2/record_part1.py "$@"
 
 # Saves the running actuator's parameters (init_pwm, brake_pwm, min/max_pwm,

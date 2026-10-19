@@ -16,12 +16,43 @@
 # desktop already running on :1.
 #
 # gnome-shell is a compositor and needs OpenGL. Xvnc alone offers only llvmpipe,
-# so the shell renders through VirtualGL on the real X server. That server must
-# stay logged in: stop the desktop on :1 and this session loses its GPU.
+# so the shell renders through VirtualGL's EGL back end, straight on the GPU with
+# no X server behind it. The GLX back end on the car's display (:1) is worse on
+# both counts: it needs that desktop logged in, and when :1 is Xwayland the shell
+# starts but composites no client windows -- apps run and their windows stay
+# invisible. AUTOSDV_VGL_DISPLAY=:1 still selects it.
+#
+# The desktop on the car's display may be a Wayland session (GDM's default), and
+# three things then leak from it into this one. WAYLAND_DISPLAY sends GTK to the
+# car's compositor, so gnome-session's acceleration check finds "no X11 display"
+# and the session fails at once. GNOME_SETUP_DISPLAY (the car's Xwayland) wins
+# over DISPLAY in the settings daemons, so gsd-xsettings finds the car's XSETTINGS
+# manager, exits, and takes the session with it. And mutter, given no backend
+# flag, asks logind for its session -- the car's Wayland session -- and tries to
+# become a Wayland compositor ("Could not take control: Device or resource
+# busy"). gnome-session
+# starts the shell from org.gnome.Shell.desktop, so this session gets a private
+# copy of that file whose Exec adds --x11, found first on XDG_DATA_DIRS.
 unset SESSION_MANAGER
 unset DBUS_SESSION_BUS_ADDRESS
+unset WAYLAND_DISPLAY
+unset GNOME_SETUP_DISPLAY
 export XDG_SESSION_TYPE=x11
+export GDK_BACKEND=x11
 export XDG_CURRENT_DESKTOP=ubuntu:GNOME
 export GNOME_SHELL_SESSION_MODE=ubuntu
-exec dbus-run-session -- vglrun -d "${AUTOSDV_VGL_DISPLAY:-:1}" \
-    gnome-session --session=ubuntu --builtin
+vnc_data="$HOME/.vnc/xdg-data${DISPLAY#*:}"
+mkdir -p "$vnc_data/applications"
+#
+# Only the shell runs under vglrun. vglrun works by LD_PRELOAD, which every
+# child inherits: wrap the whole session and every terminal on this desktop
+# carries libvglfaker into whatever it starts, and the ZED, whose Argus buffers
+# go through EGL, stops at "CAMERA OPENING" with "(Argus) Error BadParameter".
+# Terminals are D-Bus activated, so they inherit the session's environment, not
+# the shell's; a GL viewer started from one wants `vglrun` explicitly.
+vgl_display="${AUTOSDV_VGL_DISPLAY:-egl}"
+sed "s|^Exec=/usr/bin/gnome-shell\$|Exec=/usr/bin/vglrun -d $vgl_display /usr/bin/gnome-shell --x11|" \
+    /usr/share/applications/org.gnome.Shell.desktop \
+    > "$vnc_data/applications/org.gnome.Shell.desktop"
+export XDG_DATA_DIRS="$vnc_data:${XDG_DATA_DIRS:-/usr/local/share:/usr/share}"
+exec dbus-run-session -- gnome-session --session=ubuntu --builtin

@@ -52,3 +52,6 @@ setup/.markers/
 
 # Marker surveys from `just lab2 survey ORIGIN_ID` (dated directories, and latest)
 /surveys/
+
+# Lab 2 students' vehicle models (the handout's packages, renamed): never committed here
+src/lab2_vehicles/

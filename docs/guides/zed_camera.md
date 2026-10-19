@@ -119,9 +119,11 @@ just launch "enable_zed_object_detection:=true"
 An empty `DISPLAY=` or a `DISPLAY` with no X server behind it (`DISPLAY=:0` when
 the desktop is `:1`) makes Argus fail, and the ZED wrapper then waits forever at
 `=== CAMERA OPENING ===`. Unset it or point it at a live server: `unset DISPLAY`,
-or `export DISPLAY=:1` (check with `xdpyinfo`). `just lab2 survey` and
-`just lab2 loc-check` test the connection, warn, and unset a dead `DISPLAY` for
-the launch.
+or `export DISPLAY=:1` (check with `xdpyinfo`). `just aruco-map survey` and
+`check` (and Lab 2's `survey` and `loc-check`, which run them) test the
+connection, warn, and unset `DISPLAY` for the launch, handing a working one to
+the viewers only; they also take VirtualGL's `libvglfaker` out of `LD_PRELOAD`
+(`scripts/camera_display.sh`).
 
 ### Hardware Acceleration Required (VNC Sessions)
 

@@ -26,6 +26,8 @@ setup(
         (os.path.join('share', package_name, 'launch'), glob('launch/*.launch.xml')),
         (os.path.join('share', package_name, 'rviz'), glob('rviz/*.rviz')),
         (os.path.join('share', package_name, 'config'), glob('config/*.yaml')),
+        # a compatibility link to autosdv_aruco_localization's: ar_tag.param.yaml files
+        # generated before the ArUco localization moved there name this path
         (os.path.join('share', package_name, 'config', 'dictionaries'),
          glob('config/dictionaries/*.dict')),
         (os.path.join('share', package_name, 'config', 'part1'), glob('config/part1/*.yaml')),
@@ -41,20 +43,16 @@ setup(
         'console_scripts': [
             'waypoint_path_publisher = autosdv_waypoint_lab.waypoint_path_publisher_node:main',
             'path_tracker = autosdv_waypoint_lab.path_tracker_node:main',
-            'start_pose_init = autosdv_waypoint_lab.start_pose_init_node:main',
             'localization_monitor = autosdv_waypoint_lab.localization_monitor_node:main',
-            'virtual_marker_localizer = autosdv_waypoint_lab.virtual_marker_localizer_node:main',
             'make_course_map = autosdv_waypoint_lab.course:main',
             'lab2_grade_run = autosdv_waypoint_lab.grading:main',
-            'lab2_camera_check = autosdv_waypoint_lab.camera_check:main',
-            'loc_check = autosdv_waypoint_lab.loc_check_node:main',
             'lab2_record = autosdv_waypoint_lab.record:main',
             'lab2_check_bags = autosdv_waypoint_lab.check_bags:main',
             'lab2_steer_cal = autosdv_waypoint_lab.steer_cal:main',
+            'lab2_vehicle_gate_probe = autosdv_waypoint_lab.vehicle_gate:main',
             'lab2_make_uturn = autosdv_waypoint_lab.uturn:main',
             'lab2_make_straight = autosdv_waypoint_lab.straight:main',
             'lab2_audit = autosdv_waypoint_lab.audit:main',
-            'mock_aruco_camera = autosdv_waypoint_lab.mock_camera_node:main',
             'bench_straight_driver = autosdv_waypoint_lab.bench_straight_driver_node:main',
             # Lab 2 Part 1 on the RC simulator (docs/design/lab2-part1-sim-design.md)
             'lab2_make_part1_course = autosdv_waypoint_lab.part1.course:main',

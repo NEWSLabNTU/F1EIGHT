@@ -1,0 +1,25 @@
+# A copy of the Lab 2 handout's lab2_speed/config/speed_pid_car.yaml (ntu-sdv-course
+# 2026/labs/Lab2/handout), so `just lab2 new-team` seeds a team model's config/car_*/ tuning
+# from the pinned tree. Keep the two equal.
+#
+# The REAL car's SpeedPID parameters (Part 2): the same class as the simulated car's
+# (config/speed_pid_part1.yaml). Given and tested on the car bench (`python3 selfcheck.py --car`
+# in the handout's lab2_speed); a team may adjust them on the car. The car's motor gives about
+# 0.03 m/s per count where the simulated car gives 0.14, so gains in counts per m/s are about
+# five times the simulated car's.
+# ff_deadband and ff_gain are NOT set here: each car's calibration goes into that car's
+# config/car_<x>/speed_controller.param.yaml of the team's model, under speed_controller_params.
+kp: 20.0
+ki: 25.0
+kd: 0.0
+integral_limit: 10.0
+error_limit: 0.5
+integral_band: 0.25
+enable_conditional_integration: true
+derivative_filter_alpha: 0.15
+max_pwm_offset: 75                # fits every car: car B has 470 - 395 = 75 counts above neutral
+max_brake_offset: 10
+kp_brake: 20.0
+brake_enter: 0.2
+brake_exit: 0.05
+brake_deadband: 5

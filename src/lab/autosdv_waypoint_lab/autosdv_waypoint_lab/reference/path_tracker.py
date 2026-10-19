@@ -19,6 +19,20 @@ import math
 from autosdv_waypoint_lab.tracker_api import TrackerCommand
 
 
+def target_point(path, s: float):
+    """The pursuit target at arc length s. Past the path's end it continues along the final
+    heading instead of stopping on the last waypoint (Path.point_at's clamp): a target
+    pinned to the end point shrinks the effective lookahead to the distance left, so near
+    the stop a few centimetres of offset steered to full lock, and once the car was past the
+    end the target was behind it and the lock flipped (car C, lab2_straight_2m_3)."""
+    end = path.s[-1]
+    if s <= end:
+        x, y, _ = path.point_at(s)
+        return x, y
+    x, y, yaw = path.point_at(end)
+    return x + (s - end) * math.cos(yaw), y + (s - end) * math.sin(yaw)
+
+
 class PathTracker:
     def __init__(self, params: dict, vehicle):
         self.wheel_base = vehicle.wheel_base
@@ -37,7 +51,7 @@ class PathTracker:
         v = max(state.speed, 0.0)
         lookahead = min(max(self.k_lookahead * v + self.lookahead_min, self.lookahead_min),
                         self.lookahead_max)
-        tx, ty, _ = path.point_at(proj.s + lookahead)
+        tx, ty = target_point(path, proj.s + lookahead)
         dx, dy = tx - state.x, ty - state.y
         alpha = math.atan2(dy, dx) - state.yaw
         dist = max(math.hypot(dx, dy), 1e-3)

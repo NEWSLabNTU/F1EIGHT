@@ -1,6 +1,6 @@
-# GENERATED from course.yaml by make_course_map; edit that, not this.
+# GENERATED from course.yaml by make_marker_map; edit that, not this.
 /**:
   ros__parameters:
-    dictionary: "$(find-pkg-share autosdv_waypoint_lab)/config/dictionaries/DICT_5X5_1000.dict"
-    marker_size: 0.38
+    dictionary: "$(find-pkg-share autosdv_aruco_localization)/config/dictionaries/DICT_5X5_1000.dict"
+    marker_size: 0.4667
     target_tag_ids: ['24', '25', '26', '27']

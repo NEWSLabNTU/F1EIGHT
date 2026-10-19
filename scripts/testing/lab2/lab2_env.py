@@ -6,7 +6,7 @@ Pure functions over an environment mapping and the filesystem, so the unit tests
     lab2_home(env)          ~/lab2, or $LAB2_HOME: the settings file, the Part 1
                             submission, the team directories and the reference bag
     display_works(d)        does an X server answer on d (xdpyinfo, else xset, else
-                            the socket): the probe `just lab2 loc-check` uses
+                            the socket): the probe `just aruco-map check` uses
     pick_display(env)       Part 2: $DISPLAY if it answers, else :1 (the car's desktop,
                             seen over RDP) if it answers, else headless
     tmux_plan(env)          started over SSH and not inside tmux: re-run inside tmux

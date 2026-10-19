@@ -1,29 +1,31 @@
 #!/usr/bin/env python3
-"""Lab 2 vehicle-bench gate: does the team's SpeedPID drive the graded route (lab2_uturn)?
+"""Lab 2 vehicle gate: may this vehicle model go on a car?
 
-Each route (by default the one graded route) starts a fresh vehicle bench (`just lab2 bench`: the car's actuator
-with the SpeedPID plug-in, the EKF, the reference tracker, the MRM path, and a
-plant model for the car), engages, waits for the run to finish and prints one
-PASS or FAIL line. Exit status is the number of FAILs. A team has to pass
-before it gets car time.
+Two halves, in order (docs/design/lab2-team-vehicle-models.md):
 
-    just lab2 gate submission:=~/lab2/B12345678_lab_2_1   # lab2_speed + car file + calibration
-    just lab2 gate speed_controller_class:=lab2_speed.speed_pid:SpeedPID \\
-                   "speed_controller_params:={kp: 20.0, ki: 25.0}"
-    just lab2 gate --only hall_demo              # another course instead
+  safety  vehicle_gate.py: the model in the RC simulator against EACH car's ESC points
+          (neutral at rest and after a stop, the control_cmd watchdog, MRM, emergency,
+          never arming reverse). A model that fails is not driven on the route.
+  route   for each route (by default the one graded route) a fresh vehicle bench
+          (`just lab2 bench`: the model's vehicle interface, the EKF, the reference
+          tracker, the MRM path, and a plant model for the car), engaged, watched to the
+          finish; one PASS or FAIL line.
+
+    just lab2 gate                                  the reference model, autosdv_vehicle
+    just lab2 gate vehicle_model:=team3_vehicle     a team's (team:=3 says the same)
+    just lab2 gate ... --cars car_a                 the safety half on one car
+    just lab2 gate ... --only hall_demo             another course instead
     just lab2 gate --list
 
-Arguments after the options go to the bench's launch file unchanged, which is
-how a team's SpeedPID, its parameters and its lookahead file are passed. With
-none, the launch file's defaults apply (on the student branch: the stub, which
-fails).
+A model must pass the gate before it goes on a car: a rule the TA checks, not something
+`just lab2 run` enforces. Exit status is the number of FAILs. Arguments after the options go to the bench's launch file unchanged.
 
 A route PASSES when all of these hold:
 
   finished   the path publisher reports the run finished with every lap done,
              and the car is at rest afterwards (timeout: --timeout s)
   no MRM     the MRM state stayed NORMAL for the whole run
-  clean      the actuator never reported a SpeedPID fault (an exception or a
+  clean      the actuator never reported a speed controller fault (an exception or a
              non-finite PWM puts the motor in neutral and shows as
              `...:controller_fault` on ~/debug/mode)
   moving     progress is not stalled: 0.5 m within 20 s of the engage
@@ -95,7 +97,7 @@ def judge(v_ref, speeds, finished, laps_done, laps, mrm, faults, stalled, at_res
         why.append(localization)
         stalled, timed_out = False, False
     if faults:
-        why.append(f'SpeedPID fault ({faults[0]})')
+        why.append(f'speed controller fault ({faults[0]})')
     if mrm:
         # `mrm` is True, or the monitor's one-line description of what raised it.
         why.append('MRM raised' + (f' ({mrm})' if isinstance(mrm, str) else ''))
@@ -277,12 +279,12 @@ def run_route(rclpy, mon, env, workdir, route, extra, timeout):
             loc = localization_problem(mon.kin_first, mon.kin_last, launched, time.monotonic(),
                                      bench.logdir)
             result.update(ok=False, why=[loc] if loc else [
-                'stack never became available (the SpeedPID may not '
+                'stack never became available (the vehicle model may not '
                 f'load; see {bench.logdir}/launch.log)'])
             return result
         problem = load_error(bench.logdir)
         if problem:
-            result.update(ok=False, why=[f'the actuator refused your SpeedPID: {problem}'])
+            result.update(ok=False, why=[f'the actuator refused its speed controller: {problem}'])
             return result
         mon.speeds, mon.recording = [], True
         if not wc.engage(rclpy, mon, env):
@@ -335,6 +337,10 @@ def main():
     ap.add_argument('--list', action='store_true')
     ap.add_argument('--timeout', type=float, default=150.0, help='per route [s]')
     ap.add_argument('--workdir', default=str(REPO / 'tmp/lab2_bench_gate'))
+    ap.add_argument('--cars', default='', help='the safety half on these cars only (comma list; '
+                    'default every car_* instance)')
+    ap.add_argument('--skip-safety', action='store_true',
+                    help='the route half only (debugging)')
     args, extra = ap.parse_known_args()
     if args.list:
         print('\n'.join(ROUTES))
@@ -353,6 +359,20 @@ def main():
     env.setdefault('LAB2_WEB_ADDR', '127.0.0.1:8091')
     workdir = Path(args.workdir)
     workdir.mkdir(parents=True, exist_ok=True)
+    import vehicle_gate as vg
+    model, _ = vg.split(extra)
+    if not any(a.startswith('vehicle_model:=') for a in extra):
+        extra.append(f'vehicle_model:={model}')
+    safety_ok, safety = True, []
+    if not args.skip_safety:
+        cars = [c for c in args.cars.split(',') if c] or vg.cars()
+        safety_ok, safety = vg.run_safety(model, cars, workdir / 'safety', env,
+                                          say=lambda m: print(m, flush=True))
+        print('', flush=True)
+        if not safety_ok:
+            print(f'route not run: {model} failed the safety half', flush=True)
+            print('\n  -> GATE FAILED')
+            return 1
     print('launch args: ' + (' '.join(extra) or '(defaults)'), flush=True)
     rclpy, mon = make_monitor()
     results = []
@@ -363,7 +383,7 @@ def main():
             results.append(res)
             if res['ok']:
                 detail = (f"{res['laps_done']}/{res['laps']} laps in {res['seconds']} s, median "
-                          f"{res['median']} m/s, peak {res['peak']} m/s, no MRM, SpeedPID clean")
+                          f"{res['median']} m/s, peak {res['peak']} m/s, no MRM, controller clean")
             else:
                 detail = '; '.join(res['why'])
             print(f"{'PASS' if res['ok'] else 'FAIL'}  {res['route']}: {detail}", flush=True)
@@ -373,7 +393,7 @@ def main():
     (workdir / 'result.json').write_text(json.dumps(results, indent=2))
     fails = sum(1 for r in results if not r['ok'])
     print(f'\n{len(results) - fails}/{len(results)} routes passed'
-          + ('  -> GATE PASSED' if not fails else '  -> GATE FAILED'))
+          + ('  -> GATE PASSED' if not fails and safety_ok else '  -> GATE FAILED'))
     return fails
 
 

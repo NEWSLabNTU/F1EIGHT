@@ -1,0 +1,126 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<!--
+  Survey alignment (optional; `just aruco-map align DIR` with a route): the
+  localization stack on the survey's map in the origin board's frame (its
+  STAGE-1 copy), for scripts/aruco_map/survey_align.py, which seeds the EKF
+  from the boards it sees, records the localized poses while someone drives
+  the car straight along the route's taped first leg, and writes the map into
+  the route's start-box frame. Lab 2's `just lab2 survey-align` runs it with
+  the lab's route.
+
+    car (bench:=false), like aruco_loc_check.launch.xml:
+      ZED -> ar_tag_based_localizer ─┐
+      velocity_report + ZED IMU -> gyro_odometer ─┴> ekf_localizer -> /localization/kinematic_state
+      the actuator as a DRY RUN (it never writes the PCA9685), no tracker, no
+      path publisher, no gate: nothing here can drive the car. Drive it with
+      the transmitter, the selector switch on the joystick.
+
+    bench (bench:=true), no car (Lab 2's vehicle bench: autosdv_coach_lab's
+    plant, autosdv_waypoint_lab's straight driver):
+      vehicle_bench_plant (starts at truth_dir's start_pose)
+        -> mock_aruco_camera renders truth_dir's boards from the TRUE pose
+        -> the real ar_tag_based_localizer on the stage-1 map (course_dir)
+      bench_straight_driver stands in for the TA's transmitter: once survey-align
+      says ready, it drives the plant straight for `distance` m. It refuses to
+      run where the actuator publishes (the car).
+
+  start_pose_init is off: the stage-1 map's frame is the origin board's, and
+  nothing says where the start box is in it until survey-align has seen the
+  boards.
+-->
+<launch>
+  <arg name="vehicle_id"
+       description="REQUIRED: which car, car_a, car_b or car_c: individual_params/config/VEHICLE_ID (calibration, autosdv_vehicle/actuator.param.yaml, autosdv.preset.yaml, whose sensor_suite the kit uses)"/>
+  <arg name="course_dir" description="the stage-1 course directory (SURVEY/stage1)"/>
+  <arg name="bench" default="false" description="true: the vehicle bench, no car"/>
+
+  <!-- bench only -->
+  <arg name="truth_dir" default="" description="bench: the course whose boards the mock camera renders (the field's truth)"/>
+  <arg name="distance" default="3.0" description="bench: metres the driver drives"/>
+  <arg name="speed" default="0.3" description="bench: m/s"/>
+  <arg name="camera_rate" default="15.0"/>
+  <arg name="actuator_param_overrides"
+       default="$(find-pkg-share autosdv_waypoint_lab)/config/actuator_lab2.param.yaml"/>
+  <arg name="vehicle_info_param_file"
+       default="$(find-pkg-share autosdv_vehicle_description)/config/vehicle_info.param.yaml"/>
+  <arg name="imu_corrector_param_file"
+       default="$(find-pkg-share individual_params)/config/$(var vehicle_id)/autosdv_sensor_kit/imu_corrector.param.yaml"/>
+
+  <let name="launch_vehicle_interface" value="false"/>
+  <let name="launch_pointcloud_preprocessor" value="false"/>
+  <let name="launch_vehicle_velocity_converter" value="false"/>
+  <let name="launch_gyro_bias_estimator" value="false"/>
+
+  <!-- the kit with its drivers off: URDF frames (base_link -> the ZED's optical frame), IMU chain -->
+  <group scoped="true">
+  <let name="rviz" value="false"/>
+  <include file="$(find-pkg-share autosdv_launch)/launch/autosdv.launch.yaml">
+    <arg name="vehicle_id" value="$(var vehicle_id)"/>
+    <arg name="camera_model" value="zedxm"/>
+    <arg name="imu_source" value="zed"/>
+    <arg name="use_gnss" value="false"/>
+    <arg name="use_ntrip" value="false"/>
+    <arg name="launch_map" value="false"/>
+    <arg name="launch_localization" value="false"/>
+    <arg name="launch_perception" value="false"/>
+    <arg name="launch_planning" value="false"/>
+    <arg name="launch_control" value="false"/>
+    <arg name="launch_system_monitor" value="false"/>
+    <arg name="launch_system" value="false"/>
+    <arg name="launch_api" value="false"/>
+    <arg name="launch_shared_pointcloud_container" value="false"/>
+    <arg name="launch_empty_objects_publisher" value="false"/>
+    <arg name="launch_sensing_driver" value="false"/>
+    <arg name="is_simulation" value="true"/>
+  </include>
+  </group>
+
+  <!-- ===== the car ===== -->
+  <group unless="$(var bench)">
+    <include file="$(find-pkg-share autosdv_aruco_localization)/launch/zed_aruco.launch.xml"/>
+    <!-- wheel speed for the EKF; the actuator as a dry run, never driving -->
+    <include file="$(find-pkg-share autosdv_vehicle_launch)/launch/vehicle_interface.launch.xml">
+      <arg name="launch_vehicle_interface" value="true"/>
+      <arg name="is_simulation" value="true"/>
+      <arg name="launch_signal_manager" value="false"/>
+      <arg name="vehicle_id" value="$(var vehicle_id)"/>
+    </include>
+    <include file="$(find-pkg-share autosdv_aruco_localization)/launch/aruco_localization.launch.xml">
+      <arg name="course_dir" value="$(var course_dir)"/>
+      <arg name="ar_tag_container" value="/sensing/camera/zedxm/zed_container"/>
+      <arg name="launch_start_pose_init" value="false"/>
+    </include>
+  </group>
+
+  <!-- ===== the bench ===== -->
+  <group if="$(var bench)">
+    <include file="$(find-pkg-share autosdv_aruco_localization)/launch/aruco_localization.launch.xml">
+      <arg name="course_dir" value="$(var course_dir)"/>
+      <arg name="ar_tag_container" value=""/>
+      <arg name="launch_start_pose_init" value="false"/>
+    </include>
+
+    <node pkg="autosdv_coach_lab" exec="vehicle_bench_plant" name="vehicle_bench_plant" output="screen">
+      <param from="$(find-pkg-share autosdv_vehicle_interface)/params/actuator.yaml"/>
+      <param from="$(var actuator_param_overrides)"/>
+      <param from="$(find-pkg-share individual_params)/config/$(var vehicle_id)/autosdv_vehicle/actuator.param.yaml"/>
+      <param from="$(var vehicle_info_param_file)"/>
+      <param from="$(find-pkg-share autosdv_vehicle_interface)/params/velocity_report.yaml"/>
+      <param from="$(var imu_corrector_param_file)"/>
+      <param name="start_pose_file" value="$(var truth_dir)/course.yaml"/>
+    </node>
+
+    <node pkg="autosdv_aruco_localization" exec="mock_aruco_camera" name="mock_aruco_camera" output="screen">
+      <param name="course_dir" value="$(var truth_dir)"/>
+      <param name="rate" value="$(var camera_rate)"/>
+    </node>
+
+    <node pkg="autosdv_waypoint_lab" exec="bench_straight_driver" name="bench_straight_driver" output="screen">
+      <param from="$(find-pkg-share autosdv_vehicle_interface)/params/actuator.yaml"/>
+      <param from="$(var actuator_param_overrides)"/>
+      <param from="$(find-pkg-share individual_params)/config/$(var vehicle_id)/autosdv_vehicle/actuator.param.yaml"/>
+      <param name="distance" value="$(var distance)"/>
+      <param name="speed" value="$(var speed)"/>
+    </node>
+  </group>
+</launch>

@@ -26,9 +26,8 @@ localized pose and the path) and the `SpeedPID` (the actuator's inner loop).
 
 ## Settings (`~/lab2/lab2.yaml`)
 
-The student commands need no settings: `just lab2 sim` finds
-`~/lab2/<id>_lab_2_1` itself, and `just lab2 run team:=3` names the team on the
-command line. The file is for the TA (the car's letter, set once per car with
+The student commands need no settings: `just lab2 sim` runs the one simulation model,
+`lab2_sim_vehicle`, and `just lab2 run team:=3` names the team on the command line. The file is for the TA (the car's letter, set once per car with
 `just lab2 init car:=A`) and for the step-by-step recipes, which take their car,
 team and directories from it instead of the command line. `LAB2_HOME` moves
 `~/lab2` (the settings file, the submissions, the team directories, the
@@ -119,7 +118,7 @@ tested in `test_lab2_env.py`):
 - **The display.** `$DISPLAY` if it answers, else `:1` (the car's desktop, seen
   over RDP) if `/tmp/.X11-unix/X1` exists and answers, else headless; one line
   says which. The stack never gets a DISPLAY (the ZED,
-  `scripts/testing/lab2/camera_display.sh`); `audit.png` opens on the display
+  `scripts/camera_display.sh`); `audit.png` opens on the display
   chosen, and its path is printed either way.
 
 `just lab2 run`, in one terminal, with one status line at a time:
@@ -316,7 +315,14 @@ Everything from Autoware is the installed 1.5.0, unmodified, except the
 AR-tag localizer: that is AutoSDV's fork
 (`src/localization/external/autoware_ar_tag_based_localizer`, branch
 `autosdv-1.5.0`), which adds one parameter, `dictionary`, and overlays the
-installed package. The lab's nodes are in `src/lab/autosdv_waypoint_lab`.
+installed package. The lab's nodes are in `src/lab/autosdv_waypoint_lab`; the
+ArUco localization it runs on (the ZED driver, the localizer and EKF launch,
+`start_pose_init`, `loc_check`, the camera check, the mock camera and
+`virtual_marker_localizer`) is lab-independent and lives in
+`src/localization/autosdv_aruco_localization`, the marker survey in
+`src/localization/autosdv_marker_survey`. Both are driven by
+`just aruco-map` (`docs/guides/aruco-map.md`); Lab 2's `survey`, `survey-align`
+and `loc-check` recipes are that tool with the lab's car and route.
 
 ## What is new, and why each piece is there
 
@@ -367,7 +373,8 @@ the bench, a WARN at 2 s triggered the MRM.
 are measured on each car.
 
 **The sensor kit runs with its drivers off.** No LiDAR in this lab, and the
-ZED driver is the lab's (`zed_aruco.launch.xml`: rectified image and IMU, depth
+ZED driver is the ArUco stack's (`autosdv_aruco_localization`'s
+`zed_aruco.launch.xml`: rectified image and IMU, depth
 and tracking off). `camera_model:=zedxm` keeps the kit's ZED URDF frames and
 the left-camera-to-IMU edge, and stops it starting its own IMU-only ZED.
 
@@ -399,7 +406,7 @@ calibration boards are 600 mm with a 480 mm square, ID 24; a course using those
 sets `marker_size: 0.48`.) A Lab 2 course sets
 
 ```yaml
-marker_size: 0.38     # the black square, not the plate: measure it
+marker_size: 0.4667   # the black square, not the board: measure it
 dictionary: DICT_5X5_1000
 marker_height: 0.25   # the square's centre above the floor (plate 0.50 m, standing)
 markers:
@@ -426,7 +433,13 @@ into the route's own frame, the START-BOX frame: origin at the start box (the
 rear axle, `base_link`), x along the first leg, y to the car's left, z up.
 `path.csv` is written in that frame once (`make-uturn`) and never moves.
 
-The procedure, on the car, in tmux:
+The procedure, on the car, in tmux. `just lab2 survey`, `survey-align`,
+`survey-solve` and `loc-check` are Lab 2's wrappers of the generic ArUco map tool,
+`just aruco-map survey|align|solve|check` (`docs/guides/aruco-map.md`), with the
+car and the route taken from the lab's settings; the outputs and `surveys/latest`
+are the same either way. Outside the lab, a survey alone (stage 1) is a complete
+marker map in the origin board's frame; the alignment is what ties it to a
+route.
 
 1. **Tape the route** from the numbers in `lab2_uturn/course.yaml`'s header
    (start box at (0, 0) facing +x, turn centre (2, -1.1), stop line (0, -2.2)
@@ -441,7 +454,7 @@ The procedure, on the car, in tmux:
    `surveys/latest`). Its floor is fitted to the car's own poses, so a board
    that leans does not tilt the map; a board that is turned or misplaced turns
    and shifts it, which is what stage 2 removes. Details:
-   `src/lab/autosdv_marker_survey/README.md`.
+   `src/localization/autosdv_marker_survey/README.md`, `docs/guides/aruco-map.md`.
 4. **Stage 2, the alignment:** put the car in the taped start box pointing
    along the first leg, then `just lab2 survey-align`. It starts the
    localization on the stage-1 map (ZED, AR-tag localizer, EKF; the actuator as
@@ -453,7 +466,7 @@ The procedure, on the car, in tmux:
    `check-bags` sees the template's route hash), `start_pose` (0, 0, 0), the
    boards in the start-box frame, the map, `ar_tag.param.yaml`, and
    `align_report.txt`. The stage-1 result stays in `stage1/`, the recorded drive
-   in `align_poses.csv` / `align_pnp.csv` (`lab2_survey_align_solve DIR [--force]`
+   in `align_poses.csv` / `align_pnp.csv` (`marker_survey_align_solve DIR --route lab2_uturn [--force]`
    aligns it again without the car). Surveying into the directory again drops
    the alignment; align again after it.
 5. **`just lab2 loc-check`**: drive the U-turn by hand along the tape; the red
@@ -521,7 +534,7 @@ and places the boards from `course.yaml`'s header, surveys, and aligns.
 | anchor board (id 24) | (4.5, 0), facing -x: on the first leg's line beyond the turn |
 | path | 7.45 m; the turn is s = 2.00 to 5.45 m |
 
-Four floor-standing 500 mm boards (`DICT_5X5_1000`, black square 0.38 m,
+Four floor-standing 600 mm boards (`DICT_5X5_1000`, black square 0.4667 m,
 `marker_height: 0.25`; the ids are placeholders the survey replaces):
 
 | board | start-box frame (m) | facing | in view |
@@ -556,7 +569,7 @@ It writes `path.csv`, `course.yaml` (start pose, boards, `uturn: {radius, leg}`
 and a header whose numbers it computes), `lanelet2_map.osm`,
 `ar_tag.param.yaml` and `map_projector_info.yaml`. The boards come from a
 coverage search with the bench's detector model (`marker_sim.visible`: 100°
-hfov, 5 m = `ar_tag` `distance_threshold`, 60° incidence, 0.38 m marker): boards
+hfov, 5 m = `ar_tag` `distance_threshold`, 60° incidence, 0.4667 m marker): boards
 on a 0.5 m grid facing every 15°, at least 1.4 m from the car's track (1 m clear
 of the car), the fewest that give
 
@@ -640,7 +653,7 @@ frame (a route without the key is its own field). When `route` is a straight
 but `surveys/latest` is aligned for `lab2_uturn`, `course_dir: auto` builds
 `surveys/<latest dir>.lab2_straight_3m/` once, re-solved for the straight from
 the drive survey-align recorded (`align_poses.csv`, `align_pnp.csv`; the
-`lab2_survey_align_solve` solver), and runs it; the run prints one
+`marker_survey_align_solve` solver), and runs it; the run prints one
 `survey: ...` line naming it. `surveys/latest` itself is never written, so the
 U-turn and its reference bags keep their survey. A new `survey-align` changes
 latest's alignment inputs and the copy is rebuilt on the next run. If the copy
@@ -668,11 +681,14 @@ to rest and reports the peak speed (bench: stop error 0.08 m, path deviation
 
 Before letting the tracker drive a freshly surveyed course, drive it by hand
 and watch where the localizer puts the car:
-`just lab2 loc-check COURSE_DIR`, with the car in the start box (the EKF is
+`just lab2 loc-check COURSE_DIR` (`just aruco-map check` with the lab's car),
+with the car in the start box (the EKF is
 seeded there) and the selector switch on the joystick. It runs the waypoint
 stack's localization unchanged and nothing that drives: no path publisher, no
 tracker, no engage, and the actuator as a dry run, so the transmitter has the
-car. With a display, RViz opens on `rviz/loc_check.rviz`: the course path
+car. With a display, RViz opens on `autosdv_aruco_localization`'s
+`rviz/loc_check.rviz` (topics `/loc_check/path`, `/loc_check/trail`,
+`/loc_check/fixes`; `/lab2/...` before the move): the course path
 (white), the localized trail (red), the surveyed markers, the latest marker
 fixes (green arrows) and the camera's detection image.
 

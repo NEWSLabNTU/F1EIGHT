@@ -53,10 +53,10 @@ def test_config_override_on_the_command_line_picks_another_file(tmp_path, no_rea
     (no_real_home / 'lab2').mkdir()
     (no_real_home / 'lab2' / 'lab2.yaml').write_text('car: A\n')
     other = tmp_path / 'other.yaml'
-    other.write_text('car: C\nsubmission: ~/sub\n')
+    other.write_text('car: C\nteam: 4\n')
     for argv in (['config:=' + str(other)], ['--config', str(other)], ['--config=' + str(other)]):
         args, line = lc.plan('gate', argv)
-        assert args == [f'submission:={no_real_home}/sub']
+        assert args == ['vehicle_model:=team4_vehicle']
         assert str(other) in line or '~' in line
     assert lc.Config(None, other).get('car') == 'C'
 
@@ -75,10 +75,8 @@ def test_missing_required_key_names_the_key_and_the_file(no_real_home):
     with pytest.raises(lc.ConfigError) as e:
         lc.plan('vehicle', [])
     msg = str(e.value)
-    assert 'team_dir' in msg and str(no_real_home / 'lab2' / 'lab2.yaml') in msg
+    assert 'no car set' in msg and str(no_real_home / 'lab2' / 'lab2.yaml') in msg
     assert '\n' not in msg
-    with pytest.raises(lc.ConfigError, match='no submission set'):
-        lc.plan('gate', [])
     with pytest.raises(lc.ConfigError, match='no car set'):
         lc.plan('record', ['team:=3'])
 
@@ -193,39 +191,57 @@ def test_record_fills_car_team_and_the_next_name(tmp_path):
     f.write_text(f'car: A\nteam: 3\nbag_dir: {tmp_path / "bags"}\n')
     (tmp_path / 'bags' / 'lab2_uturn_1').mkdir(parents=True)
     args, line = lc.plan('record', ['config:=' + str(f)])
-    assert args == ['--car', 'A', '--team', '3', '--out-dir', str(tmp_path / 'bags'),
-                    '--name', 'uturn_2']
+    assert args == ['--car', 'A', '--team', '3', '--vehicle-model', 'team3_vehicle',
+                    '--out-dir', str(tmp_path / 'bags'), '--name', 'uturn_2']
     assert 'name uturn_2' in line
     args, _ = lc.plan('record', ['config:=' + str(f), '--team', '5', '--name', 'mine', '--bench'])
-    assert args == ['--car', 'A', '--team', '5', '--out-dir', str(tmp_path / 'bags'),
-                    '--name', 'mine', '--bench']
+    assert args == ['--car', 'A', '--team', '5', '--vehicle-model', 'team5_vehicle',
+                    '--out-dir', str(tmp_path / 'bags'), '--name', 'mine', '--bench']
+    args, _ = lc.plan('record', ['config:=' + str(f), 'team:=0'])
+    assert args[args.index('--vehicle-model') + 1] == 'autosdv_vehicle'   # team 0: the reference
 
 
-def test_vehicle_and_gate_keep_the_explicit_arguments(tmp_path, monkeypatch):
+def test_vehicle_and_gate_select_the_vehicle_model(tmp_path, monkeypatch, capsys):
     monkeypatch.setattr(lc, 'SURVEY_LATEST', tmp_path / 'surveys' / 'latest')
     f = tmp_path / 'x.yaml'
-    f.write_text('car: B\nteam_dir: /t/team3\nsubmission: /s/sub\n')
+    f.write_text('car: B\n')
     cf = 'config:=' + str(f)
     (tmp_path / 'c').mkdir()
     (tmp_path / 'c' / 'course.yaml').write_text('path: path.csv\n')
-    assert lc.plan('vehicle', [cf])[0] == ['route:=lab2_uturn', 'team:=/t/team3', 'vehicle_id:=car_b']
-    assert lc.plan('vehicle', [cf, 'route:=hall_demo', 'team:=/o/t'])[0] == \
-        ['route:=hall_demo', 'team:=/o/t', 'vehicle_id:=car_b']
-    assert lc.plan('vehicle', [cf, f'course_dir:={tmp_path / "c"}', 'submission:=/x'])[0] == \
-        [f'course_dir:={tmp_path / "c"}', 'submission:=/x', 'vehicle_id:=car_b']
+    # no team, no model: the reference
+    assert lc.plan('vehicle', [cf])[0] == ['route:=lab2_uturn', 'vehicle_model:=autosdv_vehicle',
+                                          'vehicle_id:=car_b']
+    assert lc.plan('vehicle', [cf, 'route:=hall_demo', 'team:=3'])[0] == \
+        ['route:=hall_demo', 'vehicle_model:=team3_vehicle', 'vehicle_id:=car_b']
+    assert lc.plan('vehicle', [cf, f'course_dir:={tmp_path / "c"}', 'vehicle_model:=foo_vehicle'])[0] == \
+        [f'course_dir:={tmp_path / "c"}', 'vehicle_model:=foo_vehicle', 'vehicle_id:=car_b']
+    # an explicit model wins over the team number
+    assert lc.plan('gate', [cf, 'team:=3', 'vehicle_model:=autosdv_vehicle'])[0] == \
+        ['vehicle_model:=autosdv_vehicle']
     with pytest.raises(lc.ConfigError, match='no course.yaml'):
         lc.plan('vehicle', [cf, 'course_dir:=/nonexistent'])
-    assert lc.plan('vehicle', [cf, 'speed_controller_class:=a:B'])[0] == \
-        ['speed_controller_class:=a:B', 'route:=lab2_uturn', 'vehicle_id:=car_b']
-    assert lc.plan('gate', [cf])[0] == ['submission:=/s/sub']
-    assert lc.plan('gate', [cf, '--team', '/o/t', '--only', 'hall_demo'])[0] == \
-        ['--only', 'hall_demo', 'team:=/o/t']
-    assert lc.plan('gate', ['speed_controller_class:=a:B'])[0] == ['speed_controller_class:=a:B']
+    assert lc.plan('gate', [cf, '--team', '7', '--only', 'hall_demo'])[0] == \
+        ['--only', 'hall_demo', 'vehicle_model:=team7_vehicle']
+    for bad in ('vehicle_model:=team3_vehicle_launch', 'vehicle_model:=Team3'):
+        with pytest.raises(lc.ConfigError, match='a model name'):
+            lc.plan('gate', [bad])
+    with pytest.raises(lc.ConfigError, match='team NUMBER'):
+        lc.plan('gate', ['team:=~/lab2/team3'])
+
+
+def test_the_retired_keys_are_refused_on_the_command_line_ignored_in_a_file(tmp_path, capsys):
+    for k in ('team_dir:=/t', 'submission:=/s'):
+        with pytest.raises(lc.ConfigError, match='is gone'):
+            lc.plan('gate', [k])
+    f = tmp_path / 'old.yaml'
+    f.write_text('car: B\nteam_dir: /t/team3\nsubmission: /s/sub\n')
+    assert lc.plan('gate', [f'config:={f}'])[0] == ['vehicle_model:=autosdv_vehicle']
+    assert 'no longer used' in capsys.readouterr().err
 
 
 def test_car_picks_the_vehicle_id(tmp_path):
     f = tmp_path / 'x.yaml'
-    f.write_text('car: B\nteam_dir: /t/team3\n')
+    f.write_text('car: B\n')
     cf = 'config:=' + str(f)
     args, line = lc.plan('vehicle', [cf])
     assert args[-1] == 'vehicle_id:=car_b' and 'vehicle_id car_b' in line
@@ -252,26 +268,33 @@ def test_car_picks_the_vehicle_id(tmp_path):
 
 def test_no_car_is_refused_on_the_car_not_on_the_bench(no_real_home):
     with pytest.raises(lc.ConfigError, match='no car set') as e:
-        lc.plan('vehicle', ['team_dir:=/t'])
+        lc.plan('vehicle', [])
     assert 'just lab2 init car:=A|B|C' in str(e.value) and '\n' not in str(e.value)
-    with pytest.raises(lc.ConfigError, match='no car set'):
-        lc.plan('loc-check', [])
+    # nothing drives in loc-check or the survey: no car is the nominal car
+    assert lc.plan('loc-check', [])[0] == ['vehicle_id:=sim']
     # the bench keeps its launch default, sim; the hardware sim is passed sim
     # (waypoint_follow.launch.xml requires vehicle_id)
-    args = lc.plan('vehicle', ['team_dir:=/t'], bench=True)[0]
+    args = lc.plan('vehicle', [], bench=True)[0]
     assert not any(a.startswith('vehicle_id:=') for a in args)
     for sim in ('hardware:=sim', 'hardware_sim:=true'):
-        assert [a for a in lc.plan('vehicle', ['team_dir:=/t', sim])[0]
+        assert [a for a in lc.plan('vehicle', [sim])[0]
                 if a.startswith('vehicle_id:=')] == ['vehicle_id:=sim']
     # the survey takes the car the same way loc-check does
     assert lc.plan('survey', ['car:=B', 'marker_size:=0.25'])[0] == \
         ['marker_size:=0.25', 'vehicle_id:=car_b']
-    with pytest.raises(lc.ConfigError, match='no car set'):
-        lc.plan('survey', [])
+    assert lc.plan('survey', ['marker_size:=0.25'])[0] == ['marker_size:=0.25', 'vehicle_id:=sim']
+    # survey-align: the settings' route and car for `just lab2 survey-align`, which reads no settings
+    assert lc.plan('survey-align', ['car:=B'])[0] == ['--route', 'lab2_uturn', 'vehicle_id:=car_b']
+    assert lc.plan('survey-align', ['/s', '--force'])[0] == \
+        ['/s', '--force', '--route', 'lab2_uturn', 'vehicle_id:=sim']
+    assert lc.plan('survey-align', ['route:=lab2_straight_2m', '--vehicle-id', 'car_c'])[0] == \
+        ['--vehicle-id', 'car_c', '--route', 'lab2_straight_2m']
+    assert lc.plan('survey-align', ['--route', 'x', 'car:=B', '--bench', '--truth', '/t'])[0] == \
+        ['--route', 'x', '--bench', '--truth', '/t']
     # a car set on the bench is still that car's profile
-    assert lc.plan('vehicle', ['team_dir:=/t', 'car:=B'], bench=True)[0][-1] == 'vehicle_id:=car_b'
+    assert lc.plan('vehicle', ['car:=B'], bench=True)[0][-1] == 'vehicle_id:=car_b'
     # an explicit vehicle_id:= alone names the car
-    args = lc.plan('vehicle', ['team_dir:=/t', 'vehicle_id:=car_c'])[0]
+    args = lc.plan('vehicle', ['vehicle_id:=car_c'])[0]
     assert [a for a in args if a.startswith('vehicle_id:=')] == ['vehicle_id:=car_c']
 
 
@@ -317,7 +340,7 @@ def _aligned_survey(root, route='lab2_uturn', path_text=None):
 def test_vehicle_runs_the_aligned_survey(tmp_path, monkeypatch, capsys):
     monkeypatch.setattr(lc, 'SURVEY_LATEST', tmp_path / 'surveys' / 'latest')
     f = tmp_path / 'x.yaml'
-    f.write_text('car: A\nteam_dir: /t/team3\n')
+    f.write_text('car: A\n')
     cf = 'config:=' + str(f)
     # no survey: the packaged course, said out loud
     assert lc.plan('vehicle', [cf])[0][0] == 'route:=lab2_uturn'
@@ -337,7 +360,7 @@ def test_a_stale_or_unaligned_survey_is_not_run(tmp_path, monkeypatch, capsys):
     d = _aligned_survey(tmp_path, path_text='0,0\n1,0\n')
     ok, why = lc.aligned_for(d, 'lab2_uturn')
     assert not ok and 'older' in why
-    assert lc.plan('vehicle', ['team_dir:=/t', 'car:=A'])[0][0] == 'route:=lab2_uturn'
+    assert lc.plan('vehicle', ['car:=A'])[0][0] == 'route:=lab2_uturn'
     assert 'run `just lab2 survey-align` again' in capsys.readouterr().err
     t = yaml.safe_load((d / 'course.yaml').read_text())
     del t['alignment']
@@ -346,16 +369,24 @@ def test_a_stale_or_unaligned_survey_is_not_run(tmp_path, monkeypatch, capsys):
     assert not ok and 'not aligned' in why
 
 
-def test_sim_reads_part1_submission_not_the_gate_submission(tmp_path):
+def test_sim_takes_nothing_from_the_file(tmp_path):
     f = tmp_path / 'lab2.yaml'
-    f.write_text('submission: /s/gate\npart1_submission: /s/part1\n')
+    f.write_text('team: 7\nvehicle_model: team7_vehicle\n')     # Part 2's car model
     cf = f'config:={f}'
-    assert lc.plan('sim', [cf, '--final'])[0] == ['--final', 'submission:=/s/part1']
-    assert lc.plan('sim', [cf, 'submission:=/x'])[0] == ['submission:=/x']
+    assert lc.plan('sim', [cf, '--final'])[0] == ['--final']
+    assert lc.plan('sim', [cf, 'team:=3'])[0] == ['team:=3']          # the runner ignores it
+    assert lc.plan('sim', [cf, 'vehicle_model:=other_sim'])[0] == ['model:=other_sim']
+    assert lc.plan('sim', [cf, 'model:=other_sim'])[0] == ['model:=other_sim']
     assert lc.plan('sim', [cf, '--class', 'a.b:C'])[0] == ['--class', 'a.b:C']
-    f.write_text('submission: /s/gate\n')
-    assert lc.plan('sim', [cf])[0] == []           # no part1_submission: the runner's stub
-    assert lc.plan('gate', [cf])[0] == ['submission:=/s/gate']
+    assert lc.plan('sim', [cf, 'submission:=/x'])[0] == ['submission:=/x']   # the TA's
+
+
+def test_part1_submission_in_an_old_file_is_ignored(tmp_path, capsys):
+    f = tmp_path / 'lab2.yaml'
+    f.write_text('part1_submission: /s/part1\nteam: 3\n')
+    assert lc.plan('sim', [f'config:={f}'])[0] == []
+    assert 'part1_submission' in capsys.readouterr().err
+    assert 'part1_submission' not in lc.template()
 
 
 # ---- survey reuse: an aligned survey of the U-turn's field serves a straight on that field
@@ -419,7 +450,7 @@ def test_a_straight_reuses_the_uturn_survey_in_a_sibling(tmp_path, monkeypatch, 
     monkeypatch.setattr(lc, 'SURVEY_LATEST', tmp_path / 'surveys' / 'latest')
     d = _real_aligned_survey(tmp_path)
     before = _tree(d)
-    args, _ = lc.plan('vehicle', ['team_dir:=/t', 'car:=A', 'route:=lab2_straight_3m'])
+    args, _ = lc.plan('vehicle', ['car:=A', 'route:=lab2_straight_3m'])
     sib = tmp_path / 'surveys' / f'{d.name}.lab2_straight_3m'
     assert args[0] == f'course_dir:={sib}'
     err = capsys.readouterr().err
@@ -434,17 +465,17 @@ def test_a_straight_reuses_the_uturn_survey_in_a_sibling(tmp_path, monkeypatch, 
     assert _tree(d) == before
     # cached: the second run re-solves nothing
     stamp = (sib / 'course.yaml').stat().st_mtime_ns
-    args2, _ = lc.plan('vehicle', ['team_dir:=/t', 'car:=A', 'route:=lab2_straight_3m'])
+    args2, _ = lc.plan('vehicle', ['car:=A', 'route:=lab2_straight_3m'])
     assert args2 == args and (sib / 'course.yaml').stat().st_mtime_ns == stamp
     assert 'cached' in capsys.readouterr().err
     # the U-turn still runs latest itself
-    assert lc.plan('vehicle', ['team_dir:=/t', 'car:=A'])[0][0] == f'course_dir:={d.resolve()}'
+    assert lc.plan('vehicle', ['car:=A'])[0][0] == f'course_dir:={d.resolve()}'
 
 
 def test_the_sibling_follows_a_new_alignment_of_latest(tmp_path, monkeypatch, capsys):
     monkeypatch.setattr(lc, 'SURVEY_LATEST', tmp_path / 'surveys' / 'latest')
     d = _real_aligned_survey(tmp_path)
-    lc.plan('vehicle', ['team_dir:=/t', 'car:=A', 'route:=lab2_straight_2m'])
+    lc.plan('vehicle', ['car:=A', 'route:=lab2_straight_2m'])
     sib = tmp_path / 'surveys' / f'{d.name}.lab2_straight_2m'
     old = (sib / 'course.yaml').read_text()
     # survey-align again: another drive (shifted 2 cm) -> other alignment inputs
@@ -454,7 +485,7 @@ def test_the_sibling_follows_a_new_alignment_of_latest(tmp_path, monkeypatch, ca
         s.y += 0.02
     al.write_samples(str(d / al.POSES_FILE), ss)
     capsys.readouterr()
-    lc.plan('vehicle', ['team_dir:=/t', 'car:=A', 'route:=lab2_straight_2m'])
+    lc.plan('vehicle', ['car:=A', 'route:=lab2_straight_2m'])
     assert 're-solved' in capsys.readouterr().err
     assert (sib / 'course.yaml').read_text() != old
 
@@ -463,11 +494,11 @@ def test_reuse_falls_back_to_the_packaged_course(tmp_path, monkeypatch, capsys):
     monkeypatch.setattr(lc, 'SURVEY_LATEST', tmp_path / 'surveys' / 'latest')
     d = _real_aligned_survey(tmp_path)
     # another field: never reused
-    assert lc.plan('vehicle', ['team_dir:=/t', 'car:=A', 'route:=hall_demo'])[0][0] == 'route:=hall_demo'
+    assert lc.plan('vehicle', ['car:=A', 'route:=hall_demo'])[0][0] == 'route:=hall_demo'
     assert 'PACKAGED' in capsys.readouterr().err
     # no recorded drive: nothing to re-solve from
     (d / 'align_poses.csv').unlink()
-    assert lc.plan('vehicle', ['team_dir:=/t', 'car:=A', 'route:=lab2_straight_3m'])[0][0] == \
+    assert lc.plan('vehicle', ['car:=A', 'route:=lab2_straight_3m'])[0][0] == \
         'route:=lab2_straight_3m'
     err = capsys.readouterr().err
     assert 'PACKAGED' in err and 'align_poses.csv' in err
@@ -482,3 +513,11 @@ def test_lab2_home_moves_the_settings_file_and_the_reference(tmp_path, monkeypat
     c = lc.Config()
     assert c.file == home / 'lab2.yaml' and c.get('car') == 'C'
     assert c.get('reference') == str(home / 'reference' / 'uturn')
+
+
+def test_sim_is_the_benches_car_label_never_a_cars():
+    """`just lab2 run --bench` and integration-test pass car:=SIM: the simulated nominal car."""
+    assert lc.plan('vehicle', ['car:=SIM'], bench=True)[0][-1] == 'vehicle_id:=sim'
+    assert lc.plan('vehicle', ['car:=SIM', 'hardware:=sim'])[0][-1] == 'vehicle_id:=sim'
+    with pytest.raises(lc.ConfigError, match='simulated car'):
+        lc.plan('vehicle', ['car:=SIM'])            # on the car

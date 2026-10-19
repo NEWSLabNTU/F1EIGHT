@@ -10,11 +10,12 @@ Builds, from the graded route lab2_uturn (its boards placed where its table says
                --yaw-err deg and leaning --lean deg back; start_pose = where the
                car really stands, --start (dx, dy, dyaw deg) off the taped box.
                The bench plant starts there; mock_aruco_camera renders these boards.
-  OUT/survey   what stage 1 (`just lab2 survey 24`) makes of it: every board in
+  OUT/survey   what the survey (`just aruco-map survey 24`) makes of it: every board in
                the misplaced origin board's frame (autosdv_marker_survey.simulate.
                stage1_map, the survey's own frame code), as a new survey writes it.
 
-With --run it then runs `survey_align.py OUT/survey --bench --truth OUT/truth`
+With --run it then runs `scripts/aruco_map/survey_align.py OUT/survey --route lab2_uturn
+--bench --truth OUT/truth`
 (bench_straight_driver drives --distance m at 0.3 m/s) and compares the aligned
 boards with the truth expressed in the frame of the car's ACTUAL start pose
 (which is what the alignment defines): PASS within --tol-pos m and --tol-yaw deg.
@@ -151,7 +152,7 @@ def main(argv=None) -> int:
         print(f'stage1 {out / "survey"}')
         if not a.run:
             return 0
-        r = subprocess.run([sys.executable, str(HERE / 'survey_align.py'), str(out / 'survey'), '--bench',
+        r = subprocess.run([sys.executable, str(REPO / 'scripts/aruco_map/survey_align.py'), str(out / 'survey'), '--bench',
                             '--truth', str(out / 'truth'), '--route', 'lab2_uturn',
                             '--distance', str(a.distance)], cwd=REPO)
         if r.returncode != 0:

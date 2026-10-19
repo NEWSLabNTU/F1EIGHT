@@ -5,15 +5,30 @@ loop: run, read the curves and the violations, change the controller, run again.
 is the RC simulator's model (motor, ESC, rear-wheel drive with slip, hall sensor) behind
 the car's real vehicle interface (`hardware:=sim`). Around it runs the Lab 2 stack: the
 waypoint path publisher, the TA's pure pursuit for steering, Autoware's command gate, and
-the actuator's safety shell with **your** `SpeedPID` inside it. It is the car's own launch
+the actuator's safety shell with **your** `SpeedPID` inside it, in the Part 1 simulation
+vehicle model, `lab2_sim_vehicle` (one package, the same name for everyone; the car models,
+`teamN_vehicle`, are Part 2's). It is the car's own launch
 (`waypoint_follow.launch.xml`, `localization:=ground_truth hardware:=sim`): only the
 localization differs, which here is the simulator's true pose. The test harness around it
 (the plant, the scenario that engages the car and aligns its start, the grader) is
 `lab2_part1_sim.launch.xml`'s own.
 
-Design: `docs/design/lab2-part1-sim-design.md`. The simulator itself: `docs/guides/rc-sim.md`.
+Design: `docs/design/lab2-part1-sim-design.md`; the vehicle models:
+`docs/design/lab2-team-vehicle-models.md`. The simulator itself: `docs/guides/rc-sim.md`.
 
 ## One command
+
+Once, to install the simulation model: copy `lab2_sim_vehicle_launch/` from the handout into
+this repository's `src/lab2_vehicles/` (gitignored) and build it with the repository:
+
+```bash
+cp -r <handout>/lab2_sim_vehicle_launch src/lab2_vehicles/
+colcon build --base-paths src --symlink-install --cmake-args -DCMAKE_BUILD_TYPE=Release \
+    --packages-up-to lab2_sim_vehicle_launch
+source install/setup.bash  # or open a new shell
+```
+
+Then the test loop:
 
 ```bash
 just lab2 sim              # the graded set: nominal, low_batt, low_mu; the mark out of 25, ~3 min
@@ -21,35 +36,45 @@ just lab2 sim --no-gui     # the same without windows (SSH, batch)
 just lab2 plot-sim         # redraw the latest run's curves.png (every car)
 ```
 
-One command builds nothing by hand and leaves nothing running. It finds your submission,
-starts the stack in its own process group, opens RViz and the dashboard, engages the car,
-drives the course, grades the run live, and does that for each of the three cars:
-`nominal`, `low_batt` (weaker battery) and `low_mu` (more slippery floor). Then it draws
-`curves.png` for every car, prints a table of the cars (checks passed, the plot's path)
-and the mark out of 25, and stops everything (Ctrl-C included). From a terminal, the
-windows of the **last** car stay up with its final curves and marks until the dashboard
-window is closed or Enter is pressed (`--no-hold` skips it).
+One command leaves nothing running. It checks the model, starts the stack in its own
+process group with `vehicle_model:=lab2_sim_vehicle vehicle_id:=sim`, opens RViz and the
+dashboard, engages the car, drives the course, grades the run live, and does that for each
+of the three cars: `nominal`, `low_batt` (weaker battery) and `low_mu` (more slippery
+floor). Then it draws `curves.png` for every car, prints a table of the cars (checks
+passed, the plot's path) and the mark out of 25, and stops everything (Ctrl-C included).
+From a terminal, the windows of the **last** car stay up with its final curves and marks
+until the dashboard window is closed or Enter is pressed (`--no-hold` skips it).
 
-**The submission** is found in this order:
+**The model** resolves from this repository's install (its ament index). Nothing to name: no
+`team:=` (it is accepted and ignored), nothing from `~/lab2/lab2.yaml`. Not installed, and it
+stops with the copy and the colcon command above.
 
-1. `submission:=DIR` on the command line (TA, or a second copy);
-2. `part1_submission:` in `~/lab2/lab2.yaml`;
-3. the one directory `~/lab2/*_lab_2_1` that holds `lab2_speed/`.
+**Built, and current.** Build with `--symlink-install` (the command above): the installed
+files are then symlinks into `src/lab2_vehicles/`, so an edit to `speed_pid.py` or to
+`config/sim/speed_controller.param.yaml` runs on the next `just lab2 sim` without a rebuild.
+A **new** file, a new package, or a change to `setup.py`, `package.xml` or `CMakeLists.txt`
+needs the colcon command again. An install without `--symlink-install`, or one whose
+`speed_pid.py` is not the one in your source, is refused with the same command, because
+your edits would not run.
 
-None, or several, and it stops with a list of what it found and how to fix it. `DIR` is
-either `<student_id>_lab_2_1/` holding `lab2_speed/`, or the `lab2_speed/` package
-itself. `LAB2_HOME` moves `~/lab2` (tests; a TA grading from another directory).
+**Checked before it runs** (`scripts/testing/lab2/submission.py --part1 DIR`, which you can
+also run yourself on `src/lab2_vehicles/lab2_sim_vehicle_launch`): the three packages are there,
+`lab2_sim_vehicle_interface/speed_pid.py` defines `class SpeedPID`, the sim tuning file
+parses and its keys, types and ranges are the table below, and nothing in the model imports
+the TA's reference controllers (`autosdv_waypoint_lab.reference`). Any of these stops the
+run with the file and the key named.
 
 **Windows.** `--no-gui` opens none (the same as `rviz:=false gui:=false`). With no
 working X display (an SSH session without X) the run goes headless by itself and says so
 in one line; the run and its marks are the same, and `curves.png` is still drawn.
 
-TA only: `variant:=low_mu` runs one car (no mark out of 25), `--name LABEL` labels the
-run directory, `--out DIR` writes `DIR/<variant>/` (the old layout, which
+TA only: `submission:=DIR` runs a team's model source (below), `variant:=low_mu` runs one
+car (no mark out of 25), `--name LABEL` labels the run directory, `--out DIR` writes `DIR/<variant>/` (the old layout, which
 the TA's calibration and tolerance tools read back), and `--final` is accepted as a
 no-op (the graded set is the default).
 
-Setup is the repository's standard one: `./setup.sh`, then `just build`.
+Setup is the repository's standard one: `./setup.sh`, then `just build`, then the two
+model commands above.
 
 ## The course
 
@@ -124,13 +149,14 @@ counts 0 of its 9.
 ## Outputs
 
 A new directory per run, so nothing is overwritten:
-`tmp/lab2/part1/<submission name>/<YYYY-mm-dd_HH-MM-SS>/<variant>/`, and
-`tmp/lab2/part1/<submission name>/latest` points at the newest run. Per car:
+`tmp/lab2/part1/<model>/<YYYY-mm-dd_HH-MM-SS>/<variant>/` (`lab2_sim_vehicle`), and
+`tmp/lab2/part1/<model>/latest` points at the newest run. Per car:
 
 - `trace.csv` (100 Hz: `t, s, y, target, measured, speed, pwm, mode, slip_r, kappa_r,
   emergency, segment`);
 - `marks.json` (`variant, valid, invalid_reason, passed, total, checks`);
-- `run.json` (the command, the timings, the `play_log` path);
+- `run.json` (the command, the vehicle model and its source directory, the timings, the
+  `play_log` path);
 - `curves.png` (speed, PWM and every failed check's window; drawn when the run ends, no
   display needed; `just lab2 plot-sim` redraws it, `--t0/--t1` zoom in);
 - `dashboard.png` (the dashboard as it was when it closed; with the dashboard only);
@@ -140,12 +166,26 @@ A new directory per run, so nothing is overwritten:
 
 ## The controller
 
-You edit `lab2_speed/speed_pid.py` and `config/speed_pid.yaml` of the handout package
-(course repository `2026/labs/Lab2/handout/lab2_speed/`; the README there is the
-reference). The interface is the actuator's plug-in contract
+You edit two files of the model, `src/lab2_vehicles/lab2_sim_vehicle_launch/`:
+
+- `lab2_sim_vehicle_interface/lab2_sim_vehicle_interface/speed_pid.py`, the `SpeedPID` (it starts
+  as the student stub; the model's launch file loads it as
+  `lab2_sim_vehicle_interface.speed_pid:SpeedPID`);
+- `lab2_sim_vehicle_launch/config/sim/speed_controller.param.yaml`, its tuning on the
+  simulated car (`vehicle_id` sim). The parameters sit under `speed_controller_params`:
+
+  ```yaml
+  /**:
+    ros__parameters:
+      speed_controller_params:
+        kp: 12.0
+        ki: 10.0
+        # ... every key of the table below
+  ```
+
+The interface is the actuator's plug-in contract
 (`autosdv_vehicle_interface/speed_controller.py`): `__init__(params)`, `reset()`,
-`update(target_speed, measured_speed, dt) -> int`. It is loaded as
-`lab2_speed.speed_pid:SpeedPID`.
+`update(target_speed, measured_speed, dt) -> int`.
 
 Two modes:
 
@@ -163,9 +203,10 @@ What is given and what you write:
 |---|---|
 | reading the parameters, `reset()`, `feed_forward()`, `filter_derivative()`, `brake_pwm()`, `clamp_pwm()`, `debug_terms()` | 1 the error and the clamped driving error, 2 P, 3 D on the measurement (filtered), 4 the braking mode, 5 driving: I with clamp, the integral band and conditional integration, the command and its throttle limit |
 
-`config/speed_pid.yaml`, checked when the run starts (`scripts/testing/lab2/submission.py
---part1`): unknown keys, wrong types and out-of-range values stop the run with the key
-named. **The starting values are not tuned**: a correct implementation with them drives the
+`config/sim/speed_controller.param.yaml`, checked when the run starts
+(`scripts/testing/lab2/submission.py --part1`): unknown keys, wrong types and out-of-range
+values stop the run with the key named; a key left out warns, and the class falls back to
+its own default. **The starting values are not tuned**: a correct implementation with them drives the
 course but fails several checks. Tuning is your work.
 
 | Key | Meaning | Range | Starting value |
@@ -186,16 +227,10 @@ course but fails several checks. Tuning is your work.
 The feed-forward was calibrated on a fresh 12.4 V pack. The car runs at 11.1 V, so it
 under-drives: about 10 counts short at 11 m/s, which the integral must make up.
 
-`python3 selfcheck.py` in the package checks the rules, the yaml and each TODO (no ROS, no
-grading).
-
-Part 2 drives the same class on the real car with `config/speed_pid_car.yaml` (given: kp 20,
-ki 25, integral_limit 10, error_limit 0.5, integral_band 0.25, brake mode on) plus the
-team's `config/calibration.yaml` as `ff_deadband`/`ff_gain`; `selfcheck.py --car` runs the
-offline car bench on it, and `just lab2 gate submission:=DIR` loads it
-(`lab2-waypoint-stack.md`, "Running a student's submission"). The car gives about 0.03 m/s
-per count against the simulated car's 0.143, so its gains are about five times larger; the
-band, off here, stops the integral charging while the bench holds the wheels.
+Part 2 drives the car model, `teamN_vehicle`, on the real cars, with that car's tuning
+file, `config/car_a/speed_controller.param.yaml` and so on (`lab2-waypoint-stack.md`). The car
+gives about 0.03 m/s per count against the simulated car's 0.143, so its gains are about
+five times larger.
 
 ## Physics you need
 
@@ -226,12 +261,13 @@ band, off here, stops the integral charging while the bench holds the wheels.
 | Symptom | Cause / remedy |
 |---|---|
 | `no working X display ...: running headless` | an SSH session without X; the run is the same, and `curves.png` is drawn. Use a desktop session or VNC to see the windows. |
-| `error: no Part 1 submission found` | no `~/lab2/<student_id>_lab_2_1/lab2_speed/`: put it there, or pass `submission:=DIR` |
-| `error: several Part 1 submissions` | more than one `~/lab2/*_lab_2_1`: name one with `submission:=DIR` or `part1_submission:` in `~/lab2/lab2.yaml`, or move the others away |
-| `error: submission DIR: submission error: .../speed_pid.yaml: kp is ...` | a key misspelled, out of range, or the wrong type; the message names it |
+| `error: lab2_sim_vehicle is not built` | copy `lab2_sim_vehicle_launch` into `src/lab2_vehicles/`, run the colcon command it prints, open a new shell |
+| `... installed without --symlink-install` / `is built from another copy` | the same colcon command (with `--symlink-install`), then run again |
+| `error: the model does not pass its Part 1 check: .../speed_controller.param.yaml ...: kp is ...` | a key misspelled, out of range, the wrong type, or not under `speed_controller_params`; the message names it |
+| `... uses the TA reference (autosdv_waypoint_lab.reference) at ...` | the controller must be your own: remove that import |
 | "Your car did not move ... still the stub?" | `update()` returns neutral: the TODOs are not done, or the output never leaves `init_pwm` |
 | invalid: `controller fault: ...` | `update()` raised or returned a non-number; the traceback is in `play_log/` |
-| invalid: `the actuator is not running: ...` | the actuator died at start-up: `speed_pid.py` does not import, or `SpeedPID.__init__` raised; the traceback is in `play_log/` |
+| invalid: `the actuator is not running: ...` | the actuator died at start-up: `speed_pid.py` does not import, or `SpeedPID.__init__` raised (or the model's launch file is broken); the traceback is in `play_log/` |
 | invalid: `lockstep invalidated: ...` | the simulation lost a participant (a node crashed or hung); run again, and report it if it repeats |
 | invalid: `MRM: ...` / `the stack did not engage` | a stack fault, not your controller; run again; report it with `run.json` |
 | the car stops about 9 m past the line, `stop_lag` fails | no braking mode: regeneration alone cannot follow 2.5 m/s² |

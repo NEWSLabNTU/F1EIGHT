@@ -1,85 +1,85 @@
 <?xml version="1.0" encoding="UTF-8"?>
-<osm version="0.6" generator="autosdv_waypoint_lab make_course_map">
+<osm version="0.6" generator="autosdv_aruco_localization make_marker_map">
   <MetaInfo format_version="1" map_version="1" />
   <node id="1" lat="0" lon="0">
     <tag k="local_x" v="4.5000" />
-    <tag k="local_y" v="0.1900" />
-    <tag k="ele" v="0.0600" />
+    <tag k="local_y" v="0.2333" />
+    <tag k="ele" v="0.0666" />
   </node>
   <node id="2" lat="0" lon="0">
     <tag k="local_x" v="4.5000" />
-    <tag k="local_y" v="-0.1900" />
-    <tag k="ele" v="0.0600" />
+    <tag k="local_y" v="-0.2333" />
+    <tag k="ele" v="0.0666" />
   </node>
   <node id="3" lat="0" lon="0">
     <tag k="local_x" v="4.5000" />
-    <tag k="local_y" v="-0.1900" />
-    <tag k="ele" v="0.4400" />
+    <tag k="local_y" v="-0.2333" />
+    <tag k="ele" v="0.5333" />
   </node>
   <node id="4" lat="0" lon="0">
     <tag k="local_x" v="4.5000" />
-    <tag k="local_y" v="0.1900" />
-    <tag k="ele" v="0.4400" />
+    <tag k="local_y" v="0.2333" />
+    <tag k="ele" v="0.5333" />
   </node>
   <node id="5" lat="0" lon="0">
-    <tag k="local_x" v="4.6645" />
-    <tag k="local_y" v="-1.4050" />
-    <tag k="ele" v="0.0600" />
+    <tag k="local_x" v="4.7021" />
+    <tag k="local_y" v="-1.3833" />
+    <tag k="ele" v="0.0666" />
   </node>
   <node id="6" lat="0" lon="0">
-    <tag k="local_x" v="4.3355" />
-    <tag k="local_y" v="-1.5950" />
-    <tag k="ele" v="0.0600" />
+    <tag k="local_x" v="4.2979" />
+    <tag k="local_y" v="-1.6167" />
+    <tag k="ele" v="0.0666" />
   </node>
   <node id="7" lat="0" lon="0">
-    <tag k="local_x" v="4.3355" />
-    <tag k="local_y" v="-1.5950" />
-    <tag k="ele" v="0.4400" />
+    <tag k="local_x" v="4.2979" />
+    <tag k="local_y" v="-1.6167" />
+    <tag k="ele" v="0.5333" />
   </node>
   <node id="8" lat="0" lon="0">
-    <tag k="local_x" v="4.6645" />
-    <tag k="local_y" v="-1.4050" />
-    <tag k="ele" v="0.4400" />
+    <tag k="local_x" v="4.7021" />
+    <tag k="local_y" v="-1.3833" />
+    <tag k="ele" v="0.5333" />
   </node>
   <node id="9" lat="0" lon="0">
-    <tag k="local_x" v="1.6645" />
-    <tag k="local_y" v="-4.9050" />
-    <tag k="ele" v="0.0600" />
+    <tag k="local_x" v="1.5604" />
+    <tag k="local_y" v="-5.2254" />
+    <tag k="ele" v="0.0666" />
   </node>
   <node id="10" lat="0" lon="0">
-    <tag k="local_x" v="1.3355" />
-    <tag k="local_y" v="-5.0950" />
-    <tag k="ele" v="0.0600" />
+    <tag k="local_x" v="1.4396" />
+    <tag k="local_y" v="-4.7746" />
+    <tag k="ele" v="0.0666" />
   </node>
   <node id="11" lat="0" lon="0">
-    <tag k="local_x" v="1.3355" />
-    <tag k="local_y" v="-5.0950" />
-    <tag k="ele" v="0.4400" />
+    <tag k="local_x" v="1.4396" />
+    <tag k="local_y" v="-4.7746" />
+    <tag k="ele" v="0.5333" />
   </node>
   <node id="12" lat="0" lon="0">
-    <tag k="local_x" v="1.6645" />
-    <tag k="local_y" v="-4.9050" />
-    <tag k="ele" v="0.4400" />
+    <tag k="local_x" v="1.5604" />
+    <tag k="local_y" v="-5.2254" />
+    <tag k="ele" v="0.5333" />
   </node>
   <node id="13" lat="0" lon="0">
-    <tag k="local_x" v="-2.0000" />
-    <tag k="local_y" v="-2.6900" />
-    <tag k="ele" v="0.0600" />
+    <tag k="local_x" v="-1.9396" />
+    <tag k="local_y" v="-2.7254" />
+    <tag k="ele" v="0.0666" />
   </node>
   <node id="14" lat="0" lon="0">
-    <tag k="local_x" v="-2.0000" />
-    <tag k="local_y" v="-2.3100" />
-    <tag k="ele" v="0.0600" />
+    <tag k="local_x" v="-2.0604" />
+    <tag k="local_y" v="-2.2746" />
+    <tag k="ele" v="0.0666" />
   </node>
   <node id="15" lat="0" lon="0">
-    <tag k="local_x" v="-2.0000" />
-    <tag k="local_y" v="-2.3100" />
-    <tag k="ele" v="0.4400" />
+    <tag k="local_x" v="-2.0604" />
+    <tag k="local_y" v="-2.2746" />
+    <tag k="ele" v="0.5333" />
   </node>
   <node id="16" lat="0" lon="0">
-    <tag k="local_x" v="-2.0000" />
-    <tag k="local_y" v="-2.6900" />
-    <tag k="ele" v="0.4400" />
+    <tag k="local_x" v="-1.9396" />
+    <tag k="local_y" v="-2.7254" />
+    <tag k="ele" v="0.5333" />
   </node>
   <way id="1000">
     <nd ref="1" />

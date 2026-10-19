@@ -25,14 +25,14 @@
 #   stop line    (0.00, -2.20): level with the start box, in the other lane
 # Floor: x -2.5 to 5.0, y -5.5 to 0.5 (route and boards), clear.
 #
-# Boards (DICT_5X5_1000, 0.38 m black square on a 500 mm plate standing on
-# the floor, so the marker centre is 0.25 m up), measured from the start box. 4 boards:
-#   id 24  (  4.50,  0.00)  facing -x       ANCHOR  in view at s = 0.0-2.6 m
+# Boards (DICT_5X5_1000, 0.4667 m black square on a 600 mm board standing on
+# the floor, so the marker centre is 0.3 m up), measured from the start box. 4 boards:
+#   id 24  (  4.50,  0.00)  facing -x       ANCHOR  in view at s = 0.0-2.5 m
 #   id 25  (  4.50, -1.50)  facing +120 deg         in view at s = 0.0-3.2 m
-#   id 26  (  1.50, -5.00)  facing +120 deg         in view at s = 3.2-4.9 m
-#   id 27  ( -2.00, -2.50)  facing +x               in view at s = 4.5-7.5 m
+#   id 26  (  1.50, -5.00)  facing +15 deg          in view at s = 3.2-4.9 m
+#   id 27  ( -2.00, -2.50)  facing +15 deg          in view at s = 4.5-7.5 m
 # Why 4: a coverage search (marker_sim.visible: hfov 100 deg, range 5 m =
-# ar_tag distance_threshold, 60 deg incidence limit, 0.38 m marker) over
+# ar_tag distance_threshold, 60 deg incidence limit, 0.4667 m marker) over
 # boards on a 0.5 m grid facing every 15 deg, each at least 1.4 m from
 # the car's track (1 m clear of the car), for the fewest that give: the start box
 # (+-0.3 m, +-10 deg) sees >= 2 boards; no blind stretch over 3 m;
@@ -40,7 +40,7 @@
 # (+-0.3 m, +-10 deg) sees >= 1, so the stop is measured on a fix.
 # 4 is the fewest the search tries.
 # Result: the start box sees >= 2 boards, the stop >= 1; a board in view on
-# 100% of the path (two or more on 43%); the turn covered on
+# 100% of the path (two or more on 42%); the turn covered on
 # 100%; the longest blind stretch 0.00 m (s = 0.0
 # to 0.0 m), 0.0 s at 0.8 m/s, under localization_monitor's
 # 5 s error_age.
@@ -59,14 +59,14 @@ closed: false
 laps: 1
 v_ref: 0.8
 start_pose: {x: 0.000, y: 0.000, yaw: 0.0000}
-marker_size: 0.38
+marker_size: 0.4667
 dictionary: DICT_5X5_1000
-# 500 mm plate standing on the floor, the 0.38 m black square centred on it
-marker_height: 0.25
+# 600 mm board standing on the floor, the 0.4667 m black square centred on it
+marker_height: 0.3
 # what make-uturn generated this course from (the tests read it; the stack does not)
 uturn: {radius: 1.1, leg: 2}
 markers:
   - {id: 24, x: 4.500, y: 0.000, yaw: 3.1416}
   - {id: 25, x: 4.500, y: -1.500, yaw: 2.0944}
-  - {id: 26, x: 1.500, y: -5.000, yaw: 2.0944}
-  - {id: 27, x: -2.000, y: -2.500, yaw: 0.0000}
+  - {id: 26, x: 1.500, y: -5.000, yaw: 0.2618}
+  - {id: 27, x: -2.000, y: -2.500, yaw: 0.2618}

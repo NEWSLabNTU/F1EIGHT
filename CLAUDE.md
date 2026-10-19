@@ -249,7 +249,8 @@ just --list             # Show all available commands
 ```
 
 Grouped commands live in justfile modules under `just/`, so the top-level list
-stays short: `arbiter`, `bag`, `control`, `map`, `sim`, `tool`, plus `demo` in `demo/`.
+stays short: `arbiter`, `aruco-map`, `bag`, `coach`, `control`, `coss`, `lab2`, `map`,
+`sim`, `tool`, plus `demo` in `demo/`.
 `just <module>` lists that module's recipes, and both spellings work —
 `just bag play` and `just bag::play`.
 
@@ -321,6 +322,20 @@ just map grid-from-bag <bag> <map_dir>   # accumulate scans instead, for a site 
 verifies the grid is in the lanelet2 map's frame, which is the failure class
 that otherwise costs days. See `docs/design/map-handling-per-localization-method.md`.
 
+### ArUco map
+```bash
+just aruco-map survey 24 [DIR] [vehicle_id:=car_c]   # drive past the boards, Ctrl-C solves
+just aruco-map check [DIR]                           # drive by hand, watch the localization
+just aruco-map align [DIR] --route NAME              # optional: into a route's start-box frame
+just aruco-map solve [DIR] [--origin ID]             # re-solve the recording, no car
+```
+A survey's map is in the **origin board's frame**: origin on the floor below
+that board, x the way it faces, z up, y = z × x. Lab-independent (settings on
+the command line only, default `vehicle_id:=sim`; nothing drives). Packages:
+`src/localization/autosdv_marker_survey`, `src/localization/autosdv_aruco_localization`;
+Lab 2 depends on them (`just lab2 survey|survey-align|loc-check` are wrappers),
+never the reverse. Guide: `docs/guides/aruco-map.md`.
+
 ### Rosbag
 ```bash
 just bag record         # Record outdoor sensor topics
@@ -338,12 +353,19 @@ just bag download       # Download test rosbag (~2.8 GB)
 just sim rc             # RC car simulator: Autoware + the real vehicle interface (hardware:=sim) + plant
 just sim grade DIR      # Lab 2 Part 1 grade: headless, deterministic (--view replays it in RViz)
 just sim make-track     # size the graded straight from the speed profile
-just lab2 sim                             # Lab 2 Part 1: the one ~/lab2/*_lab_2_1 SpeedPID on 3 RC-sim cars, mark / 25
+just lab2 sim                             # Lab 2 Part 1: lab2_sim_vehicle (its SpeedPID + config/sim tuning) on 3 RC-sim cars, mark / 25
 just lab2 run team:=3                     # Lab 2 Part 2: ~/lab2/team3 on the car, or the vehicle bench + gate elsewhere
 just lab2 stack car_b                     # the Lab 2 stack (waypoints + ArUco) on car B, no lab settings; car_a sensor_suite:=vlp16_zed ...
 ```
 The RC simulator's vehicle model, grader and limits: `docs/guides/rc-sim.md`.
 Lab 2 Part 1 (the course, the 9 checks, the controller and its physics): `docs/guides/lab2-part1-sim.md`.
+Part 1 runs ONE simulation model for everyone, `lab2_sim_vehicle`
+(`vehicle_model:=lab2_sim_vehicle vehicle_id:=sim`; the car models `teamN_vehicle` are Part
+2's), resolved from this repository's install: the handout's `lab2_sim_vehicle_launch/`
+copied into `src/lab2_vehicles/` (gitignored) and built with `colcon build ... --symlink-install
+--packages-up-to lab2_sim_vehicle_launch`; no `team:=`. It is checked first (`scripts/testing/lab2/submission.py --part1
+DIR`). TA: `submission:=DIR` (a `<id>_lab_2_1/` holding the model) builds it into the run's
+own `ws/`; `--class ... --params ...` runs a class on `autosdv_vehicle`.
 See `docs/guides/simulation_testing.md` for the full simulation guide
 (planning sim, rosbag replay, CARLA integration).
 
@@ -887,8 +909,11 @@ They drifted from it once; read them there when it matters.
 
 **Per-car values** live in Autoware's instance layer, `individual_params`
 (`src/param/autoware_individual_params`), under `config/<vehicle_id>/`:
-`autosdv_vehicle/actuator.param.yaml` (ESC neutral and brake points, servo
-centre and ends, a measured steering ratio), `autosdv_sensor_kit/` (calibration,
+`autosdv_vehicle/actuator.param.yaml` (ESC neutral and brake points, the ESC
+thresholds of `docs/design/esc-pwm-model.md`, servo
+centre and ends, a measured steering ratio), `autosdv_vehicle/speed_controller.param.yaml` (the car's tuning of the default
+speed controller: gains, `esc_deadzone_compensation`, `drive_floor_pwm`; empty
+until tuned; `speed_controller_params:=` still overrides it), `autosdv_sensor_kit/` (calibration,
 IMU bias) and `autosdv.preset.yaml` (defaults for `sensor_model`,
 `vehicle_model`, `sensor_suite`, `use_gnss`). Instances: `car_a` (VLP16 + ZED,
 measured), `car_b` (Robin-W + ZED), `car_c` (a copy of B until measured), and
@@ -897,7 +922,7 @@ ZED preset; never a physical car). The launch argument `vehicle_id:=<car>` selec
 **required** on every launch that runs on a car (`just launch vehicle_id:=car_b`,
 `just lab2 stack car_b`, `just control basic vehicle_id:=car_b`); there is no
 default and no environment variable (`$(env VEHICLE_ID default)` is gone),
-because the cars differ in their stop PWM (A 380, B 395) and the wrong one drives
+because the cars differ in their stop PWM (A 380, B 390) and the wrong one drives
 instead of stopping. The preset is included before the arguments it defaults, so
 the command line still wins (`vehicle_id:=car_a use_gnss:=true`). The actuator
 file loads last into the actuator and gear manager. The simulators (`just sim
@@ -970,6 +995,7 @@ recipes that no longer exist.
 | [docs/known-config-defects.md](docs/known-config-defects.md) | Configuration that is wrong on every run until someone edits a file |
 | [docs/guides/vehicle_calibration.md](docs/guides/vehicle_calibration.md) | PWM control, PID tuning, testing tools |
 | [docs/guides/zed_camera.md](docs/guides/zed_camera.md) | ZED setup, troubleshooting |
+| [docs/guides/aruco-map.md](docs/guides/aruco-map.md) | ArUco board survey and localization (`just aruco-map`): commands, frame, outputs |
 | [docs/guides/lidar_integration.md](docs/guides/lidar_integration.md) | Robin-W, Velodyne, TensorRT |
 | [docs/guides/control_testing.md](docs/guides/control_testing.md) | Control system testing procedures |
 | [docs/guides/mrm_configuration.md](docs/guides/mrm_configuration.md) | MRM (emergency stop) configuration |
