@@ -1,0 +1,23 @@
+# Lab 2 TEST route lab2_quarter_r2: a quarter circle, NOT graded (audit reports metrics only).
+#
+# Route: from the start box, a 90 deg RIGHT arc of radius 2 m about (0, -2):
+# from (0, 0) facing +x to (2, -2) facing -y, arc length 3.14 m, one run at
+# v_ref 0.8 m/s, open path; the path publisher's end ramp (decel 0.3 m/s^2)
+# brings the car to rest on the last waypoint. The curvature speed limit is
+# sqrt(a_lat_max / k) = sqrt(0.6 / 0.5) = 1.1 m/s, above v_ref.
+#
+# Field: its own (no `field:` key). No boards are planned here: the field's
+# boards are wherever the TA puts them, and the survey measures them
+# (`just lab2 survey ID`, then `just lab2 survey-align --route lab2_quarter_r2`),
+# which writes the aligned course with the real boards. Space needed: about
+# 2.5 x 2.5 m to the right of the start box, plus 2 m straight ahead of it for
+# the alignment drive.
+path: path.csv
+closed: false
+laps: 1
+v_ref: 0.8
+start_pose: {x: 0.000, y: 0.000, yaw: 0.0000}
+marker_size: 0.4667   # black edge: 0.60 m board, 7 of its 9 cells (1-cell white margin)
+dictionary: DICT_5X5_1000
+marker_height: 0.30
+markers: []
