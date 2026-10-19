@@ -121,3 +121,78 @@ def test_window_and_validation():
     with pytest.raises(ValueError):
         mf.Recording([0.0], [370], [0.0, 0.1], [0.0, 0.0])
     assert asdict(TRUTH_A)['deadband'] == 7
+
+
+# ---- the prior's init_pwm: never the 370 default (car B is 395)
+
+DUMP = """/autosdv/actuator_node:
+  ros__parameters:
+    brake_pwm: 365
+    car_profile: car_b
+    init_pwm: 395
+    max_pwm: 470
+    min_pwm: 360
+    speed_controller:
+      kp: 15.0
+"""
+
+
+def _bag_dir(tmp_path, dump=DUMP):
+    bag = tmp_path / 'lab2cal_x'
+    bag.mkdir()
+    if dump is not None:
+        (bag / mf.ACTUATOR_PARAMS_FILE).write_text(dump)
+    return str(bag)
+
+
+def test_read_actuator_params_from_a_ros2_param_dump(tmp_path):
+    bag = _bag_dir(tmp_path)
+    p = mf.read_actuator_params(f'{bag}/{mf.ACTUATOR_PARAMS_FILE}')
+    assert p['init_pwm'] == 395 and p['car_profile'] == 'car_b' and p['brake_pwm'] == 365
+
+
+def test_prior_from_the_bags_actuator_params(tmp_path):
+    prior, source = mf.resolve_prior(_bag_dir(tmp_path), {'gain': 0.02})
+    assert prior.init_pwm == 395 and prior.gain == 0.02
+    assert mf.ACTUATOR_PARAMS_FILE in source and 'car_b' in source
+
+
+def test_explicit_prior_init_wins(tmp_path):
+    prior, source = mf.resolve_prior(_bag_dir(tmp_path), {'init_pwm': 380})
+    assert prior.init_pwm == 380 and '--prior' in source
+
+
+def test_old_bag_needs_a_car_profile(tmp_path):
+    bag = _bag_dir(tmp_path, dump=None)
+    with pytest.raises(ValueError, match='--car-profile'):
+        mf.resolve_prior(bag, {})
+    prior, source = mf.resolve_prior(bag, {}, 'car_b', {'init_pwm': 395})
+    assert prior.init_pwm == 395 and 'car_b' in source
+
+
+def test_saved_params_and_car_profile_disagree(tmp_path):
+    bag = _bag_dir(tmp_path)
+    with pytest.raises(ValueError, match='370.*395'):
+        mf.resolve_prior(bag, {}, 'car_a', {'init_pwm': 370})
+    prior, _ = mf.resolve_prior(bag, {}, 'car_b', {'init_pwm': 395})
+    assert prior.init_pwm == 395
+
+
+def test_cli_refuses_a_recording_without_a_neutral(tmp_path, clean, capsys):
+    path = str(tmp_path / 'rec.csv')
+    mf.write_csv(path, clean[0])
+    assert mf.main([path]) == 2
+    assert '--car-profile' in capsys.readouterr().err
+
+
+def test_car_b_bag_fits_from_its_own_neutral(tmp_path):
+    """A car B speed-step bag (neutral 395) fitted from 370 pins the deadband at
+    --deadband-max; from the saved actuator_params.yaml it comes back exactly."""
+    truth = MotorPlantParams(init_pwm=395, deadband=7, gain=0.025, time_constant=0.5)
+    rec, _ = mf.synthesize(truth, [0.0, 0.5, 1.0, 0.0], 3.0)
+    prior, _ = mf.resolve_prior(_bag_dir(tmp_path), {})
+    res = mf.fit(rec, prior, deadband_max=10)
+    assert res.params.init_pwm == 395 and res.params.deadband == truth.deadband
+    assert res.params.gain == pytest.approx(truth.gain, rel=0.03)
+    wrong = mf.fit(rec, MotorPlantParams(), deadband_max=10)
+    assert wrong.params.deadband == 10 or wrong.rmse_fit > 5 * res.rmse_fit

@@ -123,11 +123,21 @@ parameters are provisional guesses.
 the stack without the planner:
 
 ```bash
-just coach vehicle launch_planner:=false                     # terminal 1 (Robin-W, ZED IMU)
+just coach vehicle launch_planner:=false car_profile:=car_b  # terminal 1 (Robin-W, ZED IMU)
 just coach record-cal steps1                                  # terminal 2
 just coach speed-steps                                        # terminal 3: 0,0.3,0.6,0 m/s, 4 s each (about 2 m)
 just coach engage                                             # terminal 4: starts the schedule
 ```
+
+Or all four from one terminal, which also fits and exports at the end:
+`just coach record-part1 car_profile:=car_b --name steps1` (`car_profile:=`
+is required; `--bench` defaults to `car_a`).
+
+`record-cal` first saves the running actuator's parameters
+(`ros2 param dump /autosdv/actuator_node`: `init_pwm`, `brake_pwm`,
+`min_pwm`/`max_pwm`, `car_profile`) as `BAG/actuator_params.yaml`, and refuses
+to record if the actuator is not up within 30 s (`RECORD_CAL_WAIT`). The fit
+reads the car's neutral from that file.
 
 The schedule starts on engage and ends stopped. It also stops early with a
 braking ramp after `max_distance` metres (2.5 m by default, so give it about
@@ -147,6 +157,15 @@ publish `control_cmd` directly; that would bypass the gate.
 ```bash
 just coach fit-motor rosbags/lab2cal_steps1 -o tmp/motor_plant.yaml
 ```
+
+The deadband and the gain are measured from the car's neutral `init_pwm`
+(car A 370, car B 395), which the fit takes from `BAG/actuator_params.yaml`.
+A bag recorded before `record-cal` saved it, or a CSV, needs the car named:
+`just coach fit-motor rosbags/lab2cal_old --car-profile car_b`; without one
+the fit refuses. `--prior '{init_pwm: N}'` overrides both. (Fitted from the
+wrong neutral, a car B bag puts the 25-count offset into the deadband, which
+pins at `--deadband-max` -- counts beyond `init_pwm`, default 15 -- and the
+gain comes out a third of the truth.)
 
 The fit replays the recorded PWM (`/autosdv/actuator_node/debug/pwm_values`)
 through `MotorPlant` and through `HallSpeedSensor`, the model of

@@ -146,13 +146,47 @@ record-part1 *ARGS:
     unset DISPLAY                       # the ZED (its IMU) cannot have one: scripts/testing/lab2/camera_display.sh
     exec python3 scripts/testing/lab2/record_part1.py "$@"
 
+# Saves the running actuator's parameters (init_pwm, brake_pwm, min/max_pwm,
+# car_profile) as BAG/actuator_params.yaml first, which fit-motor measures the
+# deadband and gain from; refuses to record when /autosdv/actuator_node is not
+# up within RECORD_CAL_WAIT seconds (default 30).
+#
 # Record what the motor fit and the braking report read, to rosbags/lab2cal_<time>
 record-cal NAME="":
     #!/usr/bin/env bash
+    set -o pipefail
     source scripts/env.sh
     name='{{ NAME }}'
     out="rosbags/lab2cal_${name:-$(date +%Y%m%d_%H%M%S)}"
-    mkdir -p rosbags
+    [ ! -e "$out" ] || { echo "$out exists: pick another NAME" >&2; exit 2; }
+    mkdir -p rosbags tmp
+    # ros2 bag record refuses an existing directory, so the dump waits in
+    # tmp/ and moves in once the recorder has created $out.
+    params=$(mktemp tmp/actuator_params.XXXXXX.yaml)
+    node=/autosdv/actuator_node
+    wait_s="${RECORD_CAL_WAIT:-30}"
+    deadline=$((SECONDS + wait_s))
+    until ros2 param dump "$node" > "$params" 2>/dev/null && grep -q '^ *init_pwm:' "$params"; do
+        if [ "$SECONDS" -ge "$deadline" ]; then
+            rm -f "$params"
+            echo "record-cal: $node is not up after ${wait_s} s: start the stack (just coach vehicle" \
+                 "launch_planner:=false car_profile:=car_X) first. Not recording: fit-motor needs" \
+                 "its init_pwm." >&2
+            exit 1
+        fi
+        sleep 1
+    done
+    for k in init_pwm brake_pwm min_pwm max_pwm car_profile; do
+        grep -q "^ *$k:" "$params" || { echo "record-cal: $node has no $k parameter ($params)" >&2; exit 1; }
+    done
+    echo "actuator: $(grep -E '^ *(car_profile|init_pwm|brake_pwm|min_pwm|max_pwm):' "$params" | tr -s ' ' | tr '\n' ' ')"
+    (
+        for _ in $(seq 300); do
+            if [ -d "$out" ]; then mv "$params" "$out/actuator_params.yaml" && exit 0; fi
+            sleep 0.1
+        done
+        echo "record-cal: $out never appeared; the actuator parameters are left in $params" >&2
+    ) &
     topics=(
         /autosdv/actuator_node/debug/pwm_values /autosdv/actuator_node/debug/pid_values
         /autosdv/actuator_node/debug/control_values /autosdv/actuator_node/debug/mode
@@ -183,6 +217,11 @@ record-board LIDAR="robin-w" NAME="":
     exec ros2 bag record -o "$out" "$cloud" /perception/coach/board \
         /perception/coach/state /localization/kinematic_state /diagnostics /tf /tf_static
 
+# The neutral the fit measures from is the bag's actuator_params.yaml (record-cal);
+# an older bag needs --car-profile car_a|car_b|car_c, and --prior '{init_pwm: N}' wins.
+#   just coach fit-motor rosbags/lab2cal_steps1 -o tmp/motor_plant.yaml
+#   just coach fit-motor rosbags/lab2cal_old --car-profile car_b
+#
 # Fit the motor plant (MotorPlantParams) to a speed-step bag; -o FILE writes the YAML
 [positional-arguments]
 fit-motor BAG *ARGS:
