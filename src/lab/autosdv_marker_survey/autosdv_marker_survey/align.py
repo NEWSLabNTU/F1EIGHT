@@ -59,7 +59,9 @@ import yaml
 # ------------------------------------------------------------ the rules
 MIN_DISTANCE = 1.0              # m: refuse a shorter drive
 RECOMMENDED_DISTANCE = 2.0      # m: warn below this
-MAX_LATERAL = 0.05              # m: refuse a drive that leaves its own line by more
+MAX_LATERAL = 0.10              # m: refuse a drive that leaves its own line by more
+# 5 cm refused every drive on car B (2026-10-16): the fixes were 1.4 cm RMS about the
+# line, but one board set disagreed with another by ~8 cm, a survey error, not a curve.
 MAX_START_YAW_DIFF = math.radians(10.0)   # refuse: the car pointed elsewhere than it drove
 MIN_REST = 0.5                  # s at rest before the drive, at least
 REST_WINDOW = 1.0               # s averaged for the start pose

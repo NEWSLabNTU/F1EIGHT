@@ -86,7 +86,7 @@ def test_the_line_not_the_car_heading_defines_x():
 
 @pytest.mark.parametrize('kw,why', [
     (dict(distance=0.8), 'drove 0.'),
-    (dict(wiggle=0.08), 'not straight'),
+    (dict(wiggle=0.15), 'not straight'),
     (dict(rest=0.2), 'at rest for'),
     (dict(heading_off=math.radians(20.0)), 'pointed'),
 ])
