@@ -282,9 +282,13 @@ def score_main(args):
             print(f'two references for {m.route}', file=sys.stderr)
             return 2
         refs[m.route] = m
-    scores, out = [], []
+    scores, out, ungraded = [], [], 0
     for b in args.bags:
         m, meta = rg.read_route_bag(b, args.route, args.course)
+        if m.route is None and m.ungraded:
+            print(rg.format_ungraded(m))
+            ungraded += 1
+            continue
         if m.route is None:
             print(f'{b}: {"; ".join(m.notes)}', file=sys.stderr)
             return 2
@@ -293,6 +297,8 @@ def score_main(args):
             m.notes.append('no reference bag for this route: fixed absolute pass lines')
         scores.append(s)
         out.append((m, s, meta))
+    if not out:
+        return 0
     if args.json:
         print(json.dumps([{'metrics': asdict(m), 'points': s.points, 'total': s.total,
                            'max': s.max_total, 'lines': s.lines, 'gate_failures': s.gate_failures}

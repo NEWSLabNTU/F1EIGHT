@@ -296,13 +296,19 @@ class Audit:
     notes: List[str] = field(default_factory=list)
     png: Optional[str] = None
     localization: Optional[dict] = None
+    graded: bool = True
+    route: Optional[str] = None      # an ungraded route's name
 
     @property
     def valid(self) -> bool:
-        return self.check_ok and self.grade_valid
+        """Graded: check-bags and the grade both pass. Not graded (a test route):
+        check-bags passes; there is no grade."""
+        return self.check_ok and (self.grade_valid or not self.graded)
 
     @property
     def verdict(self) -> str:
+        if not self.graded:
+            return 'METRICS ONLY' if self.valid else 'INVALID'
         return 'VALID' if self.valid else 'INVALID'
 
 
@@ -315,6 +321,11 @@ def build_audit(bag: str, verdict, m: rg.RouteMetrics, sc: Optional[rg.RouteScor
               reference=reference)
     a.check_ok, a.check_reasons, a.check_warnings = verdict.ok, list(verdict.reasons), list(verdict.warnings)
     a.notes = list(m.notes)
+    if sc is None and m.ungraded:
+        a.graded, a.route = False, m.ungraded
+        a.violations += [f'check-bags: {r}' for r in verdict.reasons]
+        _run_violations(a, m, s)
+        return a
     # the cause first: the grade's gates, then what check-bags adds, then the points lost
     # and the moments on the timeline
     if sc is None:
@@ -347,6 +358,12 @@ def build_audit(bag: str, verdict, m: rg.RouteMetrics, sc: Optional[rg.RouteScor
             else:
                 a.violations.append(f'{label} {_f(val)} {unit} over the full-marks line {full:.3f} '
                                     f'({pts:.2f} / {sc.maximum[k]:g} points)')
+    _run_violations(a, m, s)
+    return a
+
+
+def _run_violations(a: Audit, m: rg.RouteMetrics, s: Series) -> None:
+    """The moments on the timeline: off the path, MRM, disengage."""
     if not math.isnan(m.t_engage):
         t1 = m.t_rest if not math.isnan(m.t_rest) else (s.kin_t[-1] if s.kin_t else m.t_engage)
         for t0_, t1_, worst in off_path_spans(s, m.t_engage, t1):
@@ -357,7 +374,6 @@ def build_audit(bag: str, verdict, m: rg.RouteMetrics, sc: Optional[rg.RouteScor
             a.violations.append(f'MRM at {t - m.t_engage:.1f} s after engage')
         for t in s.disengage:
             a.violations.append(f'disengaged at {t - m.t_engage:.1f} s after engage, before the finish')
-    return a
 
 
 def format_audit(a: Audit, m: Optional[rg.RouteMetrics] = None) -> str:
@@ -365,6 +381,20 @@ def format_audit(a: Audit, m: Optional[rg.RouteMetrics] = None) -> str:
     out = [f'AUDIT  {a.bag}   {who}']
     check = 'ACCEPT' if a.check_ok else 'REJECT'
     grade = 'valid' if a.grade_valid else 'INVALID'
+    if not a.graded:
+        out.append(f'  {a.verdict}   check-bags {check}{" (bench mode)" if a.bench else ""}; '
+                   f'route {a.route}: {rg.UNGRADED}')
+        if m is not None:
+            out.append(f'  {"speed RMSE (steady)":<22}{_f(m.speed_rmse) + " m/s":>12}   '
+                       f'window {_f(m.window_s, 1)} s')
+            out.append(f'  {"overshoot":<22}{_f(m.overshoot) + " m/s":>12}')
+            out.append(f'  {"stop error":<22}{_f(m.stop_error) + " m":>12}')
+            out.append(f'  {"path deviation max":<22}{_f(m.path_dev_max) + " m":>12}'
+                       f'{"valid <= " + format(rg.PATH_DEV_MAX, ".2f"):>20}')
+            out.append(f'  {"localization jump":<22}{_f(m.loc_jump) + " m":>12}'
+                       f'{"valid <= " + format(rg.LOC_JUMP_MAX, ".2f"):>20}')
+            out.append(f'  {"stop (signed)":<22}{_f(m.stop_signed) + " m":>12}   + = past the stop line')
+        return '\n'.join(out + _tail(a))
     out.append(f'  {a.verdict}   check-bags {check}{" (bench mode)" if a.bench else ""}, grade {grade}'
                + ('' if not a.bench else '  -- a bench bag is never a submission'))
     lines = f'reference {a.reference}' if a.reference else 'fixed lines (no reference bag)'
@@ -382,6 +412,11 @@ def format_audit(a: Audit, m: Optional[rg.RouteMetrics] = None) -> str:
         out.append(f'  total  {a.total:.2f} / {a.max_total:g}')
     else:
         out.append(f'  total  0 / {a.max_total:g}   (INVALID; the metrics alone: {a.raw_total:.2f})')
+    return '\n'.join(out + _tail(a))
+
+
+def _tail(a: Audit) -> List[str]:
+    out = []
     if a.violations:
         out.append('  violations:')
         out += [f'    - {v}' for v in a.violations]
@@ -396,7 +431,7 @@ def format_audit(a: Audit, m: Optional[rg.RouteMetrics] = None) -> str:
     out += [f'  note: {n}' for n in a.notes]
     if a.png:
         out.append(f'  plot: {a.png}')
-    return '\n'.join(out)
+    return out
 
 
 # ------------------------------------------------------------ the picture
@@ -441,7 +476,11 @@ def plot_audit(png: str, a: Audit, m: rg.RouteMetrics, sc: Optional[rg.RouteScor
     gs = fig.add_gridspec(3, 1, height_ratios=[1.15, 1.35, 0.8], hspace=0.32)
     ax1, ax2, ax3 = fig.add_subplot(gs[0]), fig.add_subplot(gs[1]), fig.add_subplot(gs[2])
     mode = '   BENCH (simulated car)' if a.bench else ''
-    if a.valid:
+    if not a.graded:
+        why = a.violations[0] if a.violations else ''
+        head = (f'{a.verdict}: {a.route}, {rg.UNGRADED}   speed RMSE {_f(m.speed_rmse)} m/s, '
+                f'stop error {_f(m.stop_error)} m' + (f'\n{why}' if why else ''))
+    elif a.valid:
         head = f'VALID   {a.total:.2f} / {a.max_total:g} points'
     else:
         why = a.violations[0] if a.violations else 'invalid'
@@ -627,7 +666,7 @@ def audit_bag(bag: str, car=None, team=None, reference=None, course=None, bench=
     verdict = cb.check_bag(bag, [course] if course else [], car, team, bench_ok=is_bench)
     m, meta = rg.read_route_bag(bag, None, course, msgs=msgs)
     ref = None
-    if reference:
+    if reference and m.route is not None:
         ref, _ = rg.read_route_bag(reference, None, course)
         if ref.route is None:
             ref = None
@@ -637,6 +676,12 @@ def audit_bag(bag: str, car=None, team=None, reference=None, course=None, bench=
         sc = rg.score_route(m, ref)
         tdir = course or rg.template_dir(m.route)
         geo = rg.geometry_from_course(tdir, m.route) if tdir else None
+        cdir = (meta or {}).get('course_dir')
+        if not cdir or not os.path.isdir(cdir):
+            cdir = tdir
+    elif m.ungraded:
+        _, tdir = rg.ungraded_course(meta, [course] if course else [])
+        geo = rg.geometry_from_course(tdir, m.ungraded)
         cdir = (meta or {}).get('course_dir')
         if not cdir or not os.path.isdir(cdir):
             cdir = tdir

@@ -98,12 +98,27 @@ def course_hashes(course_dir: str) -> Dict[str, str]:
     }
 
 
+def course_route_name(course_dir: str) -> str:
+    """The route a course directory drives: the route an aligned survey was aligned for,
+    else the directory's name (a packaged course)."""
+    try:
+        with open(os.path.join(course_dir, 'course.yaml')) as f:
+            d = yaml.safe_load(f) or {}
+        al = d.get('alignment')
+        if isinstance(al, dict) and al.get('route'):
+            return str(al['route'])
+    except (OSError, yaml.YAMLError):
+        pass
+    return os.path.basename(os.path.normpath(course_dir))
+
+
 def build_meta(course_dir: str, car_id: str, team_id: str, git_commit: str,
                started: float = 0.0) -> dict:
     h = course_hashes(course_dir)
     return {
         'schema': 1,
         'course_name': os.path.basename(os.path.normpath(course_dir)),
+        'route_name': course_route_name(course_dir),
         'course_hash': h['course_hash'],
         'route_hash': h['route_hash'],
         'route': h['route'],
@@ -177,6 +192,13 @@ def route_label(meta: Optional[dict]) -> Optional[str]:
     if not meta:
         return None
     return meta.get('route_kind') or meta.get('course_name') or None
+
+
+def route_name(meta: Optional[dict]) -> Optional[str]:
+    """The route's course name, graded or not (route_name; older bags: course_name)."""
+    if not meta:
+        return None
+    return meta.get('route_name') or meta.get('course_name') or None
 
 
 def route_from_meta(meta: Optional[dict]) -> Optional[str]:

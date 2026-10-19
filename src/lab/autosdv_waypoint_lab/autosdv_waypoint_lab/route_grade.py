@@ -129,6 +129,7 @@ class RouteMetrics:
     bad_speeds: int = 0                 # non-finite speed reports (dropped likewise)
     gate_failures: List[str] = field(default_factory=list)
     notes: List[str] = field(default_factory=list)
+    ungraded: Optional[str] = None      # a route that is not graded: its name (metrics only)
 
 
 def finite(*xs) -> bool:
@@ -211,6 +212,13 @@ def template_dir(route: str) -> Optional[str]:
     name = {v: k for k, v in bm.ROUTE_BY_NAME.items()}.get(route)
     if not name:
         return None
+    return course_template(name)
+
+
+def course_template(name: str) -> Optional[str]:
+    """The packaged course directory of that name, or None."""
+    if not name or '/' in name or name.startswith('.'):
+        return None
     try:
         from ament_index_python.packages import get_package_share_directory
         d = os.path.join(get_package_share_directory('autosdv_waypoint_lab'),
@@ -220,7 +228,37 @@ def template_dir(route: str) -> Optional[str]:
     except Exception:
         pass
     d = os.path.join(os.path.dirname(__file__), '..', 'config', 'courses', name)
-    return d if os.path.isdir(d) else None
+    return os.path.normpath(d) if os.path.isfile(os.path.join(d, 'course.yaml')) else None
+
+
+UNGRADED = 'not a graded route: metrics only'
+
+
+def ungraded_course(meta: Optional[dict], course_dirs=()) -> Optional[Tuple[str, str]]:
+    """(route name, course directory) of a bag of a route that is not graded but whose
+    course can be found (a straight test route, hall_demo): the one course given, else
+    the packaged course of that name, else the recorded course_dir. None otherwise."""
+    name = bm.route_name(meta)
+    if not name or bm.route_from_meta(meta) is not None or name in bm.ROUTE_BY_NAME:
+        return None     # (a graded route's name on a bag that is not that route: no metrics)
+    if len(course_dirs) == 1 and os.path.isfile(os.path.join(course_dirs[0], 'course.yaml')):
+        return name, course_dirs[0]
+    d = course_template(name)
+    if d:
+        return name, d
+    cd = (meta or {}).get('course_dir')
+    if cd and os.path.isfile(os.path.join(cd, 'course.yaml')):
+        return name, cd
+    return None
+
+
+def course_v_ref(course_dir: str, default: float = TARGET_SPEED) -> float:
+    import yaml
+    try:
+        with open(os.path.join(course_dir, 'course.yaml')) as f:
+            return float((yaml.safe_load(f) or {}).get('v_ref', default))
+    except (OSError, ValueError):
+        return default
 
 
 # ------------------------------------------------------------ metrics
@@ -367,6 +405,18 @@ def read_route_bag(path: str, route: Optional[str] = None, course_dir: Optional[
     meta = bm.meta_from_messages(msgs, path)
     route = route or bm.route_from_meta(meta)
     name = os.path.basename(os.path.normpath(path))
+    if not route:
+        test = ungraded_course(meta, (course_dir,) if course_dir else ())
+        if test is not None:
+            label, cdir = test
+            geo = geometry_from_course(cdir, label)
+            target = float(((meta or {}).get('route') or {}).get('v_ref', course_v_ref(cdir)))
+            m = route_metrics(name, msgs, label, geo, target)
+            m.route, m.ungraded = None, label
+            if not geo.turns:
+                m.notes = [n for n in m.notes if 'in the turn' not in n]
+            m.notes.insert(0, UNGRADED)
+            return m, meta
     if route not in bm.ROUTES:
         m = RouteMetrics(name)
         label = bm.route_label(meta)
@@ -473,4 +523,22 @@ def format_route(m: RouteMetrics, s: RouteScore) -> str:
         out.append('  INVALID -> 0 points: ' + '; '.join(s.gate_failures))
     out.append(f'  bag total  {s.total:.2f} / {s.max_total:g}')
     out += [f'  note: {n}' for n in m.notes]
+    return '\n'.join(out)
+
+
+def format_ungraded(m: RouteMetrics) -> str:
+    """A bag of a route that is not graded: its metrics, no points."""
+    def f(x, unit='', nd=3):
+        return 'n/a' if x is None or (isinstance(x, float) and math.isnan(x)) else f'{x:.{nd}f}{unit}'
+    rows = [('route', f'{m.ungraded} ({UNGRADED})'),
+            ('steady window', f(m.window_s, ' s', 1)),
+            ('speed RMSE', f(m.speed_rmse, ' m/s')),
+            ('overshoot', f(m.overshoot, ' m/s')),
+            ('stop error', f'{f(m.stop_error, " m")}  (signed {f(m.stop_signed, " m")}, + = past)'),
+            ('path deviation max', f(m.path_dev_max, ' m')),
+            ('localization jump', f(m.loc_jump, ' m')),
+            ('finished', str(m.finished)), ('MRM', str(m.mrm)), ('disengages', str(m.disengages))]
+    w = max(len(k) for k, _ in rows)
+    out = [m.name] + [f'  {k:<{w}}  {v}' for k, v in rows]
+    out += [f'  note: {n}' for n in m.notes[1:]]
     return '\n'.join(out)
