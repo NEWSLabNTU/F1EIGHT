@@ -37,8 +37,11 @@
        needs it. -->
   <exec_depend>autosdv_coach_lab</exec_depend>
   <exec_depend>autosdv_lab_msgs</exec_depend>
-  <!-- lab2_part1_sim.launch.xml -->
+  <!-- lab2_part1_sim.launch.xml, waypoint_follow*.launch.xml, the bench of
+       aruco_survey_align.launch.xml -->
   <exec_depend>autosdv_waypoint_lab</exec_depend>
+  <!-- aruco_loc_check.launch.xml, aruco_survey_align.launch.xml, waypoint_follow*.launch.xml -->
+  <exec_depend>autosdv_aruco_localization</exec_depend>
   <exec_depend>autosdv_rc_sim</exec_depend>
 
   <test_depend>ament_copyright</test_depend>

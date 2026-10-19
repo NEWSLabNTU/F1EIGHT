@@ -16,7 +16,7 @@
   place:
 
     zed_aruco.launch.xml                     the ZED: rectified image + IMU only
-    waypoint_localization.launch.xml         marker map, AR-tag localizer, EKF,
+    aruco_localization.launch.xml            marker map, AR-tag localizer, EKF,
                                              gyro odometer, start_pose_init
     autosdv_pursuit_control_component        the gate, the operation mode
                                              manager, the selector; NOT
@@ -37,7 +37,7 @@
   Two switches, both defaulting to the car, so Lab 2 Part 1 (the simulated
   car) can run this same stack:
 
-    localization:=ground_truth   no zed_aruco, waypoint_localization or
+    localization:=ground_truth   no zed_aruco, aruco_localization or
                                  localization_monitor; the graph defaults to
                                  the one without the marker checks. Something
                                  else (rc_sim_plant) publishes
@@ -151,7 +151,7 @@
   <!-- see coach_pursuit.launch.xml for why these four are lets -->
   <let name="launch_vehicle_interface" value="false"/>
   <let name="launch_pointcloud_preprocessor" value="false"/>
-  <!-- waypoint_localization.launch.xml runs its own, under localization -->
+  <!-- aruco_localization.launch.xml runs its own, under localization -->
   <let name="launch_vehicle_velocity_converter" value="false"/>
   <let name="launch_gyro_bias_estimator" value="false"/>
 
@@ -205,7 +205,7 @@
   </group>
 
   <let name="launch_zed" value="$(eval &quot;'$(var launch_camera)'.lower() in ('true', '1') and $(var use_aruco)&quot;)"/>
-  <include file="$(find-pkg-share autosdv_waypoint_lab)/launch/zed_aruco.launch.xml" if="$(var launch_zed)"/>
+  <include file="$(find-pkg-share autosdv_aruco_localization)/launch/zed_aruco.launch.xml" if="$(var launch_zed)"/>
 
   <let name="run_mode" value="$(eval &quot;'planning_simulation' if $(var hardware_sim) else 'online'&quot;)"/>
   <include file="$(find-pkg-share autosdv_launch)/launch/components/autosdv_pursuit_system_component.launch.xml">
@@ -261,7 +261,7 @@
        never go through the network stack -->
   <let name="ar_tag_container" value="/sensing/camera/zedxm/zed_container" if="$(var launch_zed)"/>
   <let name="ar_tag_container" value="" unless="$(var launch_zed)"/>
-  <include file="$(find-pkg-share autosdv_waypoint_lab)/launch/waypoint_localization.launch.xml" if="$(var use_aruco)">
+  <include file="$(find-pkg-share autosdv_aruco_localization)/launch/aruco_localization.launch.xml" if="$(var use_aruco)">
     <arg name="course_dir" value="$(var course_dir)"/>
     <arg name="use_ar_tag_localizer" value="$(var use_ar_tag_localizer)"/>
     <arg name="ar_tag_container" value="$(var ar_tag_container)"/>

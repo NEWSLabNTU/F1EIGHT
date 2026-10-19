@@ -21,7 +21,7 @@
       <remap from="~/input/camera_info" to="/fake/camera_info"/>
       <remap from="~/input/ekf_pose" to="/localization/pose_twist_fusion_filter/biased_pose_with_covariance"/>
       <remap from="~/output/pose_with_covariance" to="/localization/pose_estimator/pose_with_covariance"/>
-      <param from="$(find-pkg-share autosdv_waypoint_lab)/config/ar_tag_based_localizer.param.yaml"/>
+      <param from="$(find-pkg-share autosdv_aruco_localization)/config/ar_tag_based_localizer.param.yaml"/>
       <param from="$(var course_dir)/ar_tag.param.yaml" allow_substs="true"/>
     </node>
   </group>

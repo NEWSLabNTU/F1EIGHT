@@ -73,7 +73,7 @@
 
   <!-- the camera model -->
   <arg name="marker_noise_file"
-       default="$(find-pkg-share autosdv_waypoint_lab)/config/virtual_marker_localizer.param.yaml"/>
+       default="$(find-pkg-share autosdv_aruco_localization)/config/virtual_marker_localizer.param.yaml"/>
   <arg name="seed" default="-1"/>
   <arg name="dropout" default="0.1" description="fraction of camera frames with no detection"/>
 
@@ -110,15 +110,15 @@
     <param name="start_pose_file" value="$(var course_dir)/course.yaml"/>
   </node>
 
-  <node pkg="autosdv_waypoint_lab" exec="mock_aruco_camera" name="mock_aruco_camera" output="screen"
+  <node pkg="autosdv_aruco_localization" exec="mock_aruco_camera" name="mock_aruco_camera" output="screen"
         if="$(var mock_camera)">
     <param name="course_dir" value="$(var course_dir)"/>
     <param name="rate" value="$(var camera_rate)"/>
   </node>
 
-  <node pkg="autosdv_waypoint_lab" exec="virtual_marker_localizer" name="virtual_marker_localizer"
+  <node pkg="autosdv_aruco_localization" exec="virtual_marker_localizer" name="virtual_marker_localizer"
         namespace="localization/pose_estimator" output="screen" unless="$(var mock_camera)">
-    <param from="$(find-pkg-share autosdv_waypoint_lab)/config/ar_tag_based_localizer.param.yaml"/>
+    <param from="$(find-pkg-share autosdv_aruco_localization)/config/ar_tag_based_localizer.param.yaml"/>
     <param from="$(var course_dir)/ar_tag.param.yaml" allow_substs="true"/>
     <param from="$(var marker_noise_file)"/>
     <param name="map_file" value="$(var course_dir)/lanelet2_map.osm"/>

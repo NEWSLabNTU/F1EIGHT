@@ -34,7 +34,7 @@
   by the car's launch file.
 
   What differs, and why:
-    localization   the plant's true pose (ground_truth: no zed_aruco, waypoint_localization
+    localization   the plant's true pose (ground_truth: no zed_aruco, aruco_localization
                    or localization_monitor; config/part1/part1-diagnostics.yaml drops the
                    two marker checks), so the stop error measures control
     the car        rc_sim_plant (hardware:=sim): the actuator's PWM goes to the plant, the
