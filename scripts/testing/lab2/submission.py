@@ -1,90 +1,51 @@
 #!/usr/bin/env python3
-"""Turn a student's Lab 2 submission directory into the launch arguments that run it.
+"""Check a team's vehicle model before Lab 2 Part 1 runs it on the simulated car.
 
-    python3 scripts/testing/lab2/submission.py DIR              # what would be used
-    python3 scripts/testing/lab2/submission.py DIR --pythonpath
-    python3 scripts/testing/lab2/submission.py DIR --launch-args   # one per line
+    python3 scripts/testing/lab2/submission.py --part1 DIR            # model, source
+    python3 scripts/testing/lab2/submission.py --part1 DIR --model    # the model name only
 
-DIR is the `<student_id>_lab_2_1/` directory (holding `lab2_speed/`), or the
-`lab2_speed/` package itself (the one with `package.xml`): the same package and
-the same SpeedPID as Part 1, driving the real car. It must hold
+DIR is the Part 1 simulation vehicle model's source, lab2_sim_vehicle (one shared name for
+everyone; the car models, teamN_vehicle, are Part 2's): `lab2_sim_vehicle_launch/` as the
+handout ships it (the directory holding the three packages), or a directory holding
+it, e.g. a student's `<student_id>_lab_2_1/` submission (the model plus a report). It must
+hold
 
-    lab2_speed/speed_pid.py             the SpeedPID (and any helper module beside it)
-    config/speed_pid_car.yaml           the real car's parameters
-    config/calibration.yaml             deadband and gain from the car's speed-step CSV
-                                        (without it the car runs with no feed-forward)
+    lab2_sim_vehicle_description/       a package (package.xml)
+    lab2_sim_vehicle_interface/         a package, with lab2_sim_vehicle_interface/speed_pid.py
+                                        defining class SpeedPID
+    lab2_sim_vehicle_launch/            a package, with config/sim/speed_controller.param.yaml:
+        /**:
+          ros__parameters:
+            speed_controller_params: {kp: ..., ...}   only the keys in part1_keys(), each of
+                                                      its type and in its range
 
-and the result is
+and nothing in it may import autosdv_waypoint_lab.reference (the TA's reference controllers)
+or name a class there. Nothing is run or imported: the checks read the files. It prints the
+model name and its source directory (--model: the name alone; --name NAME checks another
+model), warnings on stderr; errors
+exit 2. `just lab2 sim` (scripts/testing/lab2/part1_run.py) runs the same check in-process.
 
-    PYTHONPATH                  the package directory, so `lab2_speed.speed_pid` imports
-    speed_controller_class      lab2_speed.speed_pid:SpeedPID
-    speed_controller_params     speed_pid_car.yaml, checked as Part 1's speed_pid.yaml is,
-                                with ff_deadband / ff_gain from the calibration unless
-                                speed_pid_car.yaml sets them itself (a calibration that
-                                is missing, does not load or has gain 0 gives 0 for
-                                both, with a warning: no feed-forward)
-
-The merge is the handout's `bench/params.py speed_pid_params()`, re-implemented
-here on purpose: the gate must not import code out of the student's copy of the
-bench. The retired `lab2_waypoint/` layout is refused with the new name.
-
-`just lab2 gate|bench|vehicle submission:=DIR` calls this; see
-scripts/testing/lab2/submission.sh.
-
-With --part1, DIR is a Lab 2 Part 1 submission for the simulated car
-(`just lab2 sim`), `<student_id>_lab_2_1/` holding `lab2_speed/`, or the
-`lab2_speed/` package itself. It must hold
-
-    lab2_speed/speed_pid.py             the SpeedPID (and any helper module beside it)
-    config/speed_pid.yaml               every parameter, feed-forward included
-
-and the result is
-
-    PYTHONPATH                  the package directory, so `lab2_speed.speed_pid` imports
-    speed_controller_class      lab2_speed.speed_pid:SpeedPID
-    speed_controller_params     speed_pid.yaml, checked: only the keys in PART1_KEYS, each
-                                of its type and in its range (no calibration file: the
-                                feed-forward constants are given in speed_pid.yaml)
-
-With --team, DIR is a Part 2 team directory instead, `~/lab2/team<N>/`:
-
-    <student_id>_lab_2_1/               the one controller the team drives with
-    path_tracker.param.yaml             the team's lookahead (optional)
-
-The tracker file may be the package's whole `path_tracker.param.yaml` or just
-the three settings a team may change, flat or under `tracker:`. Those three are
-merged into the package's file, written to tmp/lab2/, and passed as
-tracker_param_file:=. Any other setting that differs from the package's is an
-error: the handout allows only the lookahead to change.
+--part1 is the only mode (the old lab2_speed/ package checks are gone with the
+SpeedPID-only lab); it is accepted, and implied when left out.
 """
 import argparse
+import ast
 import json
 import math
+import os
+import re
 import sys
 from pathlib import Path
 
 import yaml
 
-CARS = ('A', 'B', 'C')
 REPO = Path(__file__).resolve().parents[3]
-TRACKER_DEFAULT = REPO / 'src/lab/autosdv_waypoint_lab/config/path_tracker.param.yaml'
-TRACKER_FILE = 'path_tracker.param.yaml'
-TUNABLE = ('k_lookahead', 'lookahead_min', 'lookahead_max')
+DEFAULT_VEHICLE_ID = 'sim'       # where no car is known: the sims and the bench run sim, the nominal car
+PWM_KEYS = ('init_pwm', 'min_pwm', 'max_pwm')
 
 
 class SubmissionError(ValueError):
     pass
-
-
-# ---- Part 1 on the simulated car: lab2_speed/ (just lab2 sim)
-
-PART1_PACKAGE = 'lab2_speed'
-PART1_CLASS = 'lab2_speed.speed_pid:SpeedPID'
-CLASS = PART1_CLASS            # Part 2 drives the same class, with the car file
-CAR_YAML = 'speed_pid_car.yaml'
-FF_KEYS = ('ff_deadband', 'ff_gain')
-DEFAULT_VEHICLE_ID = 'sim'       # where no car is known: the sims and the bench run sim, the nominal car
-PWM_KEYS = ('init_pwm', 'min_pwm', 'max_pwm')
 
 
 def _instances():
@@ -112,7 +73,7 @@ def part1_keys(pwm: dict = None) -> dict:
     car's actuator_pwm() (default sim's): forward headroom max_pwm - init_pwm, brake room
     init_pwm - min_pwm.
 
-    The course handout's lab2_speed/selfcheck.py carries a copy of this table (KEYS); a change
+    The course handout's selfcheck.py carries a copy of this table (KEYS); a change
     here must be made there too.
     """
     pwm = pwm or actuator_pwm()
@@ -149,40 +110,38 @@ class _UniqueKeyLoader(yaml.SafeLoader):
         return super().construct_mapping(node, deep)
 
 
-def part1_package_dir(path) -> Path:
-    root = Path(path).expanduser().resolve()
-    for cand in (root, root / PART1_PACKAGE):
-        if (cand / PART1_PACKAGE / 'speed_pid.py').is_file():
-            return cand
-    raise SubmissionError(
-        f'{root}: no {PART1_PACKAGE}/{PART1_PACKAGE}/speed_pid.py inside; give the '
-        f'<student_id>_lab_2_1 directory or the {PART1_PACKAGE} package directory')
-
-
-def part1_params(pkg: Path, pwm: dict = None):
-    """(checked speed_controller_params mapping, [warnings]) from config/speed_pid.yaml."""
-    return check_part1_yaml(pkg / 'config' / 'speed_pid.yaml', pwm)
-
-
-def check_part1_yaml(path: Path, pwm: dict = None):
-    """(checked mapping, [warnings]) for one Part 1 speed_pid.yaml."""
-    path = Path(path)
+def _load_unique(path: Path):
+    """The YAML document at path, refusing a key given twice."""
     if not path.is_file():
         raise SubmissionError(f'{path}: missing')
     try:
-        data = yaml.load(path.read_text(), Loader=_UniqueKeyLoader)
+        return yaml.load(path.read_text(), Loader=_UniqueKeyLoader)
     except SubmissionError as e:
         raise SubmissionError(f'{path}: {e}') from None
     except yaml.YAMLError as e:
         raise SubmissionError(f'{path}: not valid YAML ({e})') from None
+
+
+def check_part1_yaml(path: Path, pwm: dict = None):
+    """(checked mapping, [warnings]) for one flat SpeedPID parameter file (speed_pid_part1.yaml,
+    a Part 2 car file)."""
+    path = Path(path)
+    return check_part1_mapping(_load_unique(path), path, pwm)
+
+
+def check_part1_mapping(data, path: Path, pwm: dict = None, where: str = ''):
+    """(checked mapping, [warnings]) for the SpeedPID parameters `data` read from path (under
+    `where`, e.g. 'speed_controller_params', for the messages)."""
+    path = Path(path)
+    label = f'{path}' + (f' ({where})' if where else '')
     if data is None:
         data = {}
     if not isinstance(data, dict):
-        raise SubmissionError(f'{path}: expected a mapping of parameters, got {type(data).__name__}')
+        raise SubmissionError(f'{label}: expected a mapping of parameters, got {type(data).__name__}')
     keys = part1_keys(pwm)
     unknown = sorted(str(k) for k in data if k not in keys)
     if unknown:
-        raise SubmissionError(f'{path}: unknown key(s) {", ".join(unknown)}; '
+        raise SubmissionError(f'{label}: unknown key(s) {", ".join(unknown)}; '
                               f'allowed: {", ".join(keys)}')
     out, warnings = {}, []
     for key, (kind, lo, hi, lo_incl) in keys.items():
@@ -193,103 +152,27 @@ def check_part1_yaml(path: Path, pwm: dict = None):
         v = data[key]
         if kind is bool:
             if not isinstance(v, bool):
-                raise SubmissionError(f'{path}: {key} must be true or false, not {v!r}')
+                raise SubmissionError(f'{label}: {key} must be true or false, not {v!r}')
             out[key] = v
             continue
         if isinstance(v, bool) or not isinstance(v, (int, float)):
-            raise SubmissionError(f'{path}: {key} must be a number, not {v!r}')
+            raise SubmissionError(f'{label}: {key} must be a number, not {v!r}')
         if kind is int:
             if isinstance(v, float) and not v.is_integer():
-                raise SubmissionError(f'{path}: {key} must be a whole number of counts, not {v!r}')
+                raise SubmissionError(f'{label}: {key} must be a whole number of counts, not {v!r}')
             v = int(v)
         elif not math.isfinite(v):
-            raise SubmissionError(f'{path}: {key} must be finite, not {v!r}')
+            raise SubmissionError(f'{label}: {key} must be finite, not {v!r}')
         else:
             v = float(v)
         if (v < lo if lo_incl else v <= lo) or v > hi:
-            raise SubmissionError(f'{path}: {key} is {v!r}, outside '
+            raise SubmissionError(f'{label}: {key} is {v!r}, outside '
                                   f'{"[" if lo_incl else "("}{lo:g}, {hi:g}]')
         out[key] = v
     if 'brake_enter' in out and 'brake_exit' in out and out['brake_exit'] >= out['brake_enter']:
-        raise SubmissionError(f'{path}: brake_exit ({out["brake_exit"]:g}) must be below '
+        raise SubmissionError(f'{label}: brake_exit ({out["brake_exit"]:g}) must be below '
                               f'brake_enter ({out["brake_enter"]:g}): the gap is the hysteresis')
     return out, warnings
-
-
-def resolve_part1(path, pwm: dict = None):
-    """(package dir, [launch args], [warnings]) for a Part 1 (simulated car) submission."""
-    pkg = part1_package_dir(path)
-    mapping, warnings = part1_params(pkg, pwm)
-    return pkg, [f'speed_controller_class:={PART1_CLASS}',
-                 f'speed_controller_params:={flow_mapping(mapping)}'], warnings
-
-
-def package_dir(path) -> Path:
-    """The lab2_speed package of a Part 2 submission (the Part 1 package, plus the car file)."""
-    try:
-        return part1_package_dir(path)
-    except SubmissionError:
-        root = Path(path).expanduser().resolve()
-        old = any((c / 'lab2_waypoint' / 'speed_pid.py').is_file()
-                  for c in (root, root / 'lab2_waypoint'))
-        raise SubmissionError(
-            f'{root}: no {PART1_PACKAGE}/{PART1_PACKAGE}/speed_pid.py inside'
-            + ('; lab2_waypoint/ is retired: Part 2 drives the Part 1 package' if old else '')
-            + f'; give the <student_id>_lab_2_1 directory or the {PART1_PACKAGE} package '
-            f'directory, holding {PART1_PACKAGE}/speed_pid.py, config/{CAR_YAML} and '
-            'config/calibration.yaml') from None
-
-
-def _load(path: Path) -> dict:
-    if not path.is_file():
-        raise SubmissionError(f'{path}: missing')
-    data = yaml.safe_load(path.read_text()) or {}
-    if not isinstance(data, dict):
-        raise SubmissionError(f'{path}: expected a mapping')
-    return data
-
-
-def params(pkg: Path, pwm: dict = None):
-    """(merged speed_controller_params mapping, [warnings]): the checked car file (offsets
-    bounded by pwm, the car's actuator_pwm()), then the calibration's feed-forward under it."""
-    data, warnings = check_part1_yaml(pkg / 'config' / CAR_YAML, pwm)
-    # the car file leaves the feed-forward to calibration.yaml on purpose
-    warnings = [w for w in warnings if not any(w.startswith(f'{CAR_YAML}: {k} ') for k in FF_KEYS)]
-    deadband, gain, cal_warnings = calibration_ff(pkg / 'config' / 'calibration.yaml')
-    data.setdefault('ff_deadband', deadband)
-    data.setdefault('ff_gain', gain)
-    return data, warnings + cal_warnings
-
-
-def calibration_ff(path: Path):
-    """(ff_deadband, ff_gain, [warnings]) from a calibration.yaml. As the handout's
-    speed_pid_params(): a file that is missing, does not load or is not calibrated gives
-    0, 0 (no feed-forward) with a warning, never an error; it costs the calibration marks,
-    not the run."""
-    def unused(why):
-        return 0.0, 0.0, [f'calibration.yaml not used (no feed-forward): {path} {why}']
-    if not path.is_file():
-        return unused('is missing')
-    try:
-        cal = yaml.safe_load(path.read_text())
-    except (OSError, yaml.YAMLError) as e:
-        return unused(f'does not load ({e})')
-    if not isinstance(cal, dict):
-        return unused('is not a mapping')
-    try:
-        deadband, gain = float(cal['deadband']), float(cal['gain'])
-    except (KeyError, TypeError, ValueError):
-        return unused('needs deadband and gain as numbers')
-    if not (math.isfinite(deadband) and math.isfinite(gain)):
-        return unused('needs finite deadband and gain')
-    warnings = []
-    if str(cal.get('car', '')).strip().upper() not in CARS:
-        warnings.append(f'calibration.yaml: car is {cal.get("car")!r}, expected one of A, B, C')
-    if gain <= 0.0:
-        warnings.append('calibration.yaml: gain is 0, the calibration is not done '
-                        '(no feed-forward)')
-        return 0.0, 0.0, warnings
-    return deadband, gain, warnings
 
 
 def flow_mapping(d: dict) -> str:
@@ -297,116 +180,178 @@ def flow_mapping(d: dict) -> str:
     return '{' + ', '.join(f'{k}: {json.dumps(v)}' for k, v in d.items()) + '}'
 
 
-def resolve(path, pwm: dict = None):
-    """(package dir, [launch args], [warnings]). pwm: the car's actuator_pwm()."""
-    pkg = package_dir(path)
-    mapping, warnings = params(pkg, pwm)
-    return pkg, [f'speed_controller_class:={CLASS}',
-                 f'speed_controller_params:={flow_mapping(mapping)}'], warnings
+# ---- Part 1 on the simulated car: the team's vehicle model (just lab2 sim)
+
+try:
+    from lab2_ws import SIM_MODEL                   # the one name; lab2_ws owns it
+except ImportError:
+    SIM_MODEL = 'lab2_sim_vehicle'
+#: Part 1's model: ONE simulation vehicle model, the same name for everyone (the handout's
+#: lab2_sim_vehicle_launch/); the car models, teamN_vehicle, are Part 2's
+SIM_TUNING = Path('config') / 'sim' / 'speed_controller.param.yaml'
+NESTED_UNDER = 'speed_controller_params'
+REFERENCE_PKG = 'autosdv_waypoint_lab.reference'
+_REFERENCE_NAME = re.compile(r'autosdv_waypoint_lab\s*[./]\s*reference\b')
+_SKIP_DIRS = {'__pycache__', '.git', 'build', 'install', 'log', '.pytest_cache'}
+_TEXT_SUFFIXES = {'.py', '.xml', '.yaml', '.yml', '.cfg', '.txt', '.json', '.launch'}
 
 
-def team_controller(team: Path) -> Path:
-    """The single controller directory inside a team directory."""
-    found = []
-    for d in sorted(p for p in team.iterdir() if p.is_dir()):
-        try:
-            package_dir(d)
-            found.append(d)
-        except SubmissionError:
-            pass
-    if len(found) != 1:
-        names = ', '.join(d.name for d in found) or 'none'
-        raise SubmissionError(
-            f'{team}: expected exactly one <student_id>_lab_2_1 directory holding '
-            f'{PART1_PACKAGE}/, found {names}')
-    return found[0]
+def _has_model(root: Path, model: str) -> bool:
+    """Does <model>_launch (a package) sit directly in root?"""
+    return (Path(root) / f'{model}_launch' / 'package.xml').is_file()
 
 
-def _ros_params(doc: dict) -> dict:
-    """The ros__parameters mapping of a param file, or the document itself."""
-    for v in doc.values():
-        if isinstance(v, dict) and isinstance(v.get('ros__parameters'), dict):
-            return v['ros__parameters']
-    return doc
+def part1_model_dir(path, model: str = SIM_MODEL) -> Path:
+    """The source root of `model` (default the Part 1 simulation model): the directory
+    holding <model>_launch/, <model>_interface/ and <model>_description/ -- `path` itself,
+    or the one such directory inside it (a student's <student_id>_lab_2_1/, say)."""
+    root = Path(path).expanduser().resolve()
+    if not root.is_dir():
+        raise SubmissionError(f'{root}: no such directory')
+    if _has_model(root, model):
+        return root
+    found = [d for d in sorted(p for p in root.iterdir() if p.is_dir() and p.name not in _SKIP_DIRS)
+             if _has_model(d, model)]
+    if len(found) == 1:
+        return found[0]
+    if found:
+        raise SubmissionError(f'{root}: {model} in several places inside ('
+                              + ', '.join(str(d) for d in found) + '); keep one')
+    raise SubmissionError(
+        f'{root}: no {model}_launch/package.xml in it or one level below; give the '
+        f'{model}_launch directory (the handout ships it), or a directory holding it')
 
 
-def merge_tracker(team_file: Path, default_file: Path = TRACKER_DEFAULT):
-    """(merged param document, {setting: value}) for a team's tracker file."""
-    base = yaml.safe_load(default_file.read_text())
-    base_params = _ros_params(base)
-    theirs = _ros_params(_load(team_file))
-    # the three settings may sit at the top level or under tracker:
-    tracker = theirs.get('tracker', {}) if isinstance(theirs.get('tracker'), dict) else {}
-    flat = {k: v for k, v in theirs.items() if k != 'tracker'}
-    chosen = {}
-    for scope, values, ref in (('', flat, base_params), ('tracker.', tracker, base_params['tracker'])):
-        for k, v in values.items():
-            if k in TUNABLE:
-                chosen[k] = v
-            elif ref.get(k) != v:
-                raise SubmissionError(
-                    f'{team_file}: {scope}{k} is {v!r}, the package has {ref.get(k)!r}; '
-                    f'only {", ".join(TUNABLE)} may change')
-    for k, v in chosen.items():
-        if isinstance(v, bool) or not isinstance(v, (int, float)) or not math.isfinite(v) or v < 0:
-            raise SubmissionError(f'{team_file}: {k} must be a number >= 0, not {v!r}')
-    merged_tracker = dict(base_params['tracker'], **{k: float(v) for k, v in chosen.items()})
-    if merged_tracker['lookahead_min'] > merged_tracker['lookahead_max']:
-        raise SubmissionError(f'{team_file}: lookahead_min is above lookahead_max')
-    base_params['tracker'] = merged_tracker
-    return base, {k: merged_tracker[k] for k in TUNABLE}
+def _defines_class(path: Path, name: str) -> bool:
+    try:
+        tree = ast.parse(path.read_text(), filename=str(path))
+    except SyntaxError as e:
+        raise SubmissionError(f'{path}: does not parse (line {e.lineno}: {e.msg})') from None
+    return any(isinstance(n, ast.ClassDef) and n.name == name for n in tree.body)
 
 
-def resolve_team(path, out_dir: Path = REPO / 'tmp' / 'lab2', pwm: dict = None):
-    """(package dir, [launch args], [warnings]) for a Part 2 team directory."""
-    team = Path(path).expanduser().resolve()
-    if not team.is_dir():
-        raise SubmissionError(f'{team}: no such directory')
-    pkg, args, warnings = resolve(team_controller(team), pwm)
-    tf = team / TRACKER_FILE
-    if not tf.is_file():
-        warnings.append(f'{tf} missing: the default lookahead is used')
-        return pkg, args, warnings
-    doc, chosen = merge_tracker(tf)
-    out_dir.mkdir(parents=True, exist_ok=True)
-    out = out_dir / f'tracker_{team.name}.param.yaml'
-    out.write_text('# GENERATED by scripts/testing/lab2/submission.py from\n'
-                   f'# {tf}\n' + yaml.safe_dump(doc, sort_keys=False))
-    warnings.append('lookahead ' + ', '.join(f'{k} {v:g}' for k, v in chosen.items()))
-    return pkg, args + [f'tracker_param_file:={out}'], warnings
+def _py_reference_use(path: Path):
+    """The first line of path that imports autosdv_waypoint_lab.reference or names it in a
+    string (an import_module, a class path), docstrings aside; None when there is none."""
+    try:
+        tree = ast.parse(path.read_text(errors='replace'), filename=str(path))
+    except SyntaxError:
+        return None     # a speed_pid.py that does not parse is reported on its own
+    docstrings = {id(n.value) for n in ast.walk(tree)
+                  if isinstance(n, ast.Expr) and isinstance(n.value, ast.Constant)}
+    for n in ast.walk(tree):
+        if isinstance(n, ast.Import) and any(_REFERENCE_NAME.match(a.name) for a in n.names):
+            return n.lineno
+        if isinstance(n, ast.ImportFrom) and n.module:
+            if _REFERENCE_NAME.match(n.module):
+                return n.lineno
+            if n.module == 'autosdv_waypoint_lab' and any(a.name == 'reference' for a in n.names):
+                return n.lineno
+        if (isinstance(n, ast.Constant) and isinstance(n.value, str) and id(n) not in docstrings
+                and _REFERENCE_NAME.search(n.value)):
+            return n.lineno
+    return None
+
+
+def _text_reference_use(path: Path):
+    """The first line naming autosdv_waypoint_lab.reference outside a comment, or None."""
+    text = path.read_text(errors='replace')
+    if path.suffix == '.xml' or path.name.endswith('.launch'):
+        text = re.sub(r'<!--.*?-->', lambda m: '\n' * m.group(0).count('\n'), text, flags=re.S)
+        lines = text.splitlines()
+    else:
+        lines = [ln.split('#', 1)[0] for ln in text.splitlines()]
+    for i, ln in enumerate(lines, 1):
+        if _REFERENCE_NAME.search(ln):
+            return i
+    return None
+
+
+def reference_uses(root: Path):
+    """['file:line', ...]: every place under root that imports or names the TA's reference."""
+    hits = []
+    for dirpath, dirnames, filenames in os.walk(root):
+        dirnames[:] = sorted(d for d in dirnames if d not in _SKIP_DIRS)
+        for f in sorted(filenames):
+            p = Path(dirpath) / f
+            if p.suffix not in _TEXT_SUFFIXES or not p.is_file():
+                continue
+            line = _py_reference_use(p) if p.suffix == '.py' else _text_reference_use(p)
+            if line is not None:
+                hits.append(f'{p.relative_to(root)}:{line}')
+    return hits
+
+
+def sim_tuning(path: Path, pwm: dict = None):
+    """(checked speed_controller_params mapping, [warnings]) from a model's
+    config/sim/speed_controller.param.yaml."""
+    doc = _load_unique(path)
+    shape = (f'{path}: expected `/**: {{ros__parameters: {{{NESTED_UNDER}: {{kp: ..., ...}}}}}}` '
+             '(the SpeedPID parameters nested under speed_controller_params)')
+    if not isinstance(doc, dict) or len(doc) != 1:
+        raise SubmissionError(shape)
+    (node, body), = doc.items()
+    if not isinstance(body, dict) or not isinstance(body.get('ros__parameters'), dict):
+        raise SubmissionError(shape)
+    ros = body['ros__parameters']
+    if NESTED_UNDER not in ros:
+        flat = sorted(k for k in ros if k in part1_keys(pwm))
+        raise SubmissionError(shape + (f'; {", ".join(flat)} sit directly under ros__parameters'
+                                       if flat else ''))
+    mapping, warnings = check_part1_mapping(ros[NESTED_UNDER], path, pwm,
+                                            f'{node}.ros__parameters.{NESTED_UNDER}')
+    others = sorted(str(k) for k in ros if k != NESTED_UNDER)
+    if others:
+        warnings.append(f'{path.name}: {", ".join(others)} under ros__parameters as well: loaded '
+                        'into the actuator as they are, not checked here')
+    return mapping, warnings
+
+
+def resolve_part1(path, pwm: dict = None, model: str = SIM_MODEL):
+    """(model name, source root, checked sim tuning, [warnings]) for the simulation model
+    source at path, before Part 1 runs it on the simulated car. SubmissionError names the
+    first problem."""
+    root = part1_model_dir(path, model)
+    for suffix in ('_description', '_interface', '_launch'):
+        pkg = root / f'{model}{suffix}'
+        if not (pkg / 'package.xml').is_file():
+            raise SubmissionError(f'{root}: no {model}{suffix}/package.xml (a model is three '
+                                  f'packages: {model}_description, _interface, _launch)')
+    hits = reference_uses(root)
+    if hits:
+        raise SubmissionError(f'{root}: uses the TA reference ({REFERENCE_PKG}) at '
+                              + ', '.join(hits) + '; the controller must be your own')
+    pid = root / f'{model}_interface' / f'{model}_interface' / 'speed_pid.py'
+    if not pid.is_file():
+        raise SubmissionError(f"{pid}: missing (the model's SpeedPID)")
+    if not _defines_class(pid, 'SpeedPID'):
+        raise SubmissionError(f'{pid}: defines no class SpeedPID')
+    mapping, warnings = sim_tuning(root / f'{model}_launch' / SIM_TUNING, pwm)
+    return model, root, mapping, warnings
 
 
 def main(argv=None) -> int:
     ap = argparse.ArgumentParser(description=__doc__.split('\n\n')[0])
     ap.add_argument('dir')
-    mode = ap.add_mutually_exclusive_group()
-    mode.add_argument('--team', action='store_true',
-                      help='DIR is a Part 2 team directory (controller + path_tracker.param.yaml)')
-    mode.add_argument('--part1', action='store_true',
-                      help='DIR is a Part 1 submission for the simulated car (lab2_speed/)')
+    ap.add_argument('--part1', action='store_true',
+                    help='DIR is the Part 1 simulation model (lab2_sim_vehicle_launch/, or a '
+                    'directory holding it): the default and only mode')
     ap.add_argument('--vehicle-id', default=None,
-                    help='the car whose PWM bounds the offsets: car_a, car_b or car_c (default '
-                    'sim, the simulated nominal car; `just lab2 vehicle` passes the vehicle_id:= that `car` picked)')
-    what = ap.add_mutually_exclusive_group()
-    what.add_argument('--pythonpath', action='store_true', help='print the PYTHONPATH entry only')
-    what.add_argument('--launch-args', action='store_true', help='print the launch args, one per line')
+                    help='the car whose PWM bounds the offsets (default sim, the simulated '
+                    'nominal car)')
+    ap.add_argument('--model', action='store_true', help='print the model name only')
+    ap.add_argument('--name', default=SIM_MODEL,
+                    help=f'the model to look for (default {SIM_MODEL}, Part 1\'s)')
     args = ap.parse_args(argv)
     try:
-        pwm = actuator_pwm(args.vehicle_id)
-        resolver = resolve_team if args.team else resolve_part1 if args.part1 else resolve
-        pkg, launch_args, warnings = resolver(args.dir, pwm=pwm)
+        model, root, _, warnings = resolve_part1(args.dir, pwm=actuator_pwm(args.vehicle_id),
+                                                 model=args.name)
     except SubmissionError as e:
         print(f'submission error: {e}', file=sys.stderr)
         return 2
     for w in warnings:
         print(f'warning: {w}', file=sys.stderr)
-    if args.pythonpath:
-        print(pkg)
-    elif args.launch_args:
-        print('\n'.join(launch_args))
-    else:
-        print(f'PYTHONPATH={pkg}')
-        print('\n'.join(launch_args))
+    print(model if args.model else f'model {model}\nsource {root}')
     return 0
 
 

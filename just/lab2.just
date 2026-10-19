@@ -3,8 +3,8 @@
 #
 # The student commands:
 #
-#   just lab2 sim                  Part 1: your SpeedPID on the three simulated cars, mark / 25,
-#                                  curves.png per car (finds ~/lab2/<id>_lab_2_1 itself)
+#   just lab2 sim                  Part 1: lab2_sim_vehicle's SpeedPID on the 3 simulated cars,
+#                                  mark / 25, curves.png per car
 #   just lab2 sim --no-gui         the same without windows
 #   just lab2 plot-sim             redraw the latest Part 1 run's plots
 #   just lab2 run team:=3          Part 2: team 3's vehicle model, team3_vehicle. On the car:
@@ -22,7 +22,7 @@
 # Everything below is for the TA, or the step-by-step equivalent.
 #
 # Settings live in ~/lab2/lab2.yaml (`just lab2 init` writes it; config:=FILE picks
-# another; $LAB2_HOME moves ~/lab2): car, team, vehicle_model, part1_submission,
+# another; $LAB2_HOME moves ~/lab2): car, team, vehicle_model,
 # route, reference, bag_dir. Precedence, highest first: key:=value on the command line,
 # that file, the built-in defaults (src/lab/autosdv_waypoint_lab/config/lab2_defaults.yaml).
 # `just lab2 config` shows the result. The TA sets each car's letter once:
@@ -168,22 +168,31 @@ gate-selftest *ARGS:
     source scripts/env.sh
     exec python3 scripts/testing/lab2/vehicle_gate_selftest.py "$@"
 
-#   just lab2 sim                                 the graded set: nominal, low_batt, low_mu; mark / 25
+#   just lab2 sim                                 lab2_sim_vehicle on the graded set: nominal, low_batt,
+#                                                 low_mu; mark / 25
 #   just lab2 sim --no-gui                        no windows (as rviz:=false gui:=false); also automatic
 #                                                 when no X display answers
-# The submission: submission:=DIR, else `part1_submission` from ~/lab2/lab2.yaml, else the one
-# ~/lab2/*_lab_2_1 holding lab2_speed/ (none or several: it stops and lists them).
-# Outputs: tmp/lab2/part1/<submission>/<date>_<time>/<variant>/ (trace.csv, marks.json, run.json,
-# curves.png, play_log), final.json beside them; tmp/lab2/part1/<submission>/latest is the newest.
+# Part 1 runs the simulation model, lab2_sim_vehicle (one package, everyone's; vehicle_id sim;
+# the car models teamN_vehicle are Part 2's), from this repository's install: the handout's
+# lab2_sim_vehicle_launch/ copied into src/lab2_vehicles/ and built with
+#   colcon build --base-paths src --symlink-install --cmake-args -DCMAKE_BUILD_TYPE=Release \
+#       --packages-up-to lab2_sim_vehicle_launch
+# (its speed_pid.py and config/sim/speed_controller.param.yaml then run without a rebuild).
+# It is checked first (scripts/testing/lab2/submission.py --part1). Not built, or built without
+# --symlink-install: it stops and prints that command.
+# Outputs: tmp/lab2/part1/<model>/<date>_<time>/<variant>/ (trace.csv, marks.json, run.json,
+# curves.png, play_log), final.json beside them; tmp/lab2/part1/<model>/latest is the newest.
 # The windows stay up after the last car until Enter or the dashboard is closed (--no-hold: not).
-# TA: submission:=DIR, variant:=low_mu (one car, no mark), --name LABEL (labels the run directory),
+# TA: submission:=DIR (lab2_sim_vehicle_launch/, or <id>_lab_2_1/ holding it: checked, built
+# alone into the run's own ws/, then run; the run directory is labelled with DIR's name),
+# model:=NAME (another installed model),
+# variant:=low_mu (one car, no mark), --name LABEL (labels the run directory),
 # --out DIR (DIR/<variant>/, the old layout), --final (accepted, the default),
 #   just lab2 sim --class autosdv_waypoint_lab.reference.speed_pid_part1:SpeedPID \
-#       --params "$(...)"                                          TA: a controller by import path
-# No submission anywhere: an error listing what was found and the fix.
+#       --params "$(...)"                          TA: a controller by import path, on autosdv_vehicle
 # ROS_DOMAIN_ID: yours if exported (non-zero), else 1 + uid % 100. Web UI on LAB2_WEB_ADDR
 # (default 127.0.0.1:8081 + uid % 100, per user). scripts/testing/lab2/part1_run.py --help: the rest.
-# Part 1: your SpeedPID on the three simulated cars, live; graded (mark / 25), plotted
+# Part 1: your vehicle model's SpeedPID on the three simulated cars, live; graded (mark / 25), plotted
 [positional-arguments]
 sim *ARGS:
     #!/usr/bin/env bash
@@ -193,7 +202,7 @@ sim *ARGS:
     exec python3 scripts/testing/lab2/part1_run.py "${LAB2_ARGS[@]}"
 
 #   just lab2 plot-sim                                                the latest run, every car
-#   just lab2 plot-sim tmp/lab2/part1/B12345678_lab_2_1/latest/nominal one car
+#   just lab2 plot-sim tmp/lab2/part1/lab2_sim_vehicle/latest/nominal     one car
 #   just lab2 plot-sim DIR --t0 15 --t1 23 -o tmp/stop.png            zoom into a window
 # `just lab2 sim` already writes curves.png per car; this redraws. No display needed (Agg).
 # Part 1: redraw a run's curves.png (speed, PWM, failed checks)

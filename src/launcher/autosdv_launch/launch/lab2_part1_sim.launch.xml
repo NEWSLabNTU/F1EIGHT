@@ -1,7 +1,15 @@
 <?xml version="1.0" encoding="UTF-8"?>
 <!--
   Lab 2 Part 1: speed and brake control on the simulated car. `just lab2 sim`.
-  Design: docs/design/lab2-part1-sim-design.md.
+  Design: docs/design/lab2-part1-sim-design.md; the vehicle models:
+  docs/design/lab2-team-vehicle-models.md.
+
+  The simulation vehicle model is the submission, lab2_sim_vehicle, the same package for every
+  student (the car models, teamN_vehicle, are Part 2's): vehicle_model:=lab2_sim_vehicle runs
+  its own SpeedPID with its own tuning, lab2_sim_vehicle_launch/config/sim/speed_controller.param.yaml
+  (vehicle_id is pinned to sim). speed_controller_class:= (with speed_controller_params:=)
+  replaces the model's controller instead: the TA's runs of the reference class on the
+  reference model, autosdv_vehicle (`just lab2 sim` with its class option).
 
   Part 1 runs the car's own stack: waypoint_follow.launch.xml (`just lab2 vehicle`) with
   localization:=ground_truth hardware:=sim, all on the plant's /clock:
@@ -12,7 +20,7 @@
       -> path_tracker (the TA's pure pursuit; speed = the path's)
       -> lab2_part1_scenario (test fixture: 0 until the aligned start)
       -> vehicle_cmd_gate
-      -> /control/command/control_cmd -> actuator (hardware:=sim, the STUDENT SpeedPID)
+      -> /control/command/control_cmd -> actuator (hardware:=sim, the model's SpeedPID)
       -> /rc_sim/pwm -> rc_sim_plant (owns /clock) -> /rc_sim/hall_edges -> velocity_report
     rc_sim_plant -> /localization/kinematic_state + TF map->base_link: the TRUE pose
     lab2_part1_scenario: engage, align the start (an e-stop only if the profile has one: the
@@ -22,7 +30,7 @@
 
   What Part 1 shares with the car: everything but localization. The gate, the operation
   mode manager, the diagnostic graph and MRM handler, the AD API, the path publisher,
-  path_tracker and the actuator with the student's SpeedPID are the car's nodes, started
+  path_tracker and the model's actuator with its SpeedPID are the car's nodes, started
   by the car's launch file.
 
   What differs, and why:
@@ -54,12 +62,12 @@
   <arg name="variant" default="nominal" description="vehicle model variant: nominal, low_batt, low_mu (rc_sim vehicle.yaml)"/>
   <arg name="course_dir" default="$(find-pkg-share autosdv_waypoint_lab)/config/courses/lab2_part1"
        description="written by lab2_make_part1_course: path.csv, part1_profile.yaml, track.yaml, the map"/>
-  <!-- The stub (holds neutral) by default, as on the student branch: `just lab2 sim
-       submission:=DIR` sets both; the TA reference only by name (just lab2 sim with the class option). -->
-  <arg name="speed_controller_class" default="autosdv_waypoint_lab.stub.speed_pid_part1:SpeedPID"
-       description="the SpeedPID, package.module:Class (just lab2 sim submission:=DIR sets it)"/>
+  <!-- Empty: the vehicle model's own controller and tuning (lab2_sim_vehicle, `just lab2
+       sim`). A class replaces it: the TA reference by name (`just lab2 sim` with its class option). -->
+  <arg name="speed_controller_class" default=""
+       description="empty: the vehicle model's own SpeedPID; else package.module:Class, which replaces it"/>
   <arg name="speed_controller_params" default=""
-       description="its parameters, a YAML mapping string (config/speed_pid.yaml of the submission); empty: the class's own defaults"/>
+       description="with speed_controller_class only: its parameters, a YAML mapping string; empty: the class's own defaults"/>
   <arg name="out_dir" default="$(env PWD)/tmp/lab2/part1/launch/$(var variant)"
        description="the grader writes trace.csv and marks.json here"/>
   <arg name="rviz" default="true"/>
@@ -69,7 +77,8 @@
   <arg name="lockstep" default="true" description="the plant waits for velocity_report, the actuator and path_tracker (and the scenario's emergency timer, which exists only for a profile with an e-stop; sim only)"/>
   <arg name="lockstep_timeout" default="2.0"
        description="[s wall] a participant silent this long invalidates the run; raise it on a host that stalls at startup"/>
-  <arg name="vehicle_model" default="autosdv_vehicle"/>
+  <arg name="vehicle_model" default="autosdv_vehicle"
+       description="the vehicle model: lab2_sim_vehicle (`just lab2 sim`), or the reference autosdv_vehicle"/>
   <arg name="sensor_model" default="autosdv_sensor_kit"/>
   <!-- pinned, not an argument: the plant models actuator.yaml's car, the simulated
        nominal car (individual_params/config/sim: its actuator PWM and IMU bias),
