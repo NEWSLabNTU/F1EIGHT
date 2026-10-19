@@ -16,7 +16,7 @@ for its graded route (`just lab2 survey-align`; the field procedure is in
 `docs/guides/lab2-waypoint-stack.md`, "On the field").
 
 ```bash
-just aruco-map survey 24 courses/my_hall marker_size:=0.467   # origin: marker 24; the black square's edge, measured
+just aruco-map survey 24 courses/my_hall   # origin: marker 24; the black square's edge, measured
 #   ...drive slowly past every marker; the log names each new one...
 #   Ctrl-C, or in another terminal: just aruco-map save
 just aruco-map check courses/my_hall         # drive by hand, watch the localization
@@ -43,7 +43,7 @@ the image is published only while someone watches.
 
 Arguments after the origin go to the launch file:
 `dictionary:=ARUCO_MIP_36h12 marker_size:=0.25` for the printed markers
-(default `DICT_5X5_1000`, 0.38 m: the lab's 500 mm boards), and
+(default `DICT_5X5_1000`, 0.4667 m: the lab's 600 mm boards), and
 `vehicle_id:=car_c` for that car's camera mount (default `sim`, the nominal
 car).
 
@@ -54,7 +54,7 @@ every distance in the map. Two boards seen so far:
 | board | plate | black square (`marker_size`) |
 | --- | --- | --- |
 | LCTK 600 mm calibration board | 0.60 m | 0.48 m |
-| **the lab's boards** (Lab 2) | 0.50 m | **0.38 m (the default)**; marker centre 0.25 m above the floor |
+| **the lab's boards** (Lab 2) | 0.60 m | **0.4667 m (the default)**: 7 of the board's 9 cells |
 
 **The floor.** `z` is the marker centre above the floor, and the floor is
 taken to be at `base_link` (the mean of the car's poses). A car held up on a
