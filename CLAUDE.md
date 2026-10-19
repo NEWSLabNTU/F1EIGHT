@@ -887,8 +887,11 @@ They drifted from it once; read them there when it matters.
 
 **Per-car values** live in Autoware's instance layer, `individual_params`
 (`src/param/autoware_individual_params`), under `config/<vehicle_id>/`:
-`autosdv_vehicle/actuator.param.yaml` (ESC neutral and brake points, servo
-centre and ends, a measured steering ratio), `autosdv_sensor_kit/` (calibration,
+`autosdv_vehicle/actuator.param.yaml` (ESC neutral and brake points, the ESC
+thresholds of `docs/design/esc-pwm-model.md`, servo
+centre and ends, a measured steering ratio), `autosdv_vehicle/speed_controller.param.yaml` (the car's tuning of the default
+speed controller: gains, `esc_deadzone_compensation`, `drive_floor_pwm`; empty
+until tuned; `speed_controller_params:=` still overrides it), `autosdv_sensor_kit/` (calibration,
 IMU bias) and `autosdv.preset.yaml` (defaults for `sensor_model`,
 `vehicle_model`, `sensor_suite`, `use_gnss`). Instances: `car_a` (VLP16 + ZED,
 measured), `car_b` (Robin-W + ZED), `car_c` (a copy of B until measured), and
