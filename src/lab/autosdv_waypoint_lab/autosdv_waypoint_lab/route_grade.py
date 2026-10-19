@@ -67,7 +67,12 @@ RAMP_FRAC = 0.98            # commanded speed at/above this fraction: still crui
 STOPPED_SPEED = 0.02        # m/s, "at rest"
 SETTLE = (0.5, 3.0)         # s after coming to rest: the window the stop pose is the median of
 LAPS_REQUIRED = 1
-PATH_DEV_MAX = 0.30         # m, validity: localized distance from the path, worst sample
+# Validity: the localized distance from the path, worst sample. 0.50 m since 2026-10-20:
+# on car C's U-turn the EKF's own error in the turn exit was 0.2-0.4 m against the board
+# fixes and the eye (lab2_uturn_3/4: 0.50 m and 0.357 m with the car on the tape for
+# most of it), so 0.30 m failed cars that drove the route. It stays well inside
+# localization_monitor's 0.8 m disengage, so a car that lost its pose still fails.
+PATH_DEV_MAX = 0.50         # m
 # Validity: the localized pose may not jump. Over every JUMP_WINDOW s from engage to rest,
 # the pose's displacement and the distance the wheel-speed report integrates to must
 # agree within LOC_JUMP_MAX. The path deviation sees a jump ACROSS the path; this one

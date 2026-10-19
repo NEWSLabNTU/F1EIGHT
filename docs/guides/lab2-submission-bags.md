@@ -64,7 +64,7 @@ the localized pose onto the path (the turn's arc-length interval is read from
 `speed_rmse` (whole window) is printed but not scored. A bag is **INVALID** and
 scores 0, with the reasons printed, unless it was engaged, finished at the
 stop, raised no MRM, never disengaged, and kept the localized pose within
-0.3 m of the path from engage to rest (`path_dev_max`).
+0.5 m of the path from engage to rest (`path_dev_max`).
 
 The reference bag is a TA run of `lab2_uturn` on the same car; keep it on that car
 at `~/lab2/reference/uturn`, the path the student spec gives.

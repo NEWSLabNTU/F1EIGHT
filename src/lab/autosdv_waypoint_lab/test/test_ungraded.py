@@ -74,7 +74,7 @@ def test_check_bags_accepts_a_straight_as_metrics_only():
     # its own template still guards the path and the speed
     bad = dict(meta, route_hash='0' * 64)
     assert any('modified course' in r for r in cb.check_messages('b', topics_all(), msgs, bad).reasons)
-    off, _ = straight_msgs(lateral=0.4)
+    off, _ = straight_msgs(lateral=0.6)
     assert any('off the path' in r for r in cb.check_messages('b', topics_all(), off, meta).reasons)
 
 

@@ -48,12 +48,12 @@ def test_clean_run_is_valid_with_no_violations():
 
 def test_off_path_stretch_is_a_violation_with_its_time():
     msgs = msgs_for()
-    # push the localized pose 0.45 m sideways between 10 s and 12 s
+    # push the localized pose 0.65 m sideways between 10 s and 12 s
     kin = []
     for t, k in msgs[g.KINEMATIC]:
         p = k.pose.pose.position
         if 10.0 <= t <= 12.0:
-            k = NS(pose=NS(pose=NS(position=NS(x=p.x, y=p.y + 0.45))))
+            k = NS(pose=NS(pose=NS(position=NS(x=p.x, y=p.y + 0.65))))
         kin.append((t, k))
     msgs[g.KINEMATIC] = kin
     m, sc, s, a = run(msgs)
@@ -61,7 +61,7 @@ def test_off_path_stretch_is_a_violation_with_its_time():
     spans = au.off_path_spans(s, m.t_engage, m.t_rest)
     assert len(spans) == 1
     t0, t1, worst = spans[0]
-    assert 9.9 <= t0 <= 10.1 and 11.9 <= t1 <= 12.1 and worst > 0.3
+    assert 9.9 <= t0 <= 10.1 and 11.9 <= t1 <= 12.1 and worst > 0.5
     assert any('off the path' in v and 'after engage' in v for v in a.violations)
 
 

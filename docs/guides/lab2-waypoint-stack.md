@@ -193,7 +193,7 @@ make autonomous mode unavailable, so an engage with no fix is refused by the
 stack itself (`just lab2 bench-checks --only no_markers`); `run` additionally
 refuses before asking the stack, and the preflight fails with no fixes. The
 monitor has no covariance check; the 0.5 m sigma limit is `run`'s, five times
-what the bench's EKF reaches and above the 0.3 m validity line, so it only
+what the bench's EKF reaches and at the 0.5 m validity line, so it only
 catches an EKF that has lost its pose.
 
 **`just lab2 audit [BAG]`** (default: the latest bag) runs the bag checker and
@@ -201,7 +201,7 @@ the grade (against `reference` when it is a bag, else the fixed lines, as
 `grade` does) and prints the verdict, each metric against its full-marks and
 zero lines with its points, and the violations: every check-bags rejection,
 every validity gate, every metric below full marks, every stretch more than
-0.3 m off the path (with its time after engage), every MRM and early
+0.5 m off the path (with its time after engage), every MRM and early
 disengage. It writes `BAG/audit.png` and `BAG/audit.json`:
 
 - speed vs time since engage: measured and commanded speed, the target, the
@@ -213,8 +213,8 @@ disengage. It writes `BAG/audit.png` and `BAG/audit.json`:
 - the run on the floor: the route path (U-turn section highlighted), the
   localized trajectory, the raw marker fixes, the true pose on the bench, the
   boards with their facing arrows, the start and stop lines, and in red every
-  stretch more than 0.3 m off the path;
-- the distance from the path vs time, the 0.3 m line, red where exceeded, and
+  stretch more than 0.5 m off the path;
+- the distance from the path vs time, the 0.5 m line, red where exceeded, and
   grey outside the judged interval (engage to rest);
 - the title: bag, car, team, VALID/INVALID with the first violation, points.
 
@@ -245,8 +245,8 @@ It exits 0 only if all of these pass, and prints one line each:
 - the localization against the plant's true pose is within `audit.LOC_LIMITS`:
   at least 2 accepted fixes/s, fix error p95 <= 0.50 m, EKF error p95 <=
   0.20 m, no gap without a fix over 3 s. The scale is the grade's: the
-  validity line is 0.3 m from the path, so a pose 0.2 m off at p95 leaves no
-  margin. A single fix is noisier than the EKF that averages it: the localizer
+  validity line is 0.5 m from the path, so a pose 0.2 m off at p95 leaves
+  0.3 m for tracking. A single fix is noisier than the EKF that averages it: the localizer
   declares a 0.22 m sigma per axis, whose 2-D p95 is 0.54 m. The gap stays
   well inside `error_age` (`lab2_uturn`'s design gap is 1.6 s).
 
@@ -611,7 +611,7 @@ until the car's `tire_angle_to_steer_ratio` is measured
 
 Grading (`route_grade.py`, `lab2-submission-bags.md`): speed RMSE on the legs
 (15) and in the turn (10), overshoot (5), stop error (15), each against the
-car's reference bag; a bag off the path by more than 0.3 m, with a localization
+car's reference bag; a bag off the path by more than 0.5 m, with a localization
 jump (pose vs integrated wheel speed over 1 s, 0.3 m), a non-finite pose or
 speed, unfinished, with an MRM or a disengage is invalid and scores 0.
 
