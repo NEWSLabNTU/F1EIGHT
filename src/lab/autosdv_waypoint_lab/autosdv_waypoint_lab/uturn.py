@@ -1,8 +1,8 @@
 """The Lab 2 graded route, lab2_uturn, generated from its radius and leg length. No ROS.
 
-    lab2_make_uturn [--radius 1.5] [--leg 10] [--write] [--out DIR] [--force]
-    just lab2 make-uturn RADIUS [--leg 10] [--write]
-    python3 scripts/testing/lab2/make_uturn.py --radius 1.5 [--write]
+    lab2_make_uturn [--radius 1.1] [--leg 2] [--write] [--out DIR] [--force]
+    just lab2 make-uturn RADIUS [--leg 2] [--write]
+    python3 scripts/testing/lab2/make_uturn.py --radius 1.1 --leg 2 [--write]
 
 The route: from the start box, straight `leg` metres, a RIGHT U-turn of radius
 R (the two legs 2R apart, centre to centre), straight `leg` metres back in the
@@ -64,8 +64,8 @@ from autosdv_waypoint_lab.marker_sim import CameraModel, coverage, visible
 from autosdv_waypoint_lab.path import CoursePath, Path, turn_spans
 
 COURSE_NAME = 'lab2_uturn'
-DEFAULT_RADIUS = 1.5
-DEFAULT_LEG = 10.0
+DEFAULT_RADIUS = 1.1
+DEFAULT_LEG = 2.0
 V_REF = 0.8
 DECEL = 0.3                 # m/s^2, waypoint_path_publisher's end ramp (for the header)
 SPACING_LEG = 0.25          # m between waypoints on the legs

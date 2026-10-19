@@ -143,9 +143,20 @@ def test_mock_camera_renders_boards_the_detector_reads():
     cam = mc.Camera(960, 600, 403.0)
     pose = (c.start_pose.x, c.start_pose.y, 0.0, c.start_pose.yaw)
     img, drawn = mc.render(cam, pose, c.markers, c.marker_size, pats)
-    assert img.shape == (600, 960) and set(drawn) >= {25, 26}
-    corners, ids, _ = cv2.aruco.ArucoDetector(d).detectMarkers(img)
-    assert ids is not None and set(ids.ravel()) >= {25, 26}
+    # the boards the coverage model (marker_sim) puts in view from the start box;
+    # the layout guarantees at least two there
+    from autosdv_waypoint_lab.course import make_osm, parse_osm_landmarks
+    from autosdv_waypoint_lab.marker_sim import CameraModel, visible
+    model = CameraModel(marker_size=c.marker_size)
+    in_view = {int(k) for k, lms in parse_osm_landmarks(make_osm(c)).items()
+               if any(visible(model, pose[0], pose[1], pose[3], lm) for lm in lms)}
+    assert len(in_view) >= 2, in_view
+    assert img.shape == (600, 960) and set(drawn) >= in_view
+    if hasattr(cv2.aruco, 'ArucoDetector'):          # OpenCV >= 4.7
+        corners, ids, _ = cv2.aruco.ArucoDetector(d).detectMarkers(img)
+    else:                                            # 4.5.x (JetPack 6, Ubuntu 22.04): the function API
+        corners, ids, _ = cv2.aruco.detectMarkers(img, d)
+    assert ids is not None and set(ids.ravel()) >= in_view
     k = np.array(cam.info_k()).reshape(3, 3)
     h = c.marker_size / 2
     obj = np.array([[-h, h, 0], [h, h, 0], [h, -h, 0], [-h, -h, 0]], np.float32)

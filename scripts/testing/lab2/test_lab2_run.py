@@ -41,12 +41,21 @@ def test_camera_only_on_the_bench_and_checked():
         lr.parse_args(['--bench', '--camera', 'webcam'])
 
 
-def test_timeout_is_three_route_times():
+def test_timeout_is_three_route_times(tmp_path):
+    import math
+    import yaml
     d = REPO / 'src/lab/autosdv_waypoint_lab/config/courses/lab2_uturn'
+    spec = yaml.safe_load((d / 'course.yaml').read_text())
+    length = 2 * spec['uturn']['leg'] + math.pi * spec['uturn']['radius']
     t = lr.route_seconds(d)
-    assert 28 < t < 34                      # 24.7 m at 0.8 m/s
-    assert lr.run_timeout(d) == pytest.approx(3 * t)
+    assert t == pytest.approx(length / spec['v_ref'], rel=0.01)
+    assert lr.run_timeout(d) == pytest.approx(max(lr.MIN_TIMEOUT, lr.TIMEOUT_FACTOR * t))
     assert lr.run_timeout(d, 42.0) == 42.0
+    # a route long enough that three driving times exceed the floor
+    (tmp_path / 'course.yaml').write_text('path: path.csv\nv_ref: 0.8\nlaps: 1\n')
+    (tmp_path / 'path.csv').write_text('0.0,0.0\n30.0,0.0\n')
+    assert lr.route_seconds(tmp_path) == pytest.approx(37.5)
+    assert lr.run_timeout(tmp_path) == pytest.approx(3 * 37.5)
 
 
 # ---- the run's state
@@ -113,9 +122,9 @@ def test_engage_refused_without_a_usable_pose():
 
 
 def test_status_line_is_one_short_line():
-    line = lr.status_line(snap(speed=0.79), 88.0, 9.84, 24.71, 'AUTONOMOUS')
+    line = lr.status_line(snap(speed=0.79), 88.0, 2.64, 7.45, 'AUTONOMOUS')
     assert '\n' not in line and len(line) < 80
-    assert '12.0 s' in line and '0.79 m/s' in line and '9.8/24.7 m' in line and 'NORMAL' in line
+    assert '12.0 s' in line and '0.79 m/s' in line and '2.6/7.5 m' in line and 'NORMAL' in line
 
 
 def test_integration_verdict(tmp_path):

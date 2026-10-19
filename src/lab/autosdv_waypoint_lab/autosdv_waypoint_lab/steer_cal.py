@@ -28,8 +28,27 @@ INIT_STEER = 489
 SERVO_HALF_RANGE = 50          # min_steer 439 .. max_steer 539 around 489
 SHIPPED_RATIO = -1000.0
 MAX_COMMAND_ANGLE = 0.349      # vehicle_info max_steer_angle: the actuator clamps here
-R_FIRST_CIRCLE = 1.5           # the tightest Lab 2 circle
 MARGIN = 0.8                   # the tightest circle may use at most this share of lock
+
+
+def graded_radius() -> float:
+    """The tightest Lab 2 circle: the U-turn radius the graded course lab2_uturn was
+    generated with (course.yaml `uturn.radius`, written by make-uturn)."""
+    import os
+    import yaml
+    from autosdv_waypoint_lab import route_grade
+    d = route_grade.template_dir('uturn')
+    if d:
+        try:
+            with open(os.path.join(d, 'course.yaml')) as f:
+                return float(yaml.safe_load(f)['uturn']['radius'])
+        except (OSError, KeyError, TypeError, ValueError):
+            pass
+    from autosdv_waypoint_lab import uturn
+    return uturn.DEFAULT_RADIUS
+
+
+R_FIRST_CIRCLE = graded_radius()
 
 
 def average_wheel_angle(delta: float, wheel_base: float = WHEEL_BASE,
@@ -86,7 +105,7 @@ class SteerFit:
             f'max_steer_angle            {self.max_angle:.3f} rad at +-{SERVO_HALF_RANGE} counts'
             f'  (vehicle_info.param.yaml)',
             f'minimum radius at lock     {self.min_radius:.2f} m',
-            f'R {R_FIRST_CIRCLE} m needs          {self.angle_needed:.3f} rad = '
+            f'R {R_FIRST_CIRCLE:g} m needs          {self.angle_needed:.3f} rad = '
             f'{100 * self.angle_needed / self.max_angle:.0f} % of lock  '
             f'-> {"PASS" if self.margin_ok else "FAIL"} (limit {100 * MARGIN:.0f} %)',
         ]

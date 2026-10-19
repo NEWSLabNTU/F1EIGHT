@@ -3,6 +3,7 @@ import math
 from types import SimpleNamespace as NS
 
 import pytest
+import yaml
 
 from autosdv_waypoint_lab import bag_meta as bm
 from autosdv_waypoint_lab import check_bags as cb
@@ -38,7 +39,17 @@ def kin(x, y):
 
 
 UTURN = rg.geometry_from_course(rg.template_dir('uturn'), 'uturn')
-T_RAMP, T_STOP = 31.0, 35.0     # the plateau covers the route up to its end ramp
+# the plateau covers the route up to its end ramp, so that the speed integral
+# (0.8 m on the 2 s start ramp, 1.6 m on the 4 s end ramp) is the path length;
+# otherwise the synthetic pose and wheel speed disagree and read as a jump
+def plateau_end(geo, rise=2.0):
+    """t_ramp for which the speed integral (rise * TARGET / 2 on the start ramp,
+    1.6 m on the 4 s end ramp, TARGET between) is the path length."""
+    return (geo.path.length - 2.0 * TARGET) / TARGET + rise / 2.0
+
+
+T_RAMP = plateau_end(UTURN)
+T_STOP = T_RAMP + 4.0
 
 
 def place(geo, s, lateral=0.0):
@@ -91,11 +102,17 @@ def test_window_and_speed_rmse_ignore_the_start_transient():
     assert m.speed_rmse_turn == pytest.approx(0.05 / math.sqrt(2), rel=0.25)
     assert 1.0 < m.t90 < 4.0            # 90 % reached on the ramp (t=1+1.8)
     assert m.t_ramp == pytest.approx(1.0 + T_RAMP - 0.1, abs=0.2)
-    assert m.window_s > 25
+    assert m.window_s == pytest.approx(T_RAMP - (m.t90 - 1.0), abs=0.3)
+
+
+# A near-step start: the window opens at t90, and the samples between 90 % and
+# the target are part of the straight's error. On a 2 m leg there are few
+# straight samples, so a 2 s linear ramp alone puts the straight near 0.02 m/s.
+STEP = dict(rise=0.5, t_ramp=plateau_end(UTURN, 0.5), t_stop=plateau_end(UTURN, 0.5) + 4.0)
 
 
 def test_perfect_speed_scores_zero_errors_and_overshoot():
-    m = metrics()
+    m = metrics(**STEP)
     assert m.speed_rmse_straight == pytest.approx(0.0, abs=0.01)
     assert m.speed_rmse_turn == pytest.approx(0.0, abs=0.01)
     assert m.overshoot == pytest.approx(0.0, abs=0.01)
@@ -104,21 +121,25 @@ def test_perfect_speed_scores_zero_errors_and_overshoot():
 
 
 def test_samples_split_into_straight_and_turn_by_arc_length():
-    m = metrics(turn_dip=0.1)
+    m = metrics(turn_dip=0.1, **STEP)
     assert m.speed_rmse_turn == pytest.approx(0.1, abs=0.005)
     # the straight keeps only the window's first samples, still on the start ramp
-    assert m.speed_rmse_straight == pytest.approx(metrics().speed_rmse_straight, abs=1e-6)
+    assert m.speed_rmse_straight == pytest.approx(metrics(**STEP).speed_rmse_straight, abs=1e-6)
     assert m.speed_rmse_straight < 0.01
     (s0, s1), = UTURN.turns
     # 10 Hz samples over the arc at about 0.8 m/s
     assert m.samples_turn == pytest.approx((s1 - s0) / 0.8 / 0.1, rel=0.1)
-    assert m.samples_straight > 2 * m.samples_turn
+    # the straight: the out leg, and the back leg up to the end ramp (1.6 m from the end)
+    straight = s0 + (UTURN.path.length - 2.0 * TARGET - s1)
+    assert m.samples_straight == pytest.approx(straight / 0.8 / 0.1, rel=0.15)
 
 
 def test_the_turn_is_read_from_the_course():
     from autosdv_waypoint_lab import uturn
     (s0, s1), = UTURN.turns
-    assert (s0, s1) == pytest.approx((10.0, 10.0 + 1.5 * math.pi), abs=0.02)
+    spec = yaml.safe_load(open(f"{rg.template_dir('uturn')}/course.yaml"))['uturn']
+    radius, leg = float(spec['radius']), float(spec['leg'])
+    assert (s0, s1) == pytest.approx((leg, leg + radius * math.pi), abs=0.02)
     for radius, leg in ((1.0, 6.0), (2.5, 14.0)):
         geo = rg.geometry_from_points('uturn', *uturn.route_polyline(radius, leg))
         assert geo.turns == [pytest.approx((leg, leg + radius * math.pi), abs=0.02)]
@@ -405,11 +426,12 @@ def test_clean_run_has_no_localization_jump():
 
 def test_a_jump_along_the_path_is_caught():
     msgs = msgs_for()
+    (s0, _), = UTURN.turns
     kin_ = []
     for t, k in msgs[g.KINEMATIC]:
-        if 10.0 <= t <= 11.0:              # 1 m back along the out leg (driving +x) for 1 s
-            p = k.pose.pose.position
-            k = kin(p.x - 1.0, p.y)
+        p = k.pose.pose.position
+        if 1.0 + 2.0 <= t and 1.0 <= p.x <= s0 - 0.1 and abs(p.y) < 1e-6:
+            k = kin(p.x - 1.0, p.y)        # 1 m back along the out leg (driving +x), on its plateau
         kin_.append((t, k))
     msgs[g.KINEMATIC] = kin_
     m = rg.route_metrics('b', msgs, 'uturn', UTURN)
