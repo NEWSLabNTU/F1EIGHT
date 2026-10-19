@@ -324,6 +324,18 @@ make-uturn RADIUS *ARGS:
     shift
     exec python3 scripts/testing/lab2/make_uturn.py --radius '{{ RADIUS }}' "$@"
 
+#   just lab2 make-straight 3                    summary with the marker coverage, a diff
+#   just lab2 make-straight 3 --write            config/courses/lab2_straight_3m
+#   just lab2 make-straight 2.5 --speed 0.6 --name lab2_straight_slow --write
+# TA/testing, not graded: lab2_uturn's field (start box, boards, frame), driving +x along its
+# first leg; run it with `just lab2 run route:=lab2_straight_3m` (bags lab2_straight_3m_N).
+# Generate a straight test route on the U-turn's field (dry run without --write)
+[positional-arguments]
+make-straight LENGTH *ARGS:
+    #!/usr/bin/env bash
+    shift
+    exec python3 scripts/testing/lab2/make_straight.py '{{ LENGTH }}' "$@"
+
 # Car in the start box, stack up, not engaged: fix quality and per-marker survey check
 camera-check COURSE="src/lab/autosdv_waypoint_lab/config/courses/hall_demo" SECONDS="20":
     #!/usr/bin/env bash
