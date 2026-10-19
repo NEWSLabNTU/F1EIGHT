@@ -146,7 +146,7 @@
   <arg name="rviz_config" default="$(find-pkg-share autoware_launch)/rviz/$(var rviz_config_name)" description="rviz config path"/>
   <arg name="rviz_respawn" default="true"/>
   <arg name="viewer_display" default="$(env DISPLAY '')"
-       description="the X display RViz opens on. A launch that opens the ZED runs without DISPLAY (scripts/testing/lab2/camera_display.sh) and hands the viewer its display here (just lab2 stack)"/>
+       description="the X display RViz opens on. A launch that opens the ZED runs without DISPLAY (scripts/camera_display.sh) and hands the viewer its display here (just lab2 stack)"/>
   <!-- Perception -->
   <arg name="perception_mode" default="lidar" description="select perception mode. camera_lidar_radar_fusion, camera_lidar_fusion, lidar_radar_fusion, lidar, radar"/>
   <arg name="traffic_light_recognition/enable_fine_detection" default="true" description="enable traffic light fine detection"/>

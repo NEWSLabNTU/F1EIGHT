@@ -1,0 +1,16 @@
+# A route for the alignment tests: a start box at the origin, a straight first
+# leg along x, and four boards around it (the layout of Lab 2's lab2_uturn,
+# copied so that these tests need no Lab 2 package).
+path: path.csv
+closed: false
+laps: 1
+v_ref: 0.8
+start_pose: {x: 0.000, y: 0.000, yaw: 0.0000}
+marker_size: 0.38
+dictionary: DICT_5X5_1000
+marker_height: 0.25
+markers:
+  - {id: 24, x: 4.500, y: 0.000, yaw: 3.1416}
+  - {id: 25, x: 4.500, y: -1.500, yaw: 2.0944}
+  - {id: 26, x: 1.500, y: -5.000, yaw: 2.0944}
+  - {id: 27, x: -2.000, y: -2.500, yaw: 0.0000}

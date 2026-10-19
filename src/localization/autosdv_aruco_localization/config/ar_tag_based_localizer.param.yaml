@@ -1,0 +1,48 @@
+# Autoware's ar_tag_based_localizer with AutoSDV's ArUco-localization
+# parameters (`just aruco-map check`, Lab 2's waypoint stack). The node is AutoSDV's fork, which adds only `dictionary`
+# (src/localization/external/autoware_ar_tag_based_localizer). The bench's
+# virtual_marker_localizer loads this same file, so the gate and covariance it
+# models are the ones the car runs.
+/**:
+  ros__parameters:
+    # dictionary, marker_size and target_tag_ids are the map's: each marker
+    # map (a survey, a Lab 2 course) carries an ar_tag.param.yaml, generated
+    # from its course.yaml (make_marker_map, `just aruco-map survey`) and
+    # loaded after this file.
+
+    # Constant in practice: the node scales it by max(1, (d/5)^3) where d is
+    # the fix's distance from the EKF pose (not the marker range, whatever the
+    # upstream comment says), and the gate below keeps d under 1.5 m.
+    # 0.05 m^2 (0.22 m) in position and 0.01 rad^2 (5.7 deg) in yaw: looser
+    # than a single fix's error at 3 m, so the EKF averages over a few frames
+    # instead of jumping to each one.
+    base_covariance: [0.05, 0.0,  0.0,  0.0,  0.0,  0.0,
+                      0.0,  0.05, 0.0,  0.0,  0.0,  0.0,
+                      0.0,  0.0,  0.05, 0.0,  0.0,  0.0,
+                      0.0,  0.0,  0.0,  0.01, 0.0,  0.0,
+                      0.0,  0.0,  0.0,  0.0,  0.01, 0.0,
+                      0.0,  0.0,  0.0,  0.0,  0.0,  0.01]
+
+    # [m] ignore markers farther than this from the camera. A 0.25 m marker
+    # is ~30 px wide at 5 m on the full-resolution ZED X Mini image; beyond
+    # that the pose (yaw especially) is too noisy to help. Set from the
+    # camera check in the hall.
+    distance_threshold: 5.0
+
+    # true: each fix carries the car's heading as well as its position. With
+    # false the localizer corrects position only and the heading drifts with
+    # the gyro for the whole run.
+    consider_orientation: true
+
+    detection_mode: "DM_NORMAL"
+    min_marker_size: 0.02
+
+    # The EKF gate. A fix more than ekf_position_tolerance from the EKF pose
+    # is dropped: that is what rejects a misread id, a marker surveyed in the
+    # wrong place, and a far marker whose orientation is badly estimated (one
+    # rendered at 4.4 m and half resolution put the car 1.1 m and 20 deg off;
+    # the EKF's own Mahalanobis gate would have taken it). It also bounds how
+    # far from the taped start box the car may be placed (start_pose_init
+    # seeds the EKF there).
+    ekf_time_tolerance: 5.0     # [s]
+    ekf_position_tolerance: 1.0 # [m]

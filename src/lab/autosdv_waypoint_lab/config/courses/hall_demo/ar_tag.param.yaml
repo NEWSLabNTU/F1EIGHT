@@ -1,4 +1,4 @@
-# GENERATED from course.yaml by make_course_map; edit that, not this.
+# GENERATED from course.yaml by make_marker_map; edit that, not this.
 /**:
   ros__parameters:
     dictionary: "ALL_DICTS"

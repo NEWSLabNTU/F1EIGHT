@@ -4,11 +4,12 @@
   <name>autosdv_waypoint_lab</name>
   <version>0.1.0</version>
   <description>
-    Lab 2, ArUco localization and waypoint following: waypoint_path_publisher
+    Lab 2, waypoint following on ArUco localization: waypoint_path_publisher
     (the TA's course as /planning/trajectory), path_tracker (loads the student
-    PathTracker in place of Autoware's trajectory_follower), start_pose_init
-    and localization_monitor (around Autoware's AR-tag localizer and EKF), the
-    bench's virtual_marker_localizer, the course map generator and the grader.
+    PathTracker in place of Autoware's trajectory_follower), localization_monitor
+    (marker fix age and path deviation), the routes, the course map generator
+    and the grader. The ArUco localization itself is autosdv_aruco_localization's,
+    the marker survey autosdv_marker_survey's.
   </description>
   <maintainer email="jerry73204@gmail.com">aeon</maintainer>
   <license>Apache-2.0</license>
@@ -30,6 +31,9 @@
   <exec_depend>rosbag2_py</exec_depend>
   <exec_depend>autoware_vehicle_msgs</exec_depend>
   <exec_depend>tier4_system_msgs</exec_depend>
+  <!-- the ArUco localization and the marker survey Lab 2 builds on -->
+  <exec_depend>autosdv_aruco_localization</exec_depend>
+  <exec_depend>autosdv_marker_survey</exec_depend>
   <!-- the localization the launch files wire up -->
   <exec_depend>autoware_ar_tag_based_localizer</exec_depend>
   <exec_depend>autoware_ekf_localizer</exec_depend>

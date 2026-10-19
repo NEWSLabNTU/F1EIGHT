@@ -1,5 +1,5 @@
 <?xml version="1.0" encoding="UTF-8"?>
-<osm version="0.6" generator="autosdv_waypoint_lab make_course_map">
+<osm version="0.6" generator="autosdv_aruco_localization make_marker_map">
   <MetaInfo format_version="1" map_version="1" />
   <node id="1" lat="0" lon="0">
     <tag k="local_x" v="4.5000" />

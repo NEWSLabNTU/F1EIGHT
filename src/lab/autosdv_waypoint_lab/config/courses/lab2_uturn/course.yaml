@@ -14,7 +14,7 @@
 # 7.45 m; the turn is s = 2.00 to 5.45 m along it
 # (the grader splits straight from turn by arc length, read from path.csv).
 #
-# Frame: the START-BOX frame `just aruco-map align` writes -- origin on the
+# Frame: the START-BOX frame `just lab2 survey-align` writes -- origin on the
 # floor at the start box (base_link: the rear axle centre), x along the first
 # leg (the way the car drives off), y to the car's left, z up. A right turn
 # from +x goes to -y, so the second leg runs at y = -2R.
@@ -48,8 +48,8 @@
 # Setting up (docs/guides/lab2-waypoint-stack.md, "On the field"): tape the
 # route, place the boards by the table above, measured from the start box (a
 # few cm off is fine: the survey measures them), survey them with any board as
-# the origin (`just aruco-map scan ID`; 24, the ANCHOR, faces the first leg),
-# then `just aruco-map align` with the car in the start box, driven straight
+# the origin (`just lab2 survey ID`; 24, the ANCHOR, faces the first leg),
+# then `just lab2 survey-align` with the car in the start box, driven straight
 # along the taped first leg. That writes the measured boards in THIS frame beside
 # this path.csv and start_pose, so the route lies where the tape is. The ids are
 # placeholders (24 is a real board id); the survey writes the ids the

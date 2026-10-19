@@ -29,7 +29,7 @@ Visualization Manager:
         Durability Policy: Transient Local
         History Policy: Keep Last
         Reliability Policy: Reliable
-        Value: /lab2/course_path
+        Value: /loc_check/path
     - Class: rviz_default_plugins/Path
       Name: Trail (localized)
       Enabled: true
@@ -41,7 +41,7 @@ Visualization Manager:
         Durability Policy: Volatile
         History Policy: Keep Last
         Reliability Policy: Reliable
-        Value: /lab2/trail
+        Value: /loc_check/trail
     - Class: rviz_default_plugins/MarkerArray
       Name: Markers (survey)
       Enabled: true
@@ -62,7 +62,7 @@ Visualization Manager:
         Durability Policy: Volatile
         History Policy: Keep Last
         Reliability Policy: Reliable
-        Value: /lab2/fixes
+        Value: /loc_check/fixes
     - Class: rviz_default_plugins/Odometry
       Name: True pose (bench)
       Enabled: true

@@ -37,7 +37,7 @@ with the fewest boards that achieve them. One board stands on the first leg's
 line beyond the turn, facing the start box: the search anchors on it (it is
 also a convenient origin for the stage-1 survey, though any board will do).
 
-The frame is the START-BOX frame, the one `just aruco-map align` writes:
+The frame is the START-BOX frame, the one `just lab2 survey-align` writes:
 origin on the floor at the start box (base_link, the rear axle), x along the
 first leg (the way the car drives off), y to the car's left, z up. The route is
 taped on the floor and the boards are placed from the table this writes,
@@ -60,7 +60,7 @@ from typing import Dict, List, Optional, Tuple
 import numpy as np
 
 from autosdv_waypoint_lab import course as course_mod
-from autosdv_waypoint_lab.marker_sim import CameraModel, coverage, visible
+from autosdv_aruco_localization.marker_sim import CameraModel, coverage, visible
 from autosdv_waypoint_lab.path import CoursePath, Path, turn_spans
 
 COURSE_NAME = 'lab2_uturn'
@@ -577,7 +577,7 @@ def course_yaml(lay: Layout) -> str:
         f'# {lay.path_length:.2f} m; the turn is s = {lay.turn[0]:.2f} to {lay.turn[1]:.2f} m along it',
         '# (the grader splits straight from turn by arc length, read from path.csv).',
         '#',
-        '# Frame: the START-BOX frame `just aruco-map align` writes -- origin on the',
+        '# Frame: the START-BOX frame `just lab2 survey-align` writes -- origin on the',
         '# floor at the start box (base_link: the rear axle centre), x along the first',
         '# leg (the way the car drives off), y to the car\'s left, z up. A right turn',
         '# from +x goes to -y, so the second leg runs at y = -2R.',
@@ -610,8 +610,8 @@ def course_yaml(lay: Layout) -> str:
         '# Setting up (docs/guides/lab2-waypoint-stack.md, "On the field"): tape the',
         '# route, place the boards by the table above, measured from the start box (a',
         '# few cm off is fine: the survey measures them), survey them with any board as',
-        f'# the origin (`just aruco-map scan ID`; {anchor.id}, the ANCHOR, faces the first leg),',
-        '# then `just aruco-map align` with the car in the start box, driven straight',
+        f'# the origin (`just lab2 survey ID`; {anchor.id}, the ANCHOR, faces the first leg),',
+        '# then `just lab2 survey-align` with the car in the start box, driven straight',
         '# along the taped first leg. That writes the measured boards in THIS frame beside',
         '# this path.csv and start_pose, so the route lies where the tape is. The ids are',
         f'# placeholders ({FIRST_ID} is a real board id); the survey writes the ids the',

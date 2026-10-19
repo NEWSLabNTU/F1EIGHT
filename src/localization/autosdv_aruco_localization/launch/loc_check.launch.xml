@@ -1,0 +1,25 @@
+<?xml version="1.0"?>
+<!--
+  The localization check's own pieces: loc_check (course path, trail, fixes,
+  summary) and, with a display, RViz on rviz/loc_check.rviz. Included by
+  autosdv_launch's aruco_loc_check.launch.xml (the car) and usable beside
+  any running waypoint stack, the vehicle bench included.
+-->
+<launch>
+  <arg name="course_dir"/>
+  <arg name="rviz" default="false"/>
+  <arg name="viewer_display" default="$(env DISPLAY '')"
+       description="the X display RViz opens on; `just aruco-map check` passes it, because the launch itself runs without DISPLAY (the ZED cannot have one)"/>
+  <arg name="use_sim_time" default="false"/>
+  <node pkg="autosdv_aruco_localization" exec="loc_check" name="loc_check" output="screen">
+    <param name="course_dir" value="$(var course_dir)"/>
+    <param name="use_sim_time" value="$(var use_sim_time)"/>
+  </node>
+  <!-- respawn: RViz sometimes starts with a black view ("Failed to create an OpenGL
+       context. GLXBadDrawable"); close the window and it comes back -->
+  <node pkg="rviz2" exec="rviz2" name="loc_check_rviz" if="$(var rviz)"
+        respawn="true" respawn_delay="2.0"
+        args="-d $(find-pkg-share autosdv_aruco_localization)/rviz/loc_check.rviz">
+    <env name="DISPLAY" value="$(var viewer_display)"/>
+  </node>
+</launch>
