@@ -110,7 +110,7 @@ bench *ARGS:
 [positional-arguments]
 vehicle *ARGS:
     #!/usr/bin/env bash
-    unset DISPLAY                       # the ZED cannot have one: scripts/testing/lab2/camera_display.sh
+    unset DISPLAY                       # the ZED cannot have one: scripts/camera_display.sh
     source scripts/env.sh
     source scripts/testing/lab2/lab2_config.sh
     lab2_config vehicle "$@" || exit 2
@@ -124,7 +124,7 @@ vehicle *ARGS:
 #   just lab2 stack car_b route:=lab2_uturn rviz:=false  any waypoint_follow.launch.xml argument
 # VEHICLE_ID picks individual_params/config/<id>/ (calibration, actuator PWM, preset); nothing
 # from ~/lab2/lab2.yaml (no team, no car:=); vehicle_model:= runs another model. The ZED gets no DISPLAY
-# (scripts/testing/lab2/camera_display.sh); RViz opens on it when it answers (rviz:= to force).
+# (scripts/camera_display.sh); RViz opens on it when it answers (rviz:= to force).
 # The Lab 2 stack (waypoint planner + ArUco localization) on one car, without the lab's settings
 [positional-arguments]
 stack VEHICLE_ID *ARGS:
@@ -135,8 +135,8 @@ stack VEHICLE_ID *ARGS:
         case "$a" in vehicle_id:=*) echo "error: the vehicle_id is the first argument, not $a" >&2; exit 2 ;; esac
     done
     # The ZED never gets a DISPLAY (camera_display.sh says why); viewers get it back.
-    source scripts/testing/lab2/camera_display.sh
-    lab2_camera_display
+    source scripts/camera_display.sh
+    camera_display
     rviz=false; [ -n "$VIEWER_DISPLAY" ] && rviz=true
     cmd=(play_launch launch --web-addr '{{ web_addr }}' autosdv_launch waypoint_follow.launch.xml
          "vehicle_id:=$vid" "rviz:=$rviz" "viewer_display:=$VIEWER_DISPLAY" "$@")
@@ -403,9 +403,21 @@ make-straight LENGTH *ARGS:
 camera-check COURSE="src/lab/autosdv_waypoint_lab/config/courses/hall_demo" SECONDS="20":
     #!/usr/bin/env bash
     source scripts/env.sh
-    exec ros2 run autosdv_waypoint_lab lab2_camera_check '{{ COURSE }}' --duration '{{ SECONDS }}'
+    exec ros2 run autosdv_aruco_localization aruco_camera_check '{{ COURSE }}' --duration '{{ SECONDS }}'
 
-# The localization check moved: `just aruco-map check` (just/aruco_map.just).
+#   just lab2 loc-check                         surveys/latest, the settings' car (no car: the nominal one)
+#   just lab2 loc-check courses/my_hall rviz:=false
+# Lab 2's wrapper of `just aruco-map check` (scripts/aruco_map/aruco_map.sh): the
+# car from the settings. Nothing here can drive the car (the actuator is a dry run).
+# Localization check: car in the start box, drive the surveyed course BY HAND, watch RViz
+[positional-arguments]
+loc-check *ARGS:
+    #!/usr/bin/env bash
+    dir=(); if [ $# -gt 0 ] && [[ $1 != -* && $1 != *:=* ]]; then dir=("$1"); shift; fi
+    # car (settings file or car:=) -> vehicle_id:=car_<car>; without one, sim (nothing drives)
+    source scripts/testing/lab2/lab2_config.sh
+    lab2_config loc-check "$@" || exit 2
+    exec scripts/aruco_map/aruco_map.sh check "${dir[@]}" "${LAB2_ARGS[@]}"
 
 # --- Steering calibration (car gate): hold a servo offset, fit the ratio from the circles ----
 #   just control basic vehicle_id:=car_b     terminal 1: actuator on this car's PWM; no gate, spotter stops
@@ -429,7 +441,53 @@ steer-fit *PAIRS:
     source scripts/env.sh
     exec ros2 run autosdv_waypoint_lab lab2_steer_cal fit "$@"
 
-# The marker survey moved: `just aruco-map survey|scan|align|solve` (just/aruco_map.just).
+# --- Marker survey: Lab 2's wrappers of `just aruco-map` (docs/guides/aruco-map.md) ----------
+# The same tool with the lab's settings: the car (car:= or ~/lab2/lab2.yaml) and, for the
+# alignment, the route. Outputs as before: surveys/<date>_<time>, surveys/latest -> it.
+#   just lab2 survey 24                                    a new surveys/<date>_<time>, origin marker 24
+#   just lab2 survey courses/my_hall 24                    or name the directory
+#   just lab2 survey courses/my_hall 3 dictionary:=ARUCO_MIP_36h12 marker_size:=0.25
+# Drive or push the car slowly past every marker, then Ctrl-C (or `just lab2 survey-save`).
+# Survey stage 1: the boards, in the origin board's frame (`just aruco-map scan`)
+[positional-arguments]
+survey *ARGS:
+    #!/usr/bin/env bash
+    pos=()
+    while [ $# -gt 0 ] && [ ${#pos[@]} -lt 2 ] && [[ $1 != -* && $1 != *:=* ]]; do pos+=("$1"); shift; done
+    # car (settings file or car:=) -> vehicle_id:=car_<car>: the survey's URDF is that car's;
+    # without one, sim, the nominal car
+    source scripts/testing/lab2/lab2_config.sh
+    lab2_config survey "$@" || exit 2
+    exec scripts/aruco_map/aruco_map.sh scan "${pos[@]}" "${LAB2_ARGS[@]}"
+
+# Solve and write the survey now, without stopping it
+survey-save:
+    #!/usr/bin/env bash
+    exec scripts/aruco_map/aruco_map.sh save
+
+#   just lab2 survey-solve                       surveys/latest
+#   just lab2 survey-solve courses/my_hall --origin 3
+# Solve a saved survey again (COURSE_DIR/survey_data.npz, default surveys/latest)
+[positional-arguments]
+survey-solve *ARGS:
+    #!/usr/bin/env bash
+    exec scripts/aruco_map/aruco_map.sh solve "$@"
+
+#   just lab2 survey-align                       surveys/latest, the settings' route and car; the car in the taped start box
+#   just lab2 survey-align surveys/<dir> [--route lab2_uturn] [--vehicle-id car_b] [--force]
+#   just lab2 survey-align DIR --bench --truth TRUTH_DIR      the vehicle bench, no car
+# READY, then drive the car STRAIGHT along the taped first leg (2 m or more), stop, Ctrl-C.
+# Nothing here can drive the car. Writes the aligned course (the route's path.csv, the boards
+# in its frame) and align_report.txt into the survey; the stage-1 result stays in DIR/stage1/.
+# Then: loc-check, run. `just aruco-map align --route ROUTE` with the lab's route and car.
+# Survey stage 2: put the survey into the route's frame (origin at the start box, x along the first leg)
+[positional-arguments]
+survey-align *ARGS:
+    #!/usr/bin/env bash
+    dir=(); if [ $# -gt 0 ] && [[ $1 != -* && $1 != *:=* ]]; then dir=("$1"); shift; fi
+    source scripts/testing/lab2/lab2_config.sh
+    lab2_config survey-align "$@" || exit 2
+    exec scripts/aruco_map/aruco_map.sh align "${dir[@]}" "${LAB2_ARGS[@]}"
 
 #   just lab2 plot                           the latest bag
 #   just lab2 plot rosbags/lab2_uturn_1

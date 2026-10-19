@@ -283,6 +283,14 @@ def test_no_car_is_refused_on_the_car_not_on_the_bench(no_real_home):
     assert lc.plan('survey', ['car:=B', 'marker_size:=0.25'])[0] == \
         ['marker_size:=0.25', 'vehicle_id:=car_b']
     assert lc.plan('survey', ['marker_size:=0.25'])[0] == ['marker_size:=0.25', 'vehicle_id:=sim']
+    # survey-align: the settings' route and car for `just lab2 survey-align`, which reads no settings
+    assert lc.plan('survey-align', ['car:=B'])[0] == ['--route', 'lab2_uturn', 'vehicle_id:=car_b']
+    assert lc.plan('survey-align', ['/s', '--force'])[0] == \
+        ['/s', '--force', '--route', 'lab2_uturn', 'vehicle_id:=sim']
+    assert lc.plan('survey-align', ['route:=lab2_straight_2m', '--vehicle-id', 'car_c'])[0] == \
+        ['--vehicle-id', 'car_c', '--route', 'lab2_straight_2m']
+    assert lc.plan('survey-align', ['--route', 'x', 'car:=B', '--bench', '--truth', '/t'])[0] == \
+        ['--route', 'x', '--bench', '--truth', '/t']
     # a car set on the bench is still that car's profile
     assert lc.plan('vehicle', ['car:=B'], bench=True)[0][-1] == 'vehicle_id:=car_b'
     # an explicit vehicle_id:= alone names the car
@@ -313,7 +321,7 @@ def test_show_names_every_source(tmp_path):
 
 
 def _aligned_survey(root, route='lab2_uturn', path_text=None):
-    """A survey directory as `just aruco-map align` leaves it."""
+    """A survey directory as `just lab2 survey-align` leaves it."""
     import shutil
     src = lc.COURSES / route
     d = root / 'surveys' / '2026-10-16_10-00-00'
@@ -353,7 +361,7 @@ def test_a_stale_or_unaligned_survey_is_not_run(tmp_path, monkeypatch, capsys):
     ok, why = lc.aligned_for(d, 'lab2_uturn')
     assert not ok and 'older' in why
     assert lc.plan('vehicle', ['car:=A'])[0][0] == 'route:=lab2_uturn'
-    assert 'run `just aruco-map align` again' in capsys.readouterr().err
+    assert 'run `just lab2 survey-align` again' in capsys.readouterr().err
     t = yaml.safe_load((d / 'course.yaml').read_text())
     del t['alignment']
     (d / 'course.yaml').write_text(yaml.safe_dump(t))

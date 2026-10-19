@@ -30,7 +30,7 @@ Over SSH (SSH_CONNECTION or SSH_TTY) and not inside tmux, the command re-runs it
 new tmux session (lab2-run, or lab2-run-2, ...), and says how to reattach if the
 connection drops; without tmux, a warning. The windows: $DISPLAY if it answers, else :1
 (the car's desktop, seen over RDP) if it answers, else headless; one line says which. The
-stack never gets a DISPLAY (the ZED: scripts/testing/lab2/camera_display.sh); audit.png
+stack never gets a DISPLAY (the ZED: scripts/camera_display.sh); audit.png
 opens on the display chosen, and its path is always printed.
 
 In order, with short status lines on the terminal and everything else in log
@@ -1018,7 +1018,7 @@ def main(argv=None) -> int:
     viewer, why_display = le.pick_display(os.environ)
     print(f'lab2 run: {why_display}')
     env = dict(os.environ)
-    env.pop('DISPLAY', None)      # the ZED cannot have one: scripts/testing/lab2/camera_display.sh
+    env.pop('DISPLAY', None)      # the ZED cannot have one: scripts/camera_display.sh
     if o.bench:
         env.setdefault('ROS_DOMAIN_ID', '73')
         if env['ROS_DOMAIN_ID'] == '0':

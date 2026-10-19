@@ -32,6 +32,9 @@ Recipes:
                 calibration and IMU bias, which no car has measured yet); every other
                 argument passes through
     survey      the same as loc-check (the survey's URDF is that car's calibration)
+    survey-align  --route ROUTE (`route`) unless --route is given, and vehicle_id:=car_<car>
+                (else sim; --bench: sim) unless --vehicle-id / vehicle_id:= is given; the
+                generic tool (`just aruco-map align`) takes both on its command line only
     gate        vehicle_model:= (below)
     sim         nothing from the file: Part 1 runs the one simulation model,
                 lab2_sim_vehicle, for everyone (`team` and `vehicle_model` name Part 2's car
@@ -60,7 +63,7 @@ team NUMBER everywhere (team:=3 is team3_vehicle). The team_dir:= and submission
 SpeedPID-only lab are gone from vehicle and gate: the controller lives in the model.
 
 Which course the car runs (`course_dir`): `auto` (the default) is the aligned
-survey surveys/latest when `just aruco-map align` aligned it for `route`,
+survey surveys/latest when `just lab2 survey-align` aligned it for `route`,
 else the route's packaged course (its PLANNED boards, with a warning); `package`
 is always the packaged course; a directory is that course. The bench
 (`just lab2 run --bench`) takes `auto` as `package`: a survey is of the field.
@@ -70,7 +73,7 @@ box, boards and start-box frame; a route's course.yaml names its field with
 `field: lab2_uturn`, and a route without one is its own field). When `route` is
 not the one surveys/latest is aligned for but shares its field, `auto` builds a
 sibling surveys/<latest dir>.<route>/ once, re-solved for `route` from latest's
-recorded drive (align_poses.csv, align_pnp.csv; the lab2_survey_align_solve
+recorded drive (align_poses.csv, align_pnp.csv; the marker_survey_align_solve
 solver), and runs that. surveys/latest itself is never written; the sibling is
 rebuilt when latest's alignment inputs change (a hash in its .reused_from). One
 stderr line names the survey a run uses; on any failure, the packaged course
@@ -238,7 +241,7 @@ def _route_fields(course_dir: Path):
 
 
 def aligned_for(course_dir, route: str):
-    """(True, '') if course_dir is a survey that `just aruco-map align` aligned for the
+    """(True, '') if course_dir is a survey that `just lab2 survey-align` aligned for the
     route `route` (a packaged course name), with that route's path, start pose, laps
     and v_ref unchanged since; else (False, why)."""
     course_dir = Path(course_dir)
@@ -251,7 +254,7 @@ def aligned_for(course_dir, route: str):
         return False, f'{course_dir}: {e}'
     al = d.get('alignment')
     if not isinstance(al, dict):
-        return False, f'{course_dir} is not aligned (run `just aruco-map align`)'
+        return False, f'{course_dir} is not aligned (run `just lab2 survey-align`)'
     if str(al.get('route')) != template.name:
         return False, f'{course_dir} is aligned for route {al.get("route")!r}, not {template.name!r}'
     try:
@@ -260,7 +263,7 @@ def aligned_for(course_dir, route: str):
         return False, f'route {template}: {e}'
     if mine != theirs:
         return False, (f'{course_dir} was aligned for an older {template.name} (its path, start pose, '
-                       'laps or v_ref differ): run `just aruco-map align` again')
+                       'laps or v_ref differ): run `just lab2 survey-align` again')
     return True, ''
 
 
@@ -305,7 +308,7 @@ def _reuse_key(latest: Path, route: str) -> str:
 
 def _solve_sibling(sib: Path, route: str, forced: bool) -> Tuple[bool, str]:
     """Align `sib` (stage1/ and the drive already copied in) for `route`: the solver of
-    `lab2_survey_align_solve`, in this process, its report into sib/align_report.txt."""
+    `marker_survey_align_solve`, in this process, its report into sib/align_report.txt."""
     for pkg in ('autosdv_marker_survey', 'autosdv_waypoint_lab'):
         p = str(REPO / 'src/lab' / pkg)
         try:
@@ -333,7 +336,7 @@ def reuse_survey(latest: Path, route: str) -> Tuple[Optional[Path], str]:
         return None, str(e)
     al_ = d.get('alignment')
     if not isinstance(al_, dict):
-        return None, f'{latest} is not aligned (run `just aruco-map align`)'
+        return None, f'{latest} is not aligned (run `just lab2 survey-align`)'
     other = str(al_.get('route'))
     if other == _template(route).name:
         return None, 'aligned for this route'
@@ -405,7 +408,7 @@ def course_for(c: 'Config', bench: bool = False):
                     'where the plan put them, not where they stand')
         else:
             warn = (f'no surveys/latest: running the PACKAGED {route}, whose boards are where the plan '
-                    'put them (survey, then `just aruco-map align`)')
+                    'put them (survey, then `just lab2 survey-align`)')
     arg = f'course_dir:={route}' if '/' in route else f'route:={route}'
     return arg, ('route', route), warn
 
@@ -618,6 +621,21 @@ def plan(recipe, argv, cwd=REPO, bench=False):
             out.append(arg)
         if vid:
             use('vehicle_id', vid)
+    elif recipe == 'survey-align':
+        out = list(rest)
+        if not _has(rest, '--route'):
+            route = c.require('route', 'the route the survey is aligned for')
+            out += ['--route', route]
+            use('route')
+        if not _has(rest, '--vehicle-id'):
+            if '--bench' in rest:
+                arg, vid = (None, None) if _has(rest, 'vehicle_id:=') else (None, SIM_VEHICLE_ID)
+            else:
+                arg, vid = vehicle_id_for(c, rest, required=False, fallback=SIM_VEHICLE_ID)
+            if arg:
+                out.append(arg)
+            if vid:
+                use('vehicle_id', vid)
     elif recipe in ('loc-check', 'survey'):
         out = list(rest)
         # nothing here drives, so no car is not a refusal: the nominal car's calibration
