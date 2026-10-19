@@ -21,7 +21,6 @@ brake_exit: 0.05                       # leave it when the excess falls below th
 brake_deadband: 5                      # counts below neutral the ESC ignores (its dead band), 0 .. 10
 # The feed-forward PWM = init_pwm + ff_deadband + v / ff_gain (v > 0). Given: you may change
 # them, and if you do, say why in the report. Calibrated on a fresh pack (12.4 V); the car runs
-# at 11.1 V nominal, so the feed-forward under-drives and the integral must make up the rest
-# (about 10 counts at 11 m/s on the nominal car, 13 on low_batt).
+# at 11.1 V nominal, so the feed-forward under-drives and the integral must make up the rest.
 ff_deadband: 5.27                      # d [counts], 0 .. 50
 ff_gain: 0.1433                        # g [m/s per count], > 0
