@@ -104,7 +104,7 @@ def test_progress_does_not_jump_across_a_crossing():
 def test_a_finished_run_counts_every_lap(closed, laps):
     # Speeds are 0 once the run is finished (within 0.05 m of the end), so the
     # car can come to rest short of the end, as the Lab 2 gate saw on
-    # lab2_uturn: progress 24.6999 of 24.7100, finished, "0/1 laps".
+    # the earlier 24.71 m lab2_uturn: progress 24.6999 of 24.7100, finished, "0/1 laps".
     pts = square_loop() if closed else ([0.0, 10.0], [0.0, 0.0], [0.8, 0.8])
     cp = CoursePath(*pts, closed=closed, laps=laps)
     cp.progress = cp.run_length - 0.01

@@ -1,8 +1,8 @@
 #!/usr/bin/env python3
 """Regenerate the lab2_uturn course from its U-turn radius (and leg length).
 
-    python3 scripts/testing/lab2/make_uturn.py --radius 1.5 [--leg 10] [--write]
-    just lab2 make-uturn 1.5 [--leg 10] [--write]
+    python3 scripts/testing/lab2/make_uturn.py --radius 1.1 [--leg 2] [--write]
+    just lab2 make-uturn 1.1 [--leg 2] [--write]
 
 Rewrites path.csv, course.yaml (start pose, boards, the generated header),
 lanelet2_map.osm, ar_tag.param.yaml and map_projector_info.yaml in
