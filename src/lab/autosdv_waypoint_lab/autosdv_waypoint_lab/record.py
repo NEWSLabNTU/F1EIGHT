@@ -168,16 +168,28 @@ def missing_path_file(course: str) -> Optional[str]:
     return None if os.path.isfile(c.path_file) else os.path.basename(c.path_file)
 
 
+ACTUATOR = '/autosdv/actuator_node'
+
+
 def course_dir_from_stack(timeout: float = 15.0) -> Optional[str]:
+    return string_param(PATH_PUBLISHER, 'course_dir', timeout)
+
+
+def controller_from_stack(timeout: float = 15.0) -> Optional[str]:
+    """The speed controller class the running actuator was started with."""
+    return string_param(ACTUATOR, 'speed_controller_class', timeout)
+
+
+def string_param(node_name: str, param: str, timeout: float = 15.0) -> Optional[str]:
     import rclpy
     from rcl_interfaces.srv import GetParameters
     node = rclpy.create_node('lab2_record_probe')
-    cli = node.create_client(GetParameters, PATH_PUBLISHER + '/get_parameters')
+    cli = node.create_client(GetParameters, node_name + '/get_parameters')
     try:
         if not cli.wait_for_service(timeout_sec=timeout):
             return None
         req = GetParameters.Request()
-        req.names = ['course_dir']
+        req.names = [param]
         fut = cli.call_async(req)
         rclpy.spin_until_future_complete(node, fut, timeout_sec=timeout)
         if fut.result() is None or not fut.result().values:
@@ -206,6 +218,7 @@ def main(argv=None):
     import rclpy
     rclpy.init()
     course = args.course_dir or course_dir_from_stack()
+    controller = controller_from_stack(5.0) if not args.course_dir else None
     if not course:
         print(f'lab2_record: no {PATH_PUBLISHER} answered; start the stack first '
               '(just lab2 vehicle ...)', file=sys.stderr)
@@ -226,6 +239,11 @@ def main(argv=None):
     meta['git_dirty'] = dirty
     meta['course_dir'] = os.path.abspath(course)
     meta.update(bm.model_version(args.vehicle_model))
+    meta['speed_controller_class'] = controller or ''
+    bad = bm.controller_problem(meta)
+    if bad:
+        print(f'lab2_record: {bad}', file=sys.stderr)
+        return 2
     if args.bench:
         meta['bench'] = True
     meta_json = json.dumps(meta, sort_keys=True)

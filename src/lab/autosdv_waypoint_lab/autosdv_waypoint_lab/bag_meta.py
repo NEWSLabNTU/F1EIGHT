@@ -163,6 +163,31 @@ def model_version(model: str) -> dict:
     return out
 
 
+def expected_controller(model: str) -> Optional[str]:
+    """The speed controller a TEAM model must run, its own speed_pid.py's SpeedPID; None for
+    any other model (the reference, autosdv_vehicle, runs its built-in controller). Only a
+    team's SpeedPID is graded, never AutoSDV's AckermannSpeedPID that every model ships."""
+    import re
+    if re.fullmatch(r'team[1-9][0-9]{0,2}_vehicle', str(model or '')):
+        return f'{model}_interface.speed_pid:SpeedPID'
+    return None
+
+
+def controller_problem(meta: Optional[dict]) -> Optional[str]:
+    """Why a bag's recorded speed controller is not its team model's own SpeedPID, or None."""
+    want = expected_controller((meta or {}).get('vehicle_model'))
+    if want is None:
+        return None
+    got = (meta or {}).get('speed_controller_class')
+    if not got:
+        return (f'no speed controller recorded for {meta.get("vehicle_model")}: its own SpeedPID '
+                f'({want}) cannot be shown to have run (record with `just lab2 record`)')
+    if got != want:
+        return (f'speed controller {got}, not the team\'s own {want}: only the model\'s '
+                'speed_pid.py SpeedPID is graded')
+    return None
+
+
 def read_sidecar(bag_dir: str) -> Optional[dict]:
     p = os.path.join(bag_dir, SIDECAR)
     if os.path.isfile(p):

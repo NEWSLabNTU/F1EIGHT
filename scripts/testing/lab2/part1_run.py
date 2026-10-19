@@ -736,6 +736,7 @@ def run_one(args, variant, ctrl_args, out_root, env, before_hold=None):
                  'total': CHECKS_PER_RUN, 'checks': {},
                  'source': 'part1_run.py (no grader result)'}
         (out_dir / 'marks.json').write_text(json.dumps(marks, indent=2) + '\n')
+    marks = enforce_own_controller(marks, args, play_log, out_dir)
     run = {'variant': variant, 'command': cmd, 'play_log': str(play_log.resolve()),
            'vehicle_model': getattr(args, 'model_name', None) or lab2_ws.REFERENCE_MODEL,
            'model_source': getattr(args, 'model_root', None),
@@ -749,6 +750,35 @@ def run_one(args, variant, ctrl_args, out_root, env, before_hold=None):
     print_marks(marks, run, table=not printed)
     return marks
 
+
+
+_CONTROLLER_LINE = re.compile(r'Speed controller: (\S+)')
+
+
+def loaded_controller(play_log: Path):
+    """The class the actuator loaded in this run ("Speed controller: X" in its log), or None."""
+    for f in sorted(Path(play_log).glob('*/node/actuator_node/*'), reverse=True):
+        if f.is_file():
+            m = _CONTROLLER_LINE.search(f.read_text(errors='replace'))
+            if m:
+                return m.group(1)
+    return None
+
+
+def enforce_own_controller(marks: dict, args, play_log: Path, out_dir: Path) -> dict:
+    """The grader rule: a model run counts only if the actuator ran the model's own SpeedPID
+    (speed_pid.py), not AutoSDV's built-in controller. --class runs (the TA) are exempt."""
+    model = getattr(args, 'model_name', None)
+    if args.cls or not model:
+        return marks
+    want, used = sub.expected_controller(model), loaded_controller(play_log)
+    marks['speed_controller'] = used
+    if used != want:
+        marks.update(valid=False, passed=0, invalid_reason=(
+            f'the actuator ran {used or "an unknown controller"}, not {want}: only your own '
+            'SpeedPID in speed_pid.py is graded'))
+    (out_dir / 'marks.json').write_text(json.dumps(marks, indent=2) + '\n')
+    return marks
 
 def fmt(v):
     if v is None:

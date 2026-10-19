@@ -61,8 +61,15 @@ your edits would not run.
 also run yourself on `src/lab2_vehicles/lab2_sim_vehicle_launch`): the three packages are there,
 `lab2_sim_vehicle_interface/speed_pid.py` defines `class SpeedPID`, the sim tuning file
 parses and its keys, types and ranges are the table below, and nothing in the model imports
-the TA's reference controllers (`autosdv_waypoint_lab.reference`). Any of these stops the
-run with the file and the key named.
+the TA's reference controllers (`autosdv_waypoint_lab.reference`), and the model runs its own
+`speed_pid.py`'s `SpeedPID`: AutoSDV's built-in `AckermannPID` / `AckermannSpeedPID`
+(`speed_controller.py`, which ships in every model) may be read, but `speed_pid.py` and the
+modules it imports may not import, subclass or select them, the launch's
+`speed_controller_class` default must stay `lab2_sim_vehicle_interface.speed_pid:SpeedPID`,
+and no config file may set it. Any of these stops the run with the file and the key named.
+After each car, the runner also reads the class the actuator actually loaded ("Speed
+controller: ..." in its log, recorded as `speed_controller` in `marks.json`); a run of any
+other class is invalid and counts 0.
 
 **Windows.** `--no-gui` opens none (the same as `rviz:=false gui:=false`). With no
 working X display (an SSH session without X) the run goes headless by itself and says so

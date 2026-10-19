@@ -1,4 +1,5 @@
 """part1_run.py: python3 -m pytest scripts/testing/lab2/test_part1_run.py"""
+import json
 import sys
 from pathlib import Path
 from types import SimpleNamespace
@@ -328,3 +329,33 @@ def test_summary_table_names_every_variant_and_its_plot(tmp_path):
     text = R.summary_table(results, plots)
     assert 'nominal' in text and '10/11' in text and str(plots['nominal']) in text
     assert 'INVALID' in text and 'MRM' in text
+
+
+def _play_log(tmp_path, line):
+    d = tmp_path / 'play_log' / '2026-10-20_04-00-00' / 'node' / 'actuator_node'
+    d.mkdir(parents=True)
+    (d / 'err').write_text(f'[INFO] [1.0] [autosdv.actuator_node]: {line}\n')
+    return tmp_path / 'play_log'
+
+
+def _marks():
+    return {'variant': 'nominal', 'valid': True, 'passed': 9, 'total': 9, 'checks': {}}
+
+
+def test_a_run_of_the_builtin_controller_counts_zero(tmp_path):
+    args = R.parse([])
+    args.model_name = 'lab2_sim_vehicle'
+    log = _play_log(tmp_path, 'Speed controller: '
+                    'lab2_sim_vehicle_interface.speed_controller:AckermannSpeedPID')
+    m = R.enforce_own_controller(_marks(), args, log, tmp_path)
+    assert (m['valid'], m['passed']) == (False, 0) and 'only your own' in m['invalid_reason']
+    assert json.loads((tmp_path / 'marks.json').read_text())['passed'] == 0
+
+
+def test_a_run_of_the_models_own_speed_pid_keeps_its_marks(tmp_path):
+    args = R.parse([])
+    args.model_name = 'lab2_sim_vehicle'
+    log = _play_log(tmp_path, 'Speed controller: lab2_sim_vehicle_interface.speed_pid:SpeedPID')
+    m = R.enforce_own_controller(_marks(), args, log, tmp_path)
+    assert (m['valid'], m['passed']) == (True, 9)
+    assert m['speed_controller'] == 'lab2_sim_vehicle_interface.speed_pid:SpeedPID'

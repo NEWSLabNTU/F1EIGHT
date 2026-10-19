@@ -255,3 +255,46 @@ def test_a_student_submission_dir_holding_the_model_and_a_report(tmp_path):
     (sub_dir / 'src').rmdir()
     assert submission.resolve_part1(sub_dir)[:2] == (model, flat.resolve())
     assert submission.main([str(sub_dir), '--model']) == 0   # --part1 implied
+
+
+@pytest.mark.parametrize('pid', [
+    'from lab2_sim_vehicle_interface.speed_controller import AckermannSpeedPID as SpeedPID\n'
+    'class SpeedPID(SpeedPID):\n    pass\n',
+    'from .speed_controller import AckermannSpeedPID\nclass SpeedPID(AckermannSpeedPID):\n    pass\n',
+    'from . import speed_controller as sc\nclass SpeedPID:\n'
+    '    def __init__(self, params):\n        self.pid = sc.AckermannPID(1, 0, 0)\n',
+    'from .helpers import Inner\nclass SpeedPID(Inner):\n    pass\n',     # via its own module
+])
+def test_part1_the_builtin_controller_is_refused(tmp_path, pid):
+    model, root = make_model(tmp_path, pid=pid)
+    pkg = root / f'{model}_interface' / f'{model}_interface'
+    (pkg / 'helpers.py').write_text(
+        'from lab2_sim_vehicle_interface.speed_controller import AckermannSpeedPID as Inner\n')
+    with pytest.raises(submission.SubmissionError, match="built-in controller"):
+        submission.resolve_part1(root)
+
+
+def test_part1_the_base_class_and_a_comment_are_fine(tmp_path):
+    pid = ('from .speed_controller import SpeedPID as Base  # not AckermannSpeedPID\n'
+           'class SpeedPID(Base):\n    pass\n')
+    model, root = make_model(tmp_path, pid=pid)
+    pkg = root / f'{model}_interface' / f'{model}_interface'
+    (pkg / 'speed_controller.py').write_text('class AckermannSpeedPID:\n    pass\n')
+    assert submission.resolve_part1(root)[0] == model
+
+
+@pytest.mark.parametrize('where', ['launch', 'yaml'])
+def test_part1_selecting_another_class_is_refused(tmp_path, where):
+    model, root = make_model(tmp_path)
+    if where == 'launch':
+        launch = root / f'{model}_launch' / 'launch'
+        launch.mkdir()
+        (launch / 'vehicle_interface.launch.xml').write_text(
+            '<launch>\n<arg name="speed_controller_class" '
+            f'default="{model}_interface.speed_controller:AckermannSpeedPID"/>\n</launch>\n')
+    else:
+        cfg = root / f'{model}_launch' / 'config' / 'extra.yaml'
+        cfg.parent.mkdir(parents=True, exist_ok=True)
+        cfg.write_text('/**:\n  ros__parameters:\n    speed_controller_class: x.y:Z\n')
+    with pytest.raises(submission.SubmissionError, match='built-in controller'):
+        submission.resolve_part1(root)

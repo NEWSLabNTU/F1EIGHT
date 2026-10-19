@@ -282,6 +282,74 @@ def reference_uses(root: Path):
     return hits
 
 
+
+#: AutoSDV's own controllers, which ship in every model (speed_controller.py) but are not
+#: the student's: a submission's SpeedPID may not be, import or select them.
+BUILTIN_CONTROLLERS = ('AckermannPID', 'AckermannSpeedPID')
+_BUILTIN_NAME = re.compile(r'\b(' + '|'.join(BUILTIN_CONTROLLERS) + r')\b')
+
+
+def expected_controller(model: str) -> str:
+    """The class a model must run: its own speed_pid.py's SpeedPID."""
+    return f'{model}_interface.speed_pid:SpeedPID'
+
+
+def _own_modules(pkg_dir: Path, start: Path):
+    """speed_pid.py and every module of its package it imports, transitively; never
+    speed_controller.py (AutoSDV's, where the built-in controllers are defined)."""
+    pkg = pkg_dir.name
+    seen, todo = [], [start]
+    while todo:
+        path = todo.pop()
+        if path in seen or not path.is_file() or path.name == 'speed_controller.py':
+            continue
+        seen.append(path)
+        try:
+            tree = ast.parse(path.read_text(errors='replace'), filename=str(path))
+        except SyntaxError:
+            continue
+        for n in ast.walk(tree):
+            names = []
+            if isinstance(n, ast.ImportFrom):
+                mod = n.module or ''
+                if n.level:
+                    names = [mod] if mod else [a.name for a in n.names]
+                elif mod == pkg:
+                    names = [a.name for a in n.names]
+                elif mod.startswith(pkg + '.'):
+                    names = [mod[len(pkg) + 1:]]
+            elif isinstance(n, ast.Import):
+                names = [a.name[len(pkg) + 1:] for a in n.names if a.name.startswith(pkg + '.')]
+            for name in names:
+                todo.append(pkg_dir / (name.split('.')[0] + '.py'))
+    return seen
+
+
+def builtin_controller_uses(root: Path, model: str):
+    """['file:line: what', ...]: a SpeedPID that is, imports or selects AutoSDV's built-in
+    controller instead of the student's own (the grader rule: the run must be speed_pid.py's)."""
+    hits = []
+    pkg_dir = root / f'{model}_interface' / f'{model}_interface'
+    for path in _own_modules(pkg_dir, pkg_dir / 'speed_pid.py'):
+        for i, line in enumerate(path.read_text(errors='replace').splitlines(), 1):
+            code = line.split('#', 1)[0]
+            m = _BUILTIN_NAME.search(code)
+            if m:
+                hits.append(f'{path.relative_to(root)}:{i}: {m.group(1)}')
+    want = expected_controller(model)
+    launch = root / f'{model}_launch' / 'launch' / 'vehicle_interface.launch.xml'
+    if launch.is_file():
+        text = re.sub(r'<!--.*?-->', '', launch.read_text(errors='replace'), flags=re.S)
+        m = re.search(r'<arg\s+name="speed_controller_class"[^>]*default="([^"]*)"', text)
+        if m and m.group(1) != want:
+            hits.append(f'{launch.relative_to(root)}: speed_controller_class defaults to '
+                        f'{m.group(1)!r}, not {want!r}')
+    for y in sorted((root / f'{model}_launch').rglob('*.yaml')):
+        for i, line in enumerate(y.read_text(errors='replace').splitlines(), 1):
+            if re.match(r'\s*speed_controller_class\s*:', line.split('#', 1)[0]):
+                hits.append(f'{y.relative_to(root)}:{i}: sets speed_controller_class')
+    return hits
+
 def sim_tuning(path: Path, pwm: dict = None):
     """(checked speed_controller_params mapping, [warnings]) from a model's
     config/sim/speed_controller.param.yaml."""
@@ -326,6 +394,13 @@ def resolve_part1(path, pwm: dict = None, model: str = SIM_MODEL):
         raise SubmissionError(f"{pid}: missing (the model's SpeedPID)")
     if not _defines_class(pid, 'SpeedPID'):
         raise SubmissionError(f'{pid}: defines no class SpeedPID')
+    builtin = builtin_controller_uses(root, model)
+    if builtin:
+        raise SubmissionError(
+            f'{root}: runs AutoSDV\'s built-in controller, not your own SpeedPID: '
+            + '; '.join(builtin) + f'. The model must run {expected_controller(model)}, '
+            'written in speed_pid.py (speed_controller.py\'s AckermannPID / AckermannSpeedPID '
+            'may be read, not imported, subclassed or selected)')
     mapping, warnings = sim_tuning(root / f'{model}_launch' / SIM_TUNING, pwm)
     return model, root, mapping, warnings
 

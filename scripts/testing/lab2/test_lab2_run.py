@@ -280,3 +280,30 @@ def test_car_stack_carries_the_vehicle_id(tmp_path, monkeypatch):
     f.write_text(f'team: 3\nbag_dir: {tmp_path / "bags"}\n')
     with pytest.raises(lc.ConfigError, match='no car set'):
         lr.Run(lr.parse_args([f'config:={f}'])).plan()
+
+
+def test_the_loaded_controller_is_read_from_the_actuator_log(tmp_path):
+    d = tmp_path / 'play_log' / '2026' / 'node' / 'actuator_node'
+    d.mkdir(parents=True)
+    (d / 'err').write_text('[INFO] [1.0] [autosdv.actuator_node]: vehicle_id: sim\n'
+                           '[INFO] [1.1] [autosdv.actuator_node]: Speed controller: '
+                           'team3_vehicle_interface.speed_pid:SpeedPID\n')
+    assert lr.loaded_controller(tmp_path) == 'team3_vehicle_interface.speed_pid:SpeedPID'
+    assert lr.loaded_controller_problem('team3_vehicle', tmp_path) is None
+    assert 'team4_vehicle' in lr.loaded_controller_problem('team4_vehicle', tmp_path)
+    assert lr.loaded_controller_problem('autosdv_vehicle', tmp_path) is None   # the reference
+    assert 'no speed controller' in lr.loaded_controller_problem('team3_vehicle', tmp_path / 'none')
+
+
+def test_a_template_runs_its_own_speedpid_and_an_edited_one_is_refused(tmp_path, monkeypatch):
+    import lab2_ws
+    import new_team as nt
+    files, source = nt.read_reference()
+    root = nt.generate(3, tmp_path, files, source, nt.read_lab_files(worktree=True),
+                       nt.vehicle_ids())
+    monkeypatch.setattr(lab2_ws, 'model_source_root', lambda m: root)
+    assert lab2_ws.controller_problems('team3_vehicle') == []
+    assert lab2_ws.controller_problems('autosdv_vehicle') == []
+    pid = root / 'team3_vehicle_interface/team3_vehicle_interface/speed_pid.py'
+    pid.write_text('from team3_vehicle_interface.speed_controller import AckermannSpeedPID as SpeedPID\n')
+    assert lab2_ws.controller_problems('team3_vehicle')

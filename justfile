@@ -373,6 +373,7 @@ build:
     # nvcc absent from PATH.
     set -e
     {{justfile_directory()}}/scripts/build/check-python-env.sh
+    {{justfile_directory()}}/scripts/build/clear-stale-builds.sh {{justfile_directory()}}
     source /opt/ros/humble/setup.bash && \
     colcon build \
         --base-paths src \

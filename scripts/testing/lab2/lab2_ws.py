@@ -9,6 +9,11 @@
                             submissions (students build theirs in src/lab2_vehicles/)
     ws_install(env)         its install/
     model_installed(model)  are <model>_launch and the rest in the ament index of this process
+    model_source_root(model) the directory holding the model's three packages (its installed
+                            launch file's link, under --symlink-install), or None
+    controller_problems(model) why a TEAM model's controller is not its own speed_pid.py
+                            SpeedPID (submission.builtin_controller_uses on its source); []
+                            for the reference
 
 lab2_run (Part 2) and part1_run (Part 1) both resolve team:=N with these, so the two parts
 name and find a team's model the same way. A student's models live under this repository's
@@ -43,6 +48,28 @@ def ws_dir(env: Mapping[str, str] = os.environ) -> Path:
 
 def ws_install(env: Mapping[str, str] = os.environ) -> Path:
     return ws_dir(env) / 'install'
+
+
+def model_source_root(model: str) -> Optional[Path]:
+    try:
+        from ament_index_python.packages import get_package_share_directory
+        launch = Path(get_package_share_directory(f'{model}_launch'),
+                      'launch', 'vehicle_interface.launch.xml')
+    except Exception:
+        return None
+    root = launch.resolve().parents[2]
+    return root if (root / f'{model}_launch').is_dir() else None
+
+
+def controller_problems(model: str) -> list:
+    if team_of(model) is None:
+        return []
+    root = model_source_root(model)
+    if root is None:
+        return [f'{model}: cannot find its source (built without --symlink-install?), so its '
+                'controller cannot be checked']
+    import submission
+    return submission.builtin_controller_uses(root, model)
 
 
 def model_installed(model: str) -> bool:
