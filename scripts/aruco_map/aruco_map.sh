@@ -18,8 +18,8 @@
 #
 # ARGS: key:=value. vehicle_id:= (default sim, the nominal car: it only picks the
 # camera mount and IMU calibration, individual_params/config/<id>), dictionary:=
-# (default DICT_5X5_1000) and marker_size:= (REQUIRED for a scan: the black square's
-# edge in metres, measured; no default, since a wrong one scales every distance)
+# (default DICT_5X5_1000) and marker_size:= (default 0.4667 m, the lab's 600 mm
+# boards: the black square's edge, measured; a wrong one scales every distance)
 # for the scan, and any other argument of the launch file the command runs.
 # align takes --route, --force, --vehicle-id (or vehicle_id:=), --bench --truth DIR.
 #
@@ -79,22 +79,10 @@ launch_args() {
     LAUNCH_ARGS+=("vehicle_id:=$vid")
 }
 
-# A scan needs marker_size:=: a wrong size scales the whole map, silently
-require_marker_size() {
-    local a
-    for a in "${LAUNCH_ARGS[@]}"; do
-        case "$a" in marker_size:=?*) return 0 ;; esac
-    done
-    die "marker_size:= is required: the edge of the boards' BLACK SQUARE in metres, measured
-  (a 7x7-cell marker on a W board with one cell of margin: W x 7/9; 0.60 m board: 0.467).
-  A scan already taken at the wrong size: just aruco-map solve DIR marker_size:=X"
-}
-
 # The scan on DIR / ORIGIN with ARGS (key:=value launch arguments). The marker
 # survey node solves and writes the map when it is stopped, so Ctrl-C ends it.
 run_scan() {
     launch_args "${ARGS[@]}"
-    require_marker_size
     # The ZED never gets a DISPLAY (camera_display.sh says why); viewers get it back.
     source scripts/camera_display.sh
     camera_display

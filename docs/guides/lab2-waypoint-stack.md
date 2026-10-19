@@ -448,7 +448,7 @@ route.
 2. **Place the boards** by the same header's table, measured from the start box.
    A few centimetres or degrees off does not matter: the survey measures where
    they really are. Upright, on the floor.
-3. **Stage 1, the survey:** `just lab2 survey 24 marker_size:=0.467` (any board id can be the
+3. **Stage 1, the survey:** `just lab2 survey 24` (any board id can be the
    origin; 24, the anchor, faces the first leg). Drive or push the car slowly
    past every board, Ctrl-C. This measures the boards relative to one another,
    in the frame of that board, and writes `surveys/<date>_<time>/` (and
@@ -712,7 +712,7 @@ odometry median 10 cm / p95 24 cm with the bench's default detection noise
 The order on the car, each step in the same tmux session (a window each), each
 one cheap enough to repeat after any change to the car:
 
-0. after the boards are placed (each visit): `just lab2 survey 24 marker_size:=M`, then
+0. after the boards are placed (each visit): `just lab2 survey 24`, then
    `just lab2 survey-align` (On the field, above);
 1. `just lab2 preflight` with the stack up and the car in the start box
    (`just lab2 run` also runs it itself before engaging);

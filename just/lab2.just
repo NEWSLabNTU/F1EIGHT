@@ -434,8 +434,8 @@ steer-fit *PAIRS:
 # --- Marker survey: Lab 2's wrappers of `just aruco-map` (docs/guides/aruco-map.md) ----------
 # The same tool with the lab's settings: the car (car:= or ~/lab2/lab2.yaml) and, for the
 # alignment, the route. Outputs as before: surveys/<date>_<time>, surveys/latest -> it.
-#   just lab2 survey 24 marker_size:=0.467                 a new surveys/<date>_<time>, origin marker 24
-#   just lab2 survey courses/my_hall 24 marker_size:=0.467 or name the directory
+#   just lab2 survey 24                 a new surveys/<date>_<time>, origin marker 24
+#   just lab2 survey courses/my_hall 24 or name the directory
 #   just lab2 survey courses/my_hall 3 dictionary:=ARUCO_MIP_36h12 marker_size:=0.25
 # Drive or push the car slowly past every marker, then Ctrl-C (or `just lab2 survey-save`).
 # Survey stage 1: the boards, in the origin board's frame (`just aruco-map scan`)

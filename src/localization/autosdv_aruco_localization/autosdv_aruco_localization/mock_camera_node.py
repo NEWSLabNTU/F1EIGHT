@@ -37,7 +37,7 @@ from typing import List, Optional, Sequence, Tuple
 
 import numpy as np
 
-PLATE_RATIO = 500.0 / 380.0     # the LCTK boards: a 0.38 m marker on a 500 mm plate
+PLATE_RATIO = 9.0 / 7.0         # the lab's boards: a 7x7-cell marker plus one cell of margin (0.4667 m on 600 mm)
 
 
 # ------------------------------------------------------------ geometry (no ROS)

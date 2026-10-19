@@ -82,7 +82,7 @@ def main(argv=None):
     ap.add_argument('--course', required=True)
     ap.add_argument('--origin', type=int, required=True)
     ap.add_argument('--dictionary', default='DICT_5X5_1000')
-    ap.add_argument('--marker-size', type=float, default=0.38)
+    ap.add_argument('--marker-size', type=float, default=0.4667)
     ap.add_argument('--marker-height', type=float, default=0.25)
     ap.add_argument('--rate', type=float, default=3.0, help='frames per second (car at 0.3 m/s)')
     ap.add_argument('--drift', type=float, default=0.01)
