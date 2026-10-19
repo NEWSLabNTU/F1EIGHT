@@ -68,7 +68,8 @@ COMMON_NODES = [
     'trajectory_follower_control_cmd',
     'vehicle_status_steering_status', 'vehicle_status_velocity_status')]
 MODE_NODES = {
-    'vehicle': ['/autosdv/velocity_report_node', '/sensing/camera/zedxm/zedxm',
+    # the ZED loads as zedxm in /sensing/camera (zed_aruco.launch.xml)
+    'vehicle': ['/autosdv/velocity_report_node', '/sensing/camera/zedxm',
                 '/localization/pose_estimator/ar_tag_based_localizer'],
     'bench': ['/vehicle_bench_plant', '/localization/pose_estimator/virtual_marker_localizer'],
     # the bench with camera:=mock: rendered boards into the real localizer
