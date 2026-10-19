@@ -1,4 +1,4 @@
 <?xml version="1.0" encoding="UTF-8"?>
-<osm version="0.6" generator="autosdv_waypoint_lab make_course_map">
+<osm version="0.6" generator="autosdv_aruco_localization make_marker_map">
   <MetaInfo format_version="1" map_version="1" />
 </osm>
