@@ -3,24 +3,40 @@
 Keyboard PWM control - direct PWM control via keyboard (non-ROS version).
 This script allows direct PWM control of motor and steering using keyboard input.
 
-Motor PWM Characteristics:
-- Stop: 390
-- Forward: Starts at 395
-- Backward: Starts at 385
-- Brake sequence (forward to backward): PWM 340 -> 390 -> decrease to 385
+    python3 scripts/control/keyboard_pwm_control.py --vehicle-id car_c
+    python3 scripts/control/keyboard_pwm_control.py --vehicle-id car_c --stop 385 --motor-step 2
 
-Steering PWM Characteristics (REVERSED):
-- Center: 400
-- Left: 450 (higher PWM)
-- Right: 350 (lower PWM)
+Every number comes from the car's profile, the file the vehicle interface
+loads (individual_params/config/<vehicle_id>/autosdv_vehicle/actuator.param.yaml
+over actuator.yaml), so this tool and the stack agree on what "stop" is:
+
+- stop       init_pwm     the motor command that holds the car still
+- brake      brake_pwm    the brake pulse of the forward-to-reverse sequence
+- motor      [min(brake_pwm, min_pwm), max_pwm]   the clamp for w/s
+- centre     init_steer   steering straight ahead
+- steering   [min_steer, max_steer]               the clamp for a/d (reversed:
+                                                  higher PWM = left)
+- I2C        i2c_address, i2c_busnum, pwm_freq
+
+Any of them can be overridden on the command line (--stop, --brake,
+--motor-min, --motor-max, --centre, --steer-min, --steer-max) to try a value
+before writing it into the profile. The cars differ (car A stops at 370, car
+B at 395, car C in a 380-390 band), so there is no built-in default.
 """
 
+import argparse
+import os
 import sys
 import termios
 import tty
 import select
 import time
 from Adafruit_PCA9685 import PCA9685
+
+# The car profiles' loader, from the vehicle interface's source tree (ROS not needed).
+sys.path.insert(0, os.path.join(os.path.dirname(os.path.abspath(__file__)), '..', '..', 'src',
+                                'vehicle', 'autosdv_vehicle_launch', 'autosdv_vehicle_interface'))
+from autosdv_vehicle_interface import car_profile  # noqa: E402
 
 
 class KeyboardPWMControl:
@@ -30,16 +46,17 @@ class KeyboardPWMControl:
     Controls motor and steering PWM directly using keyboard input.
     """
 
-    def __init__(self, motor_step=5, steering_step=5):
-        """Initialize PWM control."""
+    def __init__(self, limits, motor_step=5, steering_step=5):
+        """Initialize PWM control. ``limits`` comes from pwm_limits()."""
         # Parameters
         self.motor_step = motor_step
         self.steering_step = steering_step
+        self.limits = limits
 
         # Initialize PCA9685 PWM driver
         try:
-            self.driver = PCA9685(address=64, busnum=7)
-            self.driver.set_pwm_freq(60)
+            self.driver = PCA9685(address=limits['i2c_address'], busnum=limits['i2c_busnum'])
+            self.driver.set_pwm_freq(limits['pwm_freq'])
             print('PCA9685 initialized successfully')
         except Exception as e:
             print(f'ERROR: Failed to initialize PCA9685: {e}')
@@ -49,17 +66,18 @@ class KeyboardPWMControl:
         self.MOTOR_CHANNEL = 0
         self.STEER_CHANNEL = 1
 
-        # Current PWM values
-        self.STOP_PWM = 390
-        self.CENTER_STEER = 400
+        # Current PWM values, from the car's profile
+        self.STOP_PWM = limits['stop']
+        self.BRAKE_PWM = limits['brake']
+        self.CENTER_STEER = limits['centre']
         self.motor_pwm = self.STOP_PWM
         self.steering_pwm = self.CENTER_STEER
 
         # PWM limits
-        self.MIN_MOTOR_PWM = 340
-        self.MAX_MOTOR_PWM = 440
-        self.MIN_STEER_PWM = 350
-        self.MAX_STEER_PWM = 450
+        self.MIN_MOTOR_PWM = limits['motor_min']
+        self.MAX_MOTOR_PWM = limits['motor_max']
+        self.MIN_STEER_PWM = limits['steer_min']
+        self.MAX_STEER_PWM = limits['steer_max']
 
         # Set initial values
         self.set_pwm()
@@ -83,13 +101,15 @@ class KeyboardPWMControl:
         print('  q   : Emergency stop (with brake sequence if moving forward)')
         print('Steering Control:')
         print('  a/d : Right/Left steering (reversed)')
-        print('  e   : Center steering (PWM = 400)')
+        print(f'  e   : Center steering (PWM = {self.CENTER_STEER})')
         print('Other:')
         print('  h   : Show this help')
         print('  Ctrl-C : Quit')
         print('')
-        print('Motor PWM: 390=stop, 395+=forward, 385-=backward')
-        print('Steering PWM: 400=center, 450=left, 350=right')
+        print(f'Car {self.limits["vehicle_id"]}: motor stop {self.STOP_PWM}, brake {self.BRAKE_PWM}, '
+              f'clamp {self.MIN_MOTOR_PWM}..{self.MAX_MOTOR_PWM}')
+        print(f'Steering: centre {self.CENTER_STEER}, {self.MAX_STEER_PWM}=left, '
+              f'{self.MIN_STEER_PWM}=right')
         print('============================')
         self.log_status()
 
@@ -102,10 +122,10 @@ class KeyboardPWMControl:
             print(f'ERROR: Failed to set PWM: {e}')
 
     def execute_brake_sequence(self):
-        """Execute brake sequence (340 -> 390) to allow backward motion."""
+        """Execute the brake sequence (brake -> stop) that arms backward motion."""
         try:
-            print('Executing brake sequence: 340 -> 390')
-            self.driver.set_pwm(self.MOTOR_CHANNEL, 0, 340)
+            print(f'Executing brake sequence: {self.BRAKE_PWM} -> {self.STOP_PWM}')
+            self.driver.set_pwm(self.MOTOR_CHANNEL, 0, self.BRAKE_PWM)
             time.sleep(0.2)
             self.driver.set_pwm(self.MOTOR_CHANNEL, 0, self.STOP_PWM)
             time.sleep(0.1)
@@ -221,27 +241,50 @@ class KeyboardPWMControl:
             pass
 
 
-def main():
+def pwm_limits(vehicle_id, overrides):
+    """The car's profile numbers this tool uses, with command-line overrides applied."""
+    p = car_profile.load(vehicle_id)
+    limits = {
+        'vehicle_id': vehicle_id,
+        'stop': p['init_pwm'], 'brake': p['brake_pwm'],
+        'motor_min': min(p['brake_pwm'], p['min_pwm']), 'motor_max': p['max_pwm'],
+        'centre': p['init_steer'], 'steer_min': p['min_steer'], 'steer_max': p['max_steer'],
+        'i2c_address': p['i2c_address'], 'i2c_busnum': p['i2c_busnum'], 'pwm_freq': p['pwm_freq'],
+    }
+    limits.update({k: v for k, v in overrides.items() if v is not None})
+    if not limits['motor_min'] <= limits['stop'] <= limits['motor_max']:
+        raise ValueError(f"stop {limits['stop']} is outside the motor clamp "
+                         f"{limits['motor_min']}..{limits['motor_max']}")
+    if not limits['steer_min'] <= limits['centre'] <= limits['steer_max']:
+        raise ValueError(f"centre {limits['centre']} is outside the steering clamp "
+                         f"{limits['steer_min']}..{limits['steer_max']}")
+    return limits
+
+
+def main(argv=None):
     """Main function."""
-    # Parse command line arguments for step sizes if needed
-    motor_step = 5
-    steering_step = 5
+    ap = argparse.ArgumentParser(description='Drive the motor and steering PWM from the keyboard.')
+    car_profile.add_argument(ap)
+    ap.add_argument('--motor-step', type=int, default=5, help='w/s step [counts] (5)')
+    ap.add_argument('--steering-step', type=int, default=5, help='a/d step [counts] (5)')
+    for flag, key, what in (('--stop', 'stop', 'motor stop (init_pwm)'),
+                            ('--brake', 'brake', 'brake pulse (brake_pwm)'),
+                            ('--motor-min', 'motor_min', 'lowest motor PWM'),
+                            ('--motor-max', 'motor_max', 'highest motor PWM (max_pwm)'),
+                            ('--centre', 'centre', 'steering centre (init_steer)'),
+                            ('--steer-min', 'steer_min', 'lowest steering PWM (min_steer)'),
+                            ('--steer-max', 'steer_max', 'highest steering PWM (max_steer)')):
+        ap.add_argument(flag, dest=key, type=int, default=None,
+                        help=f'override the profile\'s {what}')
+    a = ap.parse_args(argv)
+    keys = ('stop', 'brake', 'motor_min', 'motor_max', 'centre', 'steer_min', 'steer_max')
+    try:
+        limits = pwm_limits(a.vehicle_id, {k: getattr(a, k) for k in keys})
+    except ValueError as e:
+        ap.error(str(e))
 
-    if len(sys.argv) > 1:
-        try:
-            motor_step = int(sys.argv[1])
-        except ValueError:
-            print(f'Invalid motor_step: {sys.argv[1]}')
-            sys.exit(1)
-
-    if len(sys.argv) > 2:
-        try:
-            steering_step = int(sys.argv[2])
-        except ValueError:
-            print(f'Invalid steering_step: {sys.argv[2]}')
-            sys.exit(1)
-
-    controller = KeyboardPWMControl(motor_step=motor_step, steering_step=steering_step)
+    controller = KeyboardPWMControl(limits, motor_step=a.motor_step,
+                                    steering_step=a.steering_step)
     controller.run()
 
 
