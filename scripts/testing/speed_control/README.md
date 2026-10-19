@@ -57,7 +57,7 @@ Arguments before `--` go to the actuator as ROS overrides; after `--`, to
 | Motor PWM cap | `forward_start_pwm + 10`; `MAX_PWM=` may raise it to `+ 25` at most | `run_trial.sh` forces `-p max_pwm` last on the actuator's command line and reads it back before driving; the actuator clamps every motor command to it |
 | Profile | 2 s stop, 3 s at 0.3 m/s, 3 s at 0.5 m/s, 3 s stop | `--profile` |
 | Distance | 3 m, aborting at 2.7 m to leave room to stop | `--max-distance`, `--stop-margin` |
-| Overspeed | 0.8 m/s | `--overspeed` |
+| Overspeed | 1.0 m/s in 3 consecutive velocity reports (150 ms; a single late edge reads high for about two) | `--overspeed`, `--overspeed-reports` |
 | Stall | PWM at or above `forward_start_pwm + 3` with < 0.05 m/s for 1.5 s | `--stall-pwm`, `--stall-time` |
 | Lost speed | no report for 0.5 s, or none within 2 s | `step_test.py` |
 | Run time | 20 s, and the step test is killed at 30 s | `--max-run`, `run_trial.sh` |

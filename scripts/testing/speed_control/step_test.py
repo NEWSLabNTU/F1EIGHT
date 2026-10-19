@@ -6,7 +6,10 @@ profile, logs speed / PWM / PID / mode / ESC state to CSV, prints metrics.
 
 Guards (any one ends the run with a zero command):
   max run   -- the whole profile may not exceed --max-run seconds
-  overspeed -- measured |speed| above --overspeed
+  overspeed -- measured |speed| above --overspeed in --overspeed-reports
+               consecutive velocity reports (one late edge timestamp makes a
+               short gap, and the report's EMA carries that spike over about
+               two reports; a real overspeed persists)
   stall     -- motor PWM at/above --stall-pwm while speed < 0.05 m/s for
                --stall-time (no speed feedback: lifted car, unplugged sensor)
   no report -- no velocity report for 0.5 s
@@ -49,6 +52,7 @@ class StepTest(Node):
         self.speed = math.nan; self.pwm = math.nan; self.pid = [math.nan] * 3
         self.mode = ''; self.esc = ''
         self.last_report = None; self.stall_since = None; self.distance = 0.0
+        self.over_reports = 0
         self.rows = []; self.abort = None; self.done = False
         self.t0 = None; self.stop_until = None
         self.create_timer(0.02, self.tick)
@@ -58,6 +62,7 @@ class StepTest(Node):
         if self.last_report is not None and math.isfinite(self.speed):
             self.distance += abs(self.speed) * (now - self.last_report)
         self.speed = m.longitudinal_velocity; self.last_report = now
+        self.over_reports = self.over_reports + 1 if abs(self.speed) > self.a.overspeed else 0
     def on_pwm(self, m): self.pwm = m.data[0]
     def on_pid(self, m): self.pid = list(m.data[4:7])  # speed_p, speed_i, speed_d
     def on_mode(self, m): self.mode = m.data
@@ -74,8 +79,8 @@ class StepTest(Node):
             return 'velocity report lost (>0.5 s)'
         if self.distance >= a.max_distance - a.stop_margin:
             return f'distance {self.distance:.2f} m reached (limit {a.max_distance} m, {a.stop_margin} m to stop)'
-        if abs(self.speed) > a.overspeed:
-            return f'overspeed {self.speed:.2f} m/s > {a.overspeed} m/s'
+        if self.over_reports >= a.overspeed_reports:
+            return f'overspeed {self.speed:.2f} m/s > {a.overspeed} m/s for {self.over_reports} reports'
         if self.pwm >= a.stall_pwm and abs(self.speed) < 0.05:
             self.stall_since = self.stall_since or now
             if now - self.stall_since > a.stall_time:
@@ -137,7 +142,9 @@ def main():
     p.add_argument('--max-distance', type=float, default=3.0)
     p.add_argument('--stop-margin', type=float, default=0.3)
     p.add_argument('--max-run', type=float, default=20.0)
-    p.add_argument('--overspeed', type=float, default=0.8)
+    p.add_argument('--overspeed', type=float, default=1.0)
+    p.add_argument('--overspeed-reports', type=int, default=3,
+                   help='consecutive velocity reports above --overspeed that abort (20 Hz: 3 = 150 ms)')
     p.add_argument('--stall-pwm', type=float, default=388.0)
     p.add_argument('--stall-time', type=float, default=1.5)
     a = p.parse_args()
