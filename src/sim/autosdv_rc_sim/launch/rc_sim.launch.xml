@@ -131,7 +131,9 @@
        Not before the lane departure checker subscribes to the route: in Autoware
        1.5.0 that subscription is VOLATILE, so a route set before it exists never
        reaches it (no lane departure check, and a 1 Hz diagnostic that flapped the
-       graph to MRM). The route can only be set after this initialization. -->
+       graph to MRM). The route can only be set after this initialization.
+       Drop wait_for_route_subscriber when Autoware is upgraded past 1.5.0 if the
+       checker's route subscription is transient_local (upstream later declares it so). -->
   <node pkg="autosdv_coach_lab" exec="sim_pose_init" name="sim_pose_init" output="screen">
     <param name="x" value="0.0"/>
     <param name="y" value="0.0"/>

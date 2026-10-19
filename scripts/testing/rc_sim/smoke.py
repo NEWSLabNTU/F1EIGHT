@@ -227,7 +227,12 @@ def drive(track, timeout, on_ready, stack):
                   f"(first at x {flaps.get('first_x', 0.0):.1f} m)")
             for name, n in flaps['culprits'].most_common(5):
                 print(f"      not OK at {n} of those: {name}")
-        if not checking:
+        print(f"ld_hz {'n/a' if ld_hz is None else f'{ld_hz:.1f}'} per simulated second "
+              f"({len(lane_departure)} diagnostics; threshold {LANE_DEPARTURE_MIN_HZ:.0f})")
+        if not lane_departure:
+            print(f"FAIL  no lane departure checker diagnostic seen (renamed after an Autoware "
+                  f"upgrade?): '{LANE_DEPARTURE_DIAG}'")
+        elif not checking:
             print(f"FAIL  the lane departure checker had no route: '{LANE_DEPARTURE_DIAG}' at "
                   + (f'{ld_hz:.1f} Hz' if ld_hz is not None else f'{len(lane_departure)} messages')
                   + f' after engage ({LANE_DEPARTURE_MIN_HZ:.0f} Hz or more expected); the route '

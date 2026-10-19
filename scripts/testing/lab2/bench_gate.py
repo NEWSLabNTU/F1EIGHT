@@ -63,17 +63,20 @@ LOC_STALE_S = 2.0            # kinematic_state older than this at the end: local
 # Verdict helpers are pure so the unit test can drive them without ROS.
 
 
-def localization_problem(kin_first, kin_last, launched, now):
+def localization_problem(kin_first, kin_last, launched, now, logdir=None):
     """Why localization was not running, or None.
 
     kin_first, kin_last: monotonic times of the first and the latest
     /localization/kinematic_state (None: never); launched: when the bench was
-    started; now: the end of the run (or of the bring-up).
+    started; now: the end of the run (or of the bring-up); logdir: the launch
+    log directory, named in the never-started verdict because a stack that died
+    outright shows the same symptom.
     """
     if kin_first is None:
         return (f'localization never started: no /localization/kinematic_state in '
                 f'{now - launched:.0f} s after launch (the EKF was never seeded or activated; '
-                'see start_pose_init and ekf_localizer in the play_log)')
+                'see start_pose_init and ekf_localizer in the play_log; or the stack died: '
+                + (f'check {logdir}/launch.log)' if logdir else 'check the launch log)'))
     if now - kin_last > LOC_STALE_S:
         return (f'localization stopped: the last /localization/kinematic_state was '
                 f'{now - kin_last:.1f} s before the end of the run')
@@ -271,7 +274,8 @@ def run_route(rclpy, mon, env, workdir, route, extra, timeout):
     try:
         launched = time.monotonic()
         if not wc.bring_up(rclpy, mon, bench):
-            loc = localization_problem(mon.kin_first, mon.kin_last, launched, time.monotonic())
+            loc = localization_problem(mon.kin_first, mon.kin_last, launched, time.monotonic(),
+                                     bench.logdir)
             result.update(ok=False, why=[loc] if loc else [
                 'stack never became available (the SpeedPID may not '
                 f'load; see {bench.logdir}/launch.log)'])
@@ -310,7 +314,7 @@ def run_route(rclpy, mon, env, workdir, route, extra, timeout):
         p = mon.progress
         finished = bool(p and p.finished)
         loc = None if finished else localization_problem(mon.kin_first, mon.kin_last, launched,
-                                                         time.monotonic())
+                                                         time.monotonic(), bench.logdir)
         ok, why = judge(v_ref, mon.speeds, finished, int(p.laps_done) if p else 0, laps,
                         mon.mrm_reason() or False, mon.faults, stalled,
                         abs(mon.speed) < 0.05, time.monotonic() - t0 >= timeout, loc)

@@ -61,8 +61,9 @@ def test_the_gate_drives_the_graded_route():
 
 
 def test_localization_that_never_started_is_named():
-    why = localization_problem(kin_first=None, kin_last=None, launched=100.0, now=190.0)
-    assert why.startswith('localization never started')
+    why = localization_problem(kin_first=None, kin_last=None, launched=100.0, now=190.0,
+                              logdir='/x/log')
+    assert why.startswith('localization never started') and '/x/log/launch.log' in why
     assert 'kinematic_state' in why and '90 s' in why
     ok, reasons = run(finished=False, stalled=True, speeds=[0.0], localization=why)
     assert not ok and reasons[0] == why
