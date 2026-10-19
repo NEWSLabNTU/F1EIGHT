@@ -27,8 +27,9 @@ Nine checks per run, one window each, all read off the profile (no positions are
                        after entering it to its end
     overshoot          worst over the two steps up (holds 0, 1): peak true speed in the hold
                        above the hold speed, % of the step
-    reach_s            worst over the same steps: time from entering the hold until the true
-                       speed is within 10 % of the step below the hold speed
+    reach_s            worst over the same steps: how long after the commanded target the true
+                       speed comes within 10 % of the step below the hold speed (the lag behind
+                       the 2.5 m/s^2 ramp; 0 when the car gets there first)
     launch_slip        max rear slip over LAUNCH_WINDOW s from the first motion (wheel or car)
     launch_accel       max true acceleration (mean over LAUNCH_ACCEL_WINDOW) in that window
     stop_lag           max (true speed - commanded target) [m/s] over the final brake segment
@@ -75,7 +76,7 @@ LIMITS: Dict[str, float] = {
     'hold_rmse_4': 0.05,              # m/s; worst 0.0274, low_mu (floor 0.05 applies)
     'hold_rmse_11': 0.15,             # m/s; worst 0.0984, low_batt
     'overshoot': 3.8,                 # % of the step; worst 2.49, nominal
-    'reach_s': 0.2,                   # s; worst 0.00 (floor 0.2 applies)
+    'reach_s': 0.39,                  # s behind the target; worst 0.26, low_batt (2026-10-20)
     'launch_slip': 0.5,               # m/s, PHYSICAL (reference 0.125, low_mu)
     'launch_accel': 4.5,              # m/s^2 over 50 ms; worst 2.94, nominal
     'stop_lag': 0.88,                 # m/s above the target; worst 0.581, low_mu
@@ -320,13 +321,21 @@ def step_up(tr: Trace, profile: Profile, k: int) -> Tuple[dict, dict]:
     t_enter = t[idx[0]]
     peak = max(idx, key=lambda i: v[i])
     over = _result(max(0.0, (v[peak] - hold.v0) / step * 100.0), peak, tr, t_enter, t[idx[-1]])
+    # reach: measured from when the target crosses the level, not from the hold's start. The
+    # target ramps into the hold and crosses the level before it, so a hold-based clock reads 0
+    # for any car that follows the ramp at all.
     level = hold.v0 - REACH_BAND * step
     start = _first(tr['s'], lambda i: tr['s'][i] >= (acc.s0 if acc else hold.s0)) or 0
-    hit = _first(v, lambda i: v[i] >= level, start)
-    if hit is None:
+    target = tr['target']
+    eps = 1e-6               # a sample on the level counts, after trace.csv's 9 digits too
+    ref = _first(target, lambda i: target[i] >= level - eps, start)
+    hit = _first(v, lambda i: v[i] >= level - eps, start)
+    if ref is None:
         reach = _none(t_enter, t[-1])
+    elif hit is None:
+        reach = _none(t[ref], t[-1])
     else:
-        reach = _result(max(0.0, t[hit] - t_enter), hit, tr, t_enter, max(t_enter, t[hit]))
+        reach = _result(max(0.0, t[hit] - t[ref]), hit, tr, t[ref], max(t[ref], t[hit]))
     return over, reach
 
 
@@ -413,7 +422,8 @@ def metrics(tr: Trace, profile: Profile) -> Dict[str, dict]:
 # the trace columns each check reads; a non-finite sample in its window makes it None (fail)
 _SPEED = ('t', 's', 'speed')
 NAN_COLUMNS = {
-    'hold_rmse_4': _SPEED, 'hold_rmse_11': _SPEED, 'overshoot': _SPEED, 'reach_s': _SPEED,
+    'hold_rmse_4': _SPEED, 'hold_rmse_11': _SPEED, 'overshoot': _SPEED,
+    'reach_s': _SPEED + ('target',),
     'launch_slip': _SPEED + ('slip_r',), 'launch_accel': _SPEED + ('slip_r',),
     'stop_lag': _SPEED + ('target',), 'stop_error': _SPEED,
     'stop_kappa': _SPEED + ('kappa_r',),

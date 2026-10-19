@@ -124,7 +124,7 @@ window; `LIMITS` has the numbers.
 |---|---|---|---|
 | `hold_rmse_4`, `hold_rmse_11` | the 4 m/s and the 11 m/s hold, from 1 s in | RMSE of true speed minus the hold speed | 0.05 / 0.15 m/s |
 | `overshoot` | the two steps up (0 → 4, 4 → 11) | peak above the hold speed, % of the step | 3.8 % |
-| `reach_s` | the same steps | time from entering the hold until within 10 % of the step | 0.2 s |
+| `reach_s` | the same steps | how long after the target the true speed comes within 10 % of the step (the lag behind the ramp) | 0.39 s |
 | `launch_slip` | 1 s from the first motion | max rear-wheel slip (spin) [m/s] | 0.5, physical |
 | `launch_accel` | the same | max acceleration over 50 ms (a lurch) | 4.5 m/s² |
 | `stop_lag` | the final brake, from its start to the stop line | max of true speed − target: a car that cannot slow down | 0.88 m/s |
@@ -144,7 +144,7 @@ low_mu, all valid and passing, the repeats bit-identical; `LIMITS_CALIBRATED = T
 | `hold_rmse_4` | 0.027 m/s (low_mu) | 0.05 (floor) |
 | `hold_rmse_11` | 0.098 m/s (low_batt) | 0.15 |
 | `overshoot` | 2.49 % (nominal) | 3.8 |
-| `reach_s` | 0.00 s | 0.2 (floor) |
+| `reach_s` | 0.26 s (low_batt; recalibrated 2026-10-20 when it began timing from the target) | 0.39 |
 | `launch_accel` | 2.94 m/s² (nominal) | 4.5 |
 | `stop_lag` | 0.581 m/s (low_mu) | 0.88 (floor 0.3) |
 
@@ -249,7 +249,7 @@ course but fails several checks. Tuning is your work.
 | `ff_deadband`, `ff_gain` | the given feed-forward: PWM = init + d + v/g | 0..50, (0, 1] | 5.27, 0.1433 |
 
 The feed-forward was calibrated on a fresh 12.4 V pack. The car runs at 11.1 V, so it
-under-drives: about 10 counts short at 11 m/s, which the integral must make up.
+under-drives, and the integral must make up the rest.
 
 Part 2 drives the car model, `teamN_vehicle`, on the real cars, with that car's tuning
 file, `config/car_a/speed_controller.param.yaml` and so on (`lab2-waypoint-stack.md`). The car

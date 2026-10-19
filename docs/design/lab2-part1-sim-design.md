@@ -254,7 +254,7 @@ and the shell's mode, on the windows `part1_profile.yaml` defines. Nine checks p
 |---|---|
 | `hold_rmse_4`, `hold_rmse_11` | steady part of each hold (from 1 s in): RMSE of true speed − hold speed |
 | `overshoot` | worst over the two steps up (0 → 4, 4 → 11), % of the step |
-| `reach_s` | worst time to enter the 10 % band after a step up |
+| `reach_s` | worst over the two steps up: how long after the commanded target the true speed enters the 10 % band (the lag behind the ramp). Timed from the target since 2026-10-20: timed from the hold's start, it read 0 for any car that follows the ramp, because the ramping target enters the band before the hold begins |
 | `launch_slip`, `launch_accel` | first second from rest (wheel spin, lurch) |
 | `stop_lag` | the final brake segment, its start to the stop line: max of true speed − commanded target (a car that cannot slow down; the former `stepdown_lag` on the final brake) |
 | `stop_error`, `stop_kappa` | final braking (distance to the line where the final rest began, wheel lock above 0.3 m/s) |
@@ -315,7 +315,7 @@ stop lag 0.3 m/s). Fixed limits unchanged.
 | `hold_rmse_4` | 0.027 m/s (low_mu) | 0.05 (floor) |
 | `hold_rmse_11` | 0.098 m/s (low_batt) | 0.15 |
 | `overshoot` | 2.49 % (nominal) | 3.8 |
-| `reach_s` | 0.00 s (the car is inside the band when the hold begins) | 0.2 (floor) |
+| `reach_s` | 0.26 s (low_batt; recalibrated 2026-10-20, `part1_calibrate.py --repeats 2`) | 0.39 |
 | `launch_slip` | 0.125 m/s (low_mu) | 0.5 (physical) |
 | `launch_accel` | 2.94 m/s² (nominal) | 4.5 |
 | `stop_lag` | 0.581 m/s (low_mu) | 0.88 |

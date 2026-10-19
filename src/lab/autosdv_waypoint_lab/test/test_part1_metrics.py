@@ -232,15 +232,35 @@ def test_overshoot_fails_on_a_bump_in_the_top_hold(ideal):
     assert c['value'] == pytest.approx(100.0 * 1.0 / 7.0, rel=1e-6)
 
 
+def _reach_ref(rows):
+    """(level, time the target crosses it) for the climb into the 11 m/s hold."""
+    level = PROFILE.hold(1).v0 - 0.1 * 7.0
+    return level, first_t(rows, lambda r: r['s'] >= PROFILE.hold(0).s1 and r['target'] >= level)
+
+
 def test_reach_fails_on_a_slow_step(ideal):
-    h = PROFILE.hold(1)
     t_in = first_t(ideal, in_hold(1))
-    level = h.v0 - 0.1 * 7.0
-    # late by 0.8 s: past the reach limit, still inside the hold's settling second
+    level, t_ref = _reach_ref(ideal)
+    assert t_ref < t_in          # the ramping target crosses the level before the hold begins
+    # held under the level until 0.8 s into the hold: past the reach limit, still inside the
+    # hold's settling second
     rows = edit(ideal, lambda r: PROFILE.hold(0).s1 <= r['s'] and r['t'] < t_in + 0.8,
                 speed=lambda r: min(r['speed'], level - 0.05))
     c = fails_only(rows, 'reach_s')
-    assert c['value'] == pytest.approx(0.8, abs=0.02)
+    assert c['value'] == pytest.approx(t_in + 0.8 - t_ref, abs=0.02)
+
+
+def test_reach_is_timed_from_the_target_not_the_hold(ideal):
+    # 0.2 s behind the target, but over the level before the hold begins: a clock started
+    # at the hold would read 0
+    t_in = first_t(ideal, in_hold(1))
+    level, t_ref = _reach_ref(ideal)
+    assert t_ref + 0.2 < t_in
+    rows = edit(ideal, lambda r: PROFILE.hold(0).s1 <= r['s'] and r['t'] < t_ref + 0.2,
+                speed=lambda r: min(r['speed'], level - 0.05))
+    c = run(rows)['reach_s']
+    assert c['value'] == pytest.approx(0.2, abs=0.02)
+    assert c['pass'] is True
 
 
 def test_launch_slip_fails_on_wheel_spin(ideal):
@@ -376,7 +396,7 @@ def test_limits_table_is_complete():
 
 # the reference's worst case per calibrated check (part1_calibrate.py, 2026-10-19, 6 live runs)
 REFERENCE_WORST = {'hold_rmse_4': 0.02741, 'hold_rmse_11': 0.09835, 'overshoot': 2.485,
-                   'reach_s': 0.0, 'launch_accel': 2.943, 'stop_lag': 0.5812}
+                   'reach_s': 0.26, 'launch_accel': 2.943, 'stop_lag': 0.5812}
 
 
 def test_calibrated_limits_follow_the_rule():
