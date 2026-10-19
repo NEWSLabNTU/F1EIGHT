@@ -322,8 +322,13 @@ class CoursePath:
     def laps_done(self) -> int:
         if self.progress is None:
             return 0
-        return int(max(0.0, self.progress + 1e-6) // self.lap_length) if self.closed else (
-            1 if self.progress >= self.run_length - 1e-6 else 0)
+        # A finished run has done every lap. The finish is `finished`'s 0.05 m
+        # short of the end, and every speed is 0 from there (window), so a car
+        # can come to rest inside those 0.05 m: counted with a tighter
+        # threshold, that run read finished with its last lap missing.
+        if self.finished:
+            return self.laps
+        return int(max(0.0, self.progress + 1e-6) // self.lap_length) if self.closed else 0
 
     @property
     def finished(self) -> bool:

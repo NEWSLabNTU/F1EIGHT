@@ -3,7 +3,7 @@ import sys
 from pathlib import Path
 
 sys.path.insert(0, str(Path(__file__).resolve().parent))
-from bench_gate import judge, load_error  # noqa: E402
+from bench_gate import judge, load_error, localization_problem  # noqa: E402
 
 GOOD = [0.0, 0.4, 0.8, 0.82, 0.8, 0.79, 0.4, 0.0]
 
@@ -58,3 +58,23 @@ def test_the_gate_drives_the_graded_route():
     assert ROUTES == ['lab2_uturn']
     d, v_ref, laps = course_info('lab2_uturn')
     assert d == COURSES_DIR / 'lab2_uturn' and (v_ref, laps) == (0.8, 1)
+
+
+def test_localization_that_never_started_is_named():
+    why = localization_problem(kin_first=None, kin_last=None, launched=100.0, now=190.0,
+                              logdir='/x/log')
+    assert why.startswith('localization never started') and '/x/log/launch.log' in why
+    assert 'kinematic_state' in why and '90 s' in why
+    ok, reasons = run(finished=False, stalled=True, speeds=[0.0], localization=why)
+    assert not ok and reasons[0] == why
+    assert not any('laps' in r for r in reasons)
+
+
+def test_localization_that_stopped_is_named():
+    why = localization_problem(kin_first=105.0, kin_last=120.0, launched=100.0, now=150.0)
+    assert why.startswith('localization stopped')
+    assert '30.0 s' in why
+
+
+def test_fresh_localization_is_no_problem():
+    assert localization_problem(kin_first=105.0, kin_last=149.9, launched=100.0, now=150.0) is None

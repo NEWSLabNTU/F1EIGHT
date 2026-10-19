@@ -27,6 +27,8 @@ A route PASSES when all of these hold:
              non-finite PWM puts the motor in neutral and shows as
              `...:controller_fault` on ~/debug/mode)
   moving     progress is not stalled: 0.5 m within 20 s of the engage
+  localized  /localization/kinematic_state arrives (a stack whose localization
+             never started, or stopped, is reported as that, not as a stall)
   speed      the median speed while moving is 0.6 to 1.15 times the route's
              v_ref, and the peak is under 1.5 times v_ref
 
@@ -56,13 +58,42 @@ ROUTES = ['lab2_uturn']
 SPEED_MEDIAN = (0.6, 1.15)   # x v_ref
 SPEED_PEAK = 1.5             # x v_ref
 STALL_S, STALL_M = 20.0, 0.5
+LOC_STALE_S = 2.0            # kinematic_state older than this at the end: localization stopped
 
 # Verdict helpers are pure so the unit test can drive them without ROS.
 
 
-def judge(v_ref, speeds, finished, laps_done, laps, mrm, faults, stalled, at_rest, timed_out):
-    """Return (ok, [reasons it failed]) from what one run recorded."""
+def localization_problem(kin_first, kin_last, launched, now, logdir=None):
+    """Why localization was not running, or None.
+
+    kin_first, kin_last: monotonic times of the first and the latest
+    /localization/kinematic_state (None: never); launched: when the bench was
+    started; now: the end of the run (or of the bring-up); logdir: the launch
+    log directory, named in the never-started verdict because a stack that died
+    outright shows the same symptom.
+    """
+    if kin_first is None:
+        return (f'localization never started: no /localization/kinematic_state in '
+                f'{now - launched:.0f} s after launch (the EKF was never seeded or activated; '
+                'see start_pose_init and ekf_localizer in the play_log; or the stack died: '
+                + (f'check {logdir}/launch.log)' if logdir else 'check the launch log)'))
+    if now - kin_last > LOC_STALE_S:
+        return (f'localization stopped: the last /localization/kinematic_state was '
+                f'{now - kin_last:.1f} s before the end of the run')
+    return None
+
+
+def judge(v_ref, speeds, finished, laps_done, laps, mrm, faults, stalled, at_rest, timed_out,
+          localization=None):
+    """Return (ok, [reasons it failed]) from what one run recorded.
+
+    localization: localization_problem()'s reason, or None. It goes first, and a
+    car that did not move or finish because of it is not reported again.
+    """
     why = []
+    if localization:
+        why.append(localization)
+        stalled, timed_out = False, False
     if faults:
         why.append(f'SpeedPID fault ({faults[0]})')
     if mrm:
@@ -129,6 +160,7 @@ def make_monitor():
                                      self.on_mode, latched)
             self.create_subscription(MrmState, '/system/fail_safe/mrm_state', self.on_mrm, 10)
             self.create_subscription(Odometry, '/vehicle_bench_plant/odometry', self.on_odom, 10)
+            self.create_subscription(Odometry, '/localization/kinematic_state', self.on_kin, 10)
             self.create_subscription(WaypointProgress, '/planning/waypoint_path_publisher/progress',
                                      self.on_progress, 10)
             self.create_subscription(String, '/autosdv/actuator_node/debug/mode',
@@ -161,6 +193,8 @@ def make_monitor():
             self.recording = False
             self.progress = None
             self.faults = []
+            self.kin_first = None
+            self.kin_last = None
 
         def on_avail(self, m):
             self.available = bool(m.autonomous)
@@ -217,6 +251,10 @@ def make_monitor():
             if self.recording:
                 self.speeds.append(self.speed)
 
+        def on_kin(self, m):
+            self.kin_last = time.monotonic()
+            self.kin_first = self.kin_first or self.kin_last
+
         def on_progress(self, m):
             self.progress = m
 
@@ -234,9 +272,13 @@ def run_route(rclpy, mon, env, workdir, route, extra, timeout):
                      workdir, env)
     result = {'route': name, 'v_ref': v_ref, 'laps': laps}
     try:
+        launched = time.monotonic()
         if not wc.bring_up(rclpy, mon, bench):
-            result.update(ok=False, why=['stack never became available (the SpeedPID may not '
-                                         f'load; see {bench.logdir}/launch.log)'])
+            loc = localization_problem(mon.kin_first, mon.kin_last, launched, time.monotonic(),
+                                     bench.logdir)
+            result.update(ok=False, why=[loc] if loc else [
+                'stack never became available (the SpeedPID may not '
+                f'load; see {bench.logdir}/launch.log)'])
             return result
         problem = load_error(bench.logdir)
         if problem:
@@ -271,9 +313,11 @@ def run_route(rclpy, mon, env, workdir, route, extra, timeout):
         mon.recording = False
         p = mon.progress
         finished = bool(p and p.finished)
+        loc = None if finished else localization_problem(mon.kin_first, mon.kin_last, launched,
+                                                         time.monotonic(), bench.logdir)
         ok, why = judge(v_ref, mon.speeds, finished, int(p.laps_done) if p else 0, laps,
                         mon.mrm_reason() or False, mon.faults, stalled,
-                        abs(mon.speed) < 0.05, time.monotonic() - t0 >= timeout)
+                        abs(mon.speed) < 0.05, time.monotonic() - t0 >= timeout, loc)
         moving = [s for s in mon.speeds if s > 0.1]
         result.update(ok=ok, why=why, seconds=round(time.monotonic() - t0, 1),
                       laps_done=int(p.laps_done) if p else 0,

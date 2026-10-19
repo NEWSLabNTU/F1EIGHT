@@ -4,7 +4,10 @@
 #   L = clamp(k_lookahead * speed + lookahead_min, lookahead_min, lookahead_max)
 #
 # Everything else (rates, timeouts, the curvature speed limit) is the tracker's
-# own default. Pass a copy of this file with tracker_param_file:=.
+# own default. Keep this file in your team directory, beside the controller
+# (~/lab2/team<N>/path_tracker.param.yaml); `just lab2 vehicle` (and the gate with
+# team:=DIR) merges these three settings into the tracker's file and refuses any
+# other setting.
 /**:
   ros__parameters:
     tracker:

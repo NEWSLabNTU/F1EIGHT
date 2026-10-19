@@ -120,14 +120,16 @@ gate *ARGS:
     lab2_apply_submission "${LAB2_ARGS[@]}" || exit 2
     exec python3 scripts/testing/lab2/bench_gate.py "${LAB2_ARGS[@]}"
 
-#   just lab2 sim submission:=~/lab2/B12345678_lab_2_1            one run, nominal car, ~1.5 min
+#   just lab2 sim submission:=~/lab2/B12345678_lab_2_1            one run, nominal car, ~1 min
 #   just lab2 sim submission:=DIR --final                          nominal, low_batt, low_mu: the 25-point mark
 #   just lab2 sim submission:=DIR variant:=low_mu rviz:=false gui:=false
 #   just lab2 sim                                                  `part1_submission` from ~/lab2/lab2.yaml
 # No submission anywhere: the STUB runs (it holds neutral), with a warning.
-# Outputs: tmp/lab2/part1/<submission name>/<variant>/ (trace.csv, marks.json, run.json, play_log).
+#   just lab2 sim --name kd_off                                    keep this run: tmp/lab2/part1/kd_off/
+# Outputs: tmp/lab2/part1/<submission name>/<variant>/ (trace.csv, marks.json, run.json, play_log);
+# the next run with the same name overwrites them, so --name LABEL keeps a run.
 # ROS_DOMAIN_ID: yours if exported (non-zero), else 1 + uid % 100. Web UI on LAB2_WEB_ADDR
-# (default 127.0.0.1:8081). scripts/testing/lab2/part1_run.py --help: the rest.
+# (default 127.0.0.1:8081 + uid % 100, per user). scripts/testing/lab2/part1_run.py --help: the rest.
 # Part 1: your SpeedPID on the simulated car, one straight, live; graded, marks printed
 [positional-arguments]
 sim *ARGS:
@@ -136,6 +138,15 @@ sim *ARGS:
     source scripts/testing/lab2/lab2_config.sh
     lab2_config sim "$@" || exit 2
     exec python3 scripts/testing/lab2/part1_run.py "${LAB2_ARGS[@]}"
+
+#   just lab2 plot-sim tmp/lab2/part1/B12345678_lab_2_1/nominal     writes .../nominal/curves.png
+#   just lab2 plot-sim DIR --t0 17 --t1 32 -o tmp/stepdown.png        zoom into a window
+# No display needed (matplotlib Agg): for runs with rviz:=false gui:=false, which save no dashboard.png.
+# Part 1: draw a run's trace.csv (speed, PWM, failed checks) to a PNG
+[positional-arguments]
+plot-sim *ARGS:
+    #!/usr/bin/env bash
+    exec python3 scripts/testing/lab2/plot_part1.py "$@"
 
 #   just lab2 make-part1-course                    rewrite config/courses/lab2_part1 (committed)
 #   just lab2 make-part1-course --estop-offset 12 --out tmp/lab2/part1/course

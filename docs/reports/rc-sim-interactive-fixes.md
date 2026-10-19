@@ -75,9 +75,22 @@ reorder it, and the symptom would be the same overshoot.
 
 ## Open items
 
-- **Smoke run 3, control-diagnostics stall at load 11.** One smoke run in a series
-  showed the control diagnostics stalling on a loaded host; it did not reproduce on
-  a quiet one. Not explained; the smoke gate is the guard.
+- **Smoke run 3, control-diagnostics stall at load 11 (fixed 2026-10-19).** The unit
+  was `/autoware/control/performance_monitoring/lane_departure`. In Autoware 1.5.0 the
+  lane departure checker's route subscription is VOLATILE and the mission planner
+  publishes the route once, so when a slow container constructed the checker after
+  the route was set, the checker never got it: no lane departure check, and its
+  diagnostic fell to the updater's 1 Hz against the graph's 1.0 s timeout, which
+  flapped `autonomous` (an MRM every second) whenever the phases lined up. Reproduced
+  by stopping `control_check_container` for 15 s at start-up: the checker missed the
+  route in 6 of 6 runs, and 2 of the 6 failed the smoke with the flap (the other 4
+  passed with a checker checking nothing). `sim_pose_init` now waits for
+  `lane_departure_checker_node` to subscribe to the route before it initializes
+  (`wait_for_route_subscriber`, set in `rc_sim.launch.xml`), and the route can only be
+  set after that. `smoke.py` now also fails a run whose checker diagnostic runs under
+  5 Hz after the engage. After: 5 of 5 forced runs and 10 of 10 unforced runs (5 with
+  64 busy loops) passed. Upstream declares the subscription transient_local after
+  1.5.0; drop the parameter with that upgrade.
 - **Edge/clock publish-order fallback.** The edges-then-clock order is a publication
   order, not a delivery guarantee across topics. If a loaded host reorders it, the
   fallback is to lag `/clock` by one batch, so every edge of a batch is older than

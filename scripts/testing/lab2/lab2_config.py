@@ -71,14 +71,22 @@ TEMPLATE_HEAD = """\
 # what every command would use and where each value came from.
 """
 TEMPLATE_KEYS = [
-    ('car', 'A', 'the car you drive: A, B or C'),
-    ('team', '3', 'your team number'),
-    ('team_dir', '~/lab2/team3', "Part 2: the team's controller directory and its path_tracker.param.yaml"),
+    ('car', 'A', "on the CAR: your team's car, A, B or C (record, check-bags, audit, run)"),
+    ('team', '3', 'on the CAR: your team number (record, check-bags, audit, run)'),
+    ('team_dir', '~/lab2/team3',
+     'on the CAR, for `just lab2 run`/`vehicle`: the team directory (controller + path_tracker)'),
     ('submission', '~/lab2/B12345678_lab_2_1',
-     'Part 1: your controller, for `just lab2 gate` on a workstation'),
+     'on a WORKSTATION, for `just lab2 gate`: the <id>_lab_2_1 holding lab2_speed/'),
     ('part1_submission', '~/lab2/B12345678_lab_2_1',
-     'Lab 2 Part 1 on the simulated car: the directory holding lab2_speed/, for `just lab2 sim`'),
+     'any machine, for `just lab2 sim` (Part 1): the <id>_lab_2_1 holding lab2_speed/'),
 ]
+INIT_KEYS_HINT = (
+    'Fill in (uncomment) the keys for the machine you are on (the Lab 2 handout, §10.5, '
+    'lists them):\n'
+    '  Part 1, any machine    part1_submission          just lab2 sim\n'
+    '  Part 2, workstation    submission                just lab2 gate\n'
+    '  Part 2, on the car     team_dir, car, team       just lab2 run (vehicle, record, ...)\n'
+    '`just lab2 config` shows what every command will use.')
 TEMPLATE_DEFAULTS = [
     ('route', 'the graded course'),
     ('course_dir', 'auto: surveys/latest once survey-align aligned it, else the route\'s package course'),
@@ -464,7 +472,7 @@ def init(argv, cwd=REPO) -> str:
         raise ConfigError(f'{path} exists; edit it, or remove it first (init never overwrites)')
     path.parent.mkdir(parents=True, exist_ok=True)
     path.write_text(template(cli))
-    return f'wrote {path}; fill in car, team, team_dir and submission'
+    return f"wrote {path}\n{INIT_KEYS_HINT}"
 
 
 def main(argv=None) -> int:

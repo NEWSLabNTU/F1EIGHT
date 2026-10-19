@@ -111,3 +111,18 @@ def test_hold_open_returns_without_a_dashboard(tmp_path):
     proc = SimpleNamespace(pid=2 ** 22 + 12345, poll=lambda: None)   # no such session
     R.hold_open(proc, tmp_path)                    # returns at once, prints nothing
     assert not R._holding
+
+
+def test_web_addr_is_per_user(monkeypatch):
+    assert R.default_web_addr(1000) == '127.0.0.1:8081'
+    assert R.default_web_addr(1005) == '127.0.0.1:8086'
+    monkeypatch.delenv('LAB2_WEB_ADDR', raising=False)
+    assert R.parse([]).web_addr == R.default_web_addr()
+    monkeypatch.setenv('LAB2_WEB_ADDR', '127.0.0.1:9000')
+    assert R.parse([]).web_addr == '127.0.0.1:9000'
+
+
+def test_keep_hint_names_the_way_to_keep_a_run(tmp_path):
+    assert '--name LABEL' in R.keep_hint(tmp_path, chosen=False)
+    assert 'overwrites' in R.keep_hint(tmp_path, chosen=False)
+    assert R.keep_hint(tmp_path, chosen=True).strip() == f'outputs in {tmp_path}'
