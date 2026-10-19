@@ -837,7 +837,7 @@ GATE_MUTANTS = {
                      '    if self._fuzz_n % 50 == 0:\n'
                      '        return float("nan")\n'
                      '    return _orig(self, target_speed, measured_speed, dt)',
-                     r'SpeedPID fault'),
+                     r'speed controller fault'),
 }
 
 

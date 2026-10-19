@@ -130,6 +130,75 @@ def build_meta(course_dir: str, car_id: str, team_id: str, git_commit: str,
     }
 
 
+def model_version(model: str) -> dict:
+    """Which vehicle model the bag ran and at what version: the git commit (and whether the
+    tree was dirty) of the source the model's <model>_launch package was built from. With
+    --symlink-install the installed launch file is a link into that source; without one, or
+    when git does not track that source, the commit is ''."""
+    import subprocess
+    out = {'vehicle_model': model, 'vehicle_model_commit': '', 'vehicle_model_dirty': False,
+           'vehicle_model_source': ''}
+    try:
+        from ament_index_python.packages import get_package_share_directory
+        launch = os.path.join(get_package_share_directory(f'{model}_launch'),
+                              'launch', 'vehicle_interface.launch.xml')
+    except Exception:       # not installed: the stack could not have run it either
+        return out
+    src = os.path.dirname(os.path.dirname(os.path.realpath(launch)))
+    out['vehicle_model_source'] = src
+
+    def git(*a):
+        return subprocess.run(['git', '-C', src, *a], capture_output=True, text=True, timeout=10)
+    try:
+        # only a model git TRACKS has a commit: a package inside some other repository's
+        # ignored tree (a workspace under a checkout) would report that repository's HEAD
+        tracked = git('ls-files', '--error-unmatch', 'launch/vehicle_interface.launch.xml')
+        r = git('rev-parse', 'HEAD')
+        if tracked.returncode == 0 and r.returncode == 0:
+            out['vehicle_model_commit'] = r.stdout.strip()
+            out['vehicle_model_dirty'] = bool(git('status', '--porcelain', '--untracked-files=no',
+                                                  '--', '..').stdout.strip())
+    except (OSError, subprocess.SubprocessError):
+        pass
+    return out
+
+
+def model_source_dir(model: str) -> Optional[str]:
+    """The directory holding the model's three packages (<model>_launch's parent), resolved
+    through --symlink-install's links; None when the model is not installed."""
+    try:
+        from ament_index_python.packages import get_package_share_directory
+        launch = os.path.join(get_package_share_directory(f'{model}_launch'),
+                              'launch', 'vehicle_interface.launch.xml')
+    except Exception:
+        return None
+    return os.path.dirname(os.path.dirname(os.path.dirname(os.path.realpath(launch))))
+
+
+def model_digest(model: str) -> str:
+    """sha256 over the source of the model's three packages (paths and contents, caches
+    left out): what the vehicle gate passed, compared before a car run. '' when the model
+    is not installed."""
+    import hashlib
+    root = model_source_dir(model)
+    if root is None:
+        return ''
+    h = hashlib.sha256()
+    for pkg in (f'{model}_launch', f'{model}_interface', f'{model}_description'):
+        base = os.path.join(root, pkg)
+        for dirpath, dirnames, filenames in os.walk(base):
+            dirnames[:] = sorted(d for d in dirnames if d not in ('__pycache__', '.pytest_cache'))
+            for name in sorted(filenames):
+                if name.endswith('.pyc'):
+                    continue
+                p = os.path.join(dirpath, name)
+                h.update(os.path.relpath(p, root).encode() + b'\0')
+                with open(p, 'rb') as f:
+                    h.update(f.read())
+                h.update(b'\0')
+    return h.hexdigest()
+
+
 def read_sidecar(bag_dir: str) -> Optional[dict]:
     p = os.path.join(bag_dir, SIDECAR)
     if os.path.isfile(p):

@@ -67,6 +67,33 @@ from autosdv_vehicle_interface.hal import (
     EDGE_TOPIC, EDGES_UNTIL, LOCKSTEP_ACK_TOPIC, LOCKSTEP_STATUS_TOPIC, parse_ack, PWM_TOPIC)
 
 
+#: the ESC and servo points a car's parameter files may set (actuator.yaml's names)
+PWM_KEYS = ('init_pwm', 'min_pwm', 'max_pwm', 'brake_pwm', 'forward_start_pwm',
+            'forward_hold_pwm', 'reverse_stop_pwm', 'reverse_start_pwm', 'reverse_arm_pwm',
+            'init_steer', 'min_steer', 'max_steer', 'tire_angle_to_steer_ratio')
+
+
+def pwm_overrides(files) -> dict:
+    """The PWM_KEYS the actuator's parameter files set, later files winning, as the
+    actuator loads them (actuator.yaml, the overrides, the car's individual_params
+    file). pwm_param_files makes the plant one physical car's ESC and servo: the Lab 2
+    vehicle gate runs a model against each car's points. A key set to 0 (an ESC
+    threshold not measured) is not an override."""
+    import yaml
+    out = {}
+    for f in files:
+        with open(f) as fh:
+            d = yaml.safe_load(fh) or {}
+        params = (d.get('/**') or {}).get('ros__parameters') or {}
+        for k in PWM_KEYS:
+            if k in params and params[k] not in (None, 0):
+                out[k] = params[k]
+    # an unmeasured forward hold is the neutral, as the actuator's EscModel takes it
+    if 'init_pwm' in out and 'forward_hold_pwm' not in out:
+        out['forward_hold_pwm'] = out['init_pwm']
+    return out
+
+
 def stamp(t_ns: int) -> TimeMsg:
     msg = TimeMsg()
     msg.sec = t_ns // 1_000_000_000
@@ -91,10 +118,12 @@ class RcSimPlant(Node):
                               ('map_frame', 'map'), ('angular_velocity_offset_x', 0.0),
                               ('angular_velocity_offset_y', 0.0),
                               ('angular_velocity_offset_z', 0.0),
-                              ('seed', 0), ('lockstep', True), ('lockstep_timeout', 2.0)):
+                              ('seed', 0), ('lockstep', True), ('lockstep_timeout', 2.0),
+                              ('pwm_param_files', [''])):
             self.declare_parameter(name, default)
         gp = lambda k: self.get_parameter(k).value  # noqa: E731
-        self.p = load_vehicle(gp('vehicle_file') or None, gp('variant'))
+        self.p = load_vehicle(gp('vehicle_file') or None, gp('variant'),
+                              **pwm_overrides([f for f in gp('pwm_param_files') if f]))
         start = track_poses(gp('track_dir') or default_track_dir())['start_pose']
         self.plant = Plant(self.p, start['x'], start['y'], start['yaw'])
         self.imu = ImuModel(self.p, int(gp('seed')))

@@ -7,15 +7,18 @@
 #                                  curves.png per car (finds ~/lab2/<id>_lab_2_1 itself)
 #   just lab2 sim --no-gui         the same without windows
 #   just lab2 plot-sim             redraw the latest Part 1 run's plots
-#   just lab2 run team:=3          Part 2: ~/lab2/team3. On the car: stack, preflight, record,
-#                                  engage (asks), stop, grading table, audit.png. On a
-#                                  workstation: the same on the vehicle bench, plus the gate verdict
-#   just lab2 run ~/lab2/team3     the same, by directory
+#   just lab2 run team:=3          Part 2: team 3's vehicle model, team3_vehicle. On the car:
+#                                  stack, preflight, record, engage (asks), stop, grading table,
+#                                  audit.png. On a workstation: the same on the vehicle bench,
+#                                  plus the gate verdict
+#   just lab2 new-team 3           team3_vehicle from the reference model, into ~/lab2/ws/src
+#   just lab2 build-teams          build ~/lab2/ws (every team's model)
+#   just lab2 gate team:=3         the vehicle gate: safety on every car, then the route
 #
 # Everything below is for the TA, or the step-by-step equivalent.
 #
 # Settings live in ~/lab2/lab2.yaml (`just lab2 init` writes it; config:=FILE picks
-# another; $LAB2_HOME moves ~/lab2): car, team, team_dir, submission, part1_submission,
+# another; $LAB2_HOME moves ~/lab2): car, team, vehicle_model, part1_submission,
 # route, reference, bag_dir. Precedence, highest first: key:=value on the command line,
 # that file, the built-in defaults (src/lab/autosdv_waypoint_lab/config/lab2_defaults.yaml).
 # `just lab2 config` shows the result. The TA sets each car's letter once:
@@ -25,9 +28,9 @@
 #
 # or, step by step in separate terminals:
 #
-#   just lab2 gate                 workstation: the submission's SpeedPID on the graded route
-#   just lab2 vehicle              car: route + team_dir
-#   just lab2 stack car_b          car: the same stack without the lab settings (reference laws)
+#   just lab2 gate team:=3         workstation: team3_vehicle's safety on every car, then the route
+#   just lab2 vehicle team:=3      car: route + team3_vehicle
+#   just lab2 stack car_b          car: the same stack without the lab settings (the reference model)
 #   just lab2 preflight            car, second terminal
 #   just lab2 record               rosbags/lab2_uturn_1, _2, ...
 #   just lab2 engage               (third terminal), then Ctrl-C the recording
@@ -38,14 +41,13 @@
 # Other arguments go to the launch file or the tool, e.g.
 #
 #   just lab2 bench
-#   just lab2 bench tracker_class:=my_lab2.path_tracker:PathTracker
+#   just lab2 bench vehicle_model:=team3_vehicle
 #   just lab2 vehicle route:=hall_demo
-#   just lab2 gate submission:=~/lab2/B12345678_lab_2_1     a student's SpeedPID and calibration
-#   just lab2 vehicle route:=lab2_uturn team:=~/lab2/team3   Part 2: the team's controller and lookahead
-#   just lab2 vehicle course_dir:=$PWD/courses/my_hall 'speed_controller_params:={kp: 15.0}'
+#   just lab2 vehicle route:=lab2_uturn team:=3              Part 2: team 3's vehicle model
+#   just lab2 vehicle course_dir:=$PWD/courses/my_hall
 #
 # Each argument reaches play_launch as one word, so quote a value that
-# contains spaces, such as a YAML mapping.
+# contains spaces.
 #
 # Then, in a second terminal: `just lab2 engage`.
 #
@@ -82,10 +84,10 @@ init *ARGS:
     #!/usr/bin/env bash
     exec python3 scripts/testing/lab2/lab2_config.py init "$@"
 
-#   just lab2 bench                                  hall_demo, reference laws
+#   just lab2 bench                                  hall_demo, the reference model
+#   just lab2 bench vehicle_model:=team3_vehicle     a team's model (built in ~/lab2/ws)
 #   just lab2 bench dropout:=0.4 gyro_bias_error_z:=0.01
-#   just lab2 bench tracker_class:=my_lab2.path_tracker:PathTracker
-# The actuator (dry run) and its SpeedPID, the EKF, the tracker and the MRM
+# The model's vehicle interface (actuator as a dry run), the EKF, the tracker and the MRM
 # path all run; the ZED, the AR-tag localizer, velocity_report and the PCA9685
 # are replaced (vehicle_bench_plant, virtual_marker_localizer).
 # Vehicle bench: the real vehicle stack on this PC, a plant model for the car
@@ -93,26 +95,25 @@ init *ARGS:
 bench *ARGS:
     #!/usr/bin/env bash
     source scripts/env.sh
-    source scripts/testing/lab2/submission.sh
-    lab2_apply_submission "$@" || exit 2
+    source scripts/testing/lab2/lab2_ws.sh
+    lab2_ws_source
     cmd=(play_launch launch --web-addr '{{ web_addr }}'
-         autosdv_launch waypoint_follow_bench.launch.xml "${LAB2_ARGS[@]}")
+         autosdv_launch waypoint_follow_bench.launch.xml "$@")
     printf '\033[2m%s\033[0m\n' "${cmd[*]}"
     exec "${cmd[@]}"
 
-#   just lab2 vehicle                       route and team_dir from the config
-#   just lab2 vehicle route:=hall_demo team:=~/lab2/team3
-# team:= / submission:= / speed_controller_class:= on the command line replace team_dir.
-# On the vehicle: ZED + AR-tag localizer + EKF, the course, the student laws
+#   just lab2 vehicle                       route and vehicle model from the config
+#   just lab2 vehicle route:=hall_demo team:=3      team3_vehicle (vehicle_model:= names any model)
+# On the vehicle: ZED + AR-tag localizer + EKF, the course, the vehicle model
 [positional-arguments]
 vehicle *ARGS:
     #!/usr/bin/env bash
     unset DISPLAY                       # the ZED cannot have one: scripts/testing/lab2/camera_display.sh
     source scripts/env.sh
-    source scripts/testing/lab2/submission.sh
+    source scripts/testing/lab2/lab2_ws.sh
+    lab2_ws_source
     source scripts/testing/lab2/lab2_config.sh
     lab2_config vehicle "$@" || exit 2
-    lab2_apply_submission "${LAB2_ARGS[@]}" || exit 2
     cmd=(play_launch launch --web-addr '{{ web_addr }}'
          autosdv_launch waypoint_follow.launch.xml "${LAB2_ARGS[@]}")
     printf '\033[2m%s\033[0m\n' "${cmd[*]}"
@@ -122,7 +123,7 @@ vehicle *ARGS:
 #   just lab2 stack car_a sensor_suite:=vlp16_zed        any preset value overridden
 #   just lab2 stack car_b route:=lab2_uturn rviz:=false  any waypoint_follow.launch.xml argument
 # VEHICLE_ID picks individual_params/config/<id>/ (calibration, actuator PWM, preset); nothing
-# from ~/lab2/lab2.yaml (no team_dir, no submission, no car:=). The ZED gets no DISPLAY
+# from ~/lab2/lab2.yaml (no team, no car:=); vehicle_model:= runs another model. The ZED gets no DISPLAY
 # (scripts/testing/lab2/camera_display.sh); RViz opens on it when it answers (rviz:= to force).
 # The Lab 2 stack (waypoint planner + ArUco localization) on one car, without the lab's settings
 [positional-arguments]
@@ -143,23 +144,57 @@ stack VEHICLE_ID *ARGS:
     source scripts/env.sh
     exec "${cmd[@]}"
 
-#   just lab2 gate                     the config's submission
-#   just lab2 gate submission:=DIR     DIR = your <student_id>_lab_2_1 (or lab2_speed) directory:
-#       its lab2_speed/speed_pid.py, config/speed_pid_car.yaml and config/calibration.yaml are
-#       loaded for you (same for `bench` and `vehicle`; scripts/testing/lab2/submission.py shows
-#       what is passed)
-#   just lab2 gate speed_controller_class:=lab2_speed.speed_pid:SpeedPID "speed_controller_params:={kp: 20.0}"
-#   just lab2 gate --only hall_demo ...        another course instead of lab2_uturn
-# Gate before car time: your SpeedPID on the graded route (lab2_uturn), full stack; PASS/FAIL
+#   just lab2 gate                              the reference model (or the config's team / vehicle_model)
+#   just lab2 gate team:=3                      team3_vehicle (vehicle_model:= names any model)
+#   just lab2 gate team:=3 --cars car_a         the safety half on one car (not recorded)
+#   just lab2 gate --only hall_demo ...         another course instead of lab2_uturn (not recorded)
+# Safety (RC simulator, every car's ESC: neutral, stop, watchdog, MRM, emergency, no reverse
+# arming), then the graded route on the vehicle bench. A full pass is recorded in
+# ~/lab2/gate/<model>.json; `just lab2 run` on a car refuses a team model without one.
+# Gate before car time: the vehicle model's safety on every car, then the route; PASS/FAIL
 [positional-arguments]
 gate *ARGS:
     #!/usr/bin/env bash
     source scripts/env.sh
-    source scripts/testing/lab2/submission.sh
+    source scripts/testing/lab2/lab2_ws.sh
+    lab2_ws_source
     source scripts/testing/lab2/lab2_config.sh
     lab2_config gate "$@" || exit 2
-    lab2_apply_submission "${LAB2_ARGS[@]}" || exit 2
     exec python3 scripts/testing/lab2/bench_gate.py "${LAB2_ARGS[@]}"
+
+#   just lab2 new-team 3                 ~/lab2/ws/src/team3_vehicle_launch ($LAB2_HOME/ws/src)
+#   just lab2 new-team 3 --dest DIR      somewhere else (then build it there)
+# From the autosdv_vehicle_launch this repository pins; never overwrites. The README it writes
+# says what is the team's and what is not (the car's PWM file, the vehicle geometry).
+# Generate team N's vehicle model (teamN_vehicle) from the reference model
+[positional-arguments]
+new-team N *ARGS:
+    #!/usr/bin/env bash
+    exec python3 scripts/testing/lab2/new_team.py "$@"
+
+#   just lab2 build-teams                    every package under ~/lab2/ws/src
+#   just lab2 build-teams --packages-select team3_vehicle_interface
+# An overlay over this repository's install: one team's broken package fails its own build only.
+# Build the teams' workspace, ~/lab2/ws (every team's vehicle model)
+[positional-arguments]
+build-teams *ARGS:
+    #!/usr/bin/env bash
+    source scripts/env.sh
+    ws="${LAB2_HOME:-$HOME/lab2}/ws"
+    if [ ! -d "$ws/src" ]; then
+        echo "error: no $ws/src: \`just lab2 new-team N\` first, or put the teams' repositories there" >&2
+        exit 2
+    fi
+    cd "$ws" && exec colcon build --base-paths src --symlink-install --continue-on-error "$@"
+
+#   just lab2 gate-selftest                  three broken models (wrong neutral, no watchdog,
+#                                            reverse arming) on car_a; each must FAIL its check
+# TA: show the vehicle gate refusing deliberately broken models
+[positional-arguments]
+gate-selftest *ARGS:
+    #!/usr/bin/env bash
+    source scripts/env.sh
+    exec python3 scripts/testing/lab2/vehicle_gate_selftest.py "$@"
 
 #   just lab2 sim                                 the graded set: nominal, low_batt, low_mu; mark / 25
 #   just lab2 sim --no-gui                        no windows (as rviz:=false gui:=false); also automatic
@@ -181,6 +216,8 @@ gate *ARGS:
 sim *ARGS:
     #!/usr/bin/env bash
     source scripts/env.sh
+    source scripts/testing/lab2/lab2_ws.sh
+    lab2_ws_source
     source scripts/testing/lab2/lab2_config.sh
     lab2_config sim "$@" || exit 2
     exec python3 scripts/testing/lab2/part1_run.py "${LAB2_ARGS[@]}"
@@ -233,16 +270,16 @@ health *ARGS:
     source scripts/env.sh
     exec python3 scripts/testing/lab2/health.py "$@"
 
-#   just lab2 run team:=3                       ~/lab2/team3; the car on a car, else the vehicle bench
-#   just lab2 run ~/lab2/team3                  the same, by directory (teamN gives the number;
-#                                               another name needs team_number:=N)
+#   just lab2 run team:=3                       team3_vehicle; the car on a car, else the vehicle bench
+#   just lab2 run vehicle_id:=car_c             the reference model (no team) on car C
 # On the car (a Jetson, /etc/nv_tegra_release, with `car:` set by the TA's `just lab2 init car:=X`):
 # stack, preflight, record, engage (asks), stop, audit. On a workstation: the vehicle bench, engaged
 # without asking, then the gate verdict (as `just lab2 gate`). Afterwards: the grading table (value,
 # the car's reference, marks, validity, total) and audit.png (opened on $DISPLAY or :1 when one
 # answers; the path always printed). Over SSH it re-runs itself inside tmux (`tmux attach -t lab2-run`).
+# On a car a team model must have passed `just lab2 gate` here with its current source.
 # TA:
-#   just lab2 run                               team_dir, car, team from the config
+#   just lab2 run                               vehicle_model / team, car from the config
 #   just lab2 run team:=3 --bench | --car       force the bench or the car
 #   just lab2 run --bench [--camera mock]       the bench with rendered boards
 #   just lab2 run --bench --yes                 engage without asking (bench only; tests)
@@ -255,6 +292,8 @@ run *ARGS:
     #!/usr/bin/env bash
     # lab2_run.py keeps DISPLAY for audit.png and takes it away from the stack (the ZED)
     source scripts/env.sh
+    source scripts/testing/lab2/lab2_ws.sh
+    lab2_ws_source
     exec python3 scripts/testing/lab2/lab2_run.py "$@"
 
 #   just lab2 audit                          the latest bag, car/team/reference from the config
@@ -270,8 +309,8 @@ audit *ARGS:
     lab2_config audit "$@" || exit 2
     exec ros2 run autosdv_waypoint_lab lab2_audit "${LAB2_ARGS[@]}"
 
-#   just lab2 integration-test                       the reference controller, rendered boards
-#   just lab2 integration-test submission:=DIR       a student's SpeedPID (team_dir:=DIR for Part 2)
+#   just lab2 integration-test                       the reference model, rendered boards
+#   just lab2 integration-test vehicle_model:=team3_vehicle team_number:=3   a team's model
 #   just lab2 integration-test --camera virtual      the modelled localizer instead (faster)
 # Bags go to tmp/lab2_integration/bags (bag_dir:= to change), car SIM, team 0. PASS needs: the run
 # finished, check-bags (bench mode) ACCEPT, grade valid, audit.png, localization vs true pose ok.
@@ -280,13 +319,10 @@ audit *ARGS:
 integration-test *ARGS:
     #!/usr/bin/env bash
     source scripts/env.sh
-    ctrl=()
-    case " $* " in
-        *" submission:="*|*" team_dir:="*|*" speed_controller_class:="*) ;;
-        *) ctrl=(speed_controller_class:=autosdv_vehicle_interface.speed_controller:AckermannSpeedPID) ;;
-    esac
+    source scripts/testing/lab2/lab2_ws.sh
+    lab2_ws_source
     exec python3 scripts/testing/lab2/lab2_run.py --bench --yes --integration \
-        car:=SIM team:=0 bag_dir:=tmp/lab2_integration/bags "${ctrl[@]}" "$@"
+        car:=SIM bag_dir:=tmp/lab2_integration/bags "$@"
 
 # TA: fuzz the Part 2 gates with mutated copies of a valid bag (--gate: also the bench gate)
 [positional-arguments]

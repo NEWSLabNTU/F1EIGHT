@@ -13,7 +13,8 @@ Precedence, highest first:
     the user's file                     ~/lab2/lab2.yaml, or config:=FILE / --config FILE
     the built-in defaults               src/lab/autosdv_waypoint_lab/config/lab2_defaults.yaml
 
-Keys: car, team, team_dir, submission, part1_submission, route, course_dir, reference, bag_dir. A missing
+Keys: car, team, vehicle_model, part1_submission, route, course_dir, reference, bag_dir (and
+team_dir, submission: read from an old file and ignored, refused on the command line). A missing
 user file is fine as long as every key a recipe needs has a value; a missing
 required key is one error line naming the key and the file to put it in.
 
@@ -23,7 +24,7 @@ recipes run from the repository root).
 
 Recipes:
 
-    vehicle     course_dir:= (below), team:=TEAM_DIR, unless given, and vehicle_id:=car_<car>
+    vehicle     course_dir:= (below), vehicle_model:= (below) and vehicle_id:=car_<car>
                 (on the car `car` is required; the bench takes sim, the simulated nominal
                 car, when it is not set, hardware:=sim passes vehicle_id:=sim)
     loc-check   vehicle_id:=car_<car> when `car` is set, else vehicle_id:=sim, the nominal
@@ -31,11 +32,11 @@ Recipes:
                 calibration and IMU bias, which no car has measured yet); every other
                 argument passes through
     survey      the same as loc-check (the survey's URDF is that car's calibration)
-    gate        submission:=SUBMISSION, unless a controller is given
+    gate        vehicle_model:= (below)
     sim         submission:=PART1_SUBMISSION when set (no default: without one the runner
                 warns and runs the stub), unless --class / speed_controller_class:= is given;
                 on its command line submission:= means part1_submission
-    record      --car --team --out-dir, and --name ROUTE_N (the next free one)
+    record      --car --team --vehicle-model --out-dir, and --name ROUTE_N (the next free one)
     grade       no bag: --score LATEST --reference REFERENCE
     check-bags  no bag: LATEST; --car --team when set
     plot        no bag: LATEST
@@ -50,8 +51,11 @@ vehicle_id:=car_b to the stack, which loads individual_params/config/car_b/ (its
 autosdv_vehicle/actuator.param.yaml PWM, its calibration, its autosdv.preset.yaml).
 A vehicle_id:= given on the command line must agree with `car`.
 
-`team:=` means the team DIRECTORY in vehicle and gate (as it always has) and
-the team NUMBER elsewhere.
+The vehicle model (Autoware's vehicle_model: <model>_launch, _interface, _description) is
+what a team submits (docs/design/lab2-team-vehicle-models.md): `vehicle_model` when set, else
+team<team>_vehicle when `team` is set, else autosdv_vehicle, the reference. `team:=` is the
+team NUMBER everywhere (team:=3 is team3_vehicle). The team_dir:= and submission:= of the
+SpeedPID-only lab are gone from vehicle and gate: the controller lives in the model.
 
 Which course the car runs (`course_dir`): `auto` (the default) is the aligned
 survey surveys/latest when `just lab2 survey-align` aligned it for `route`,
@@ -94,8 +98,12 @@ USER_FILE = Path('~/lab2/lab2.yaml')     # ~/lab2 is $LAB2_HOME when that is set
 
 def user_file() -> Path:
     return lab2_env.lab2_home() / 'lab2.yaml'
-KEYS = ('car', 'team', 'team_dir', 'submission', 'part1_submission', 'route', 'course_dir',
-        'reference', 'bag_dir')
+KEYS = ('car', 'team', 'vehicle_model', 'team_dir', 'submission', 'part1_submission', 'route',
+        'course_dir', 'reference', 'bag_dir')
+#: the SpeedPID-only lab's keys: an old file that sets them still loads (they are ignored, with
+#: a warning); on the command line of vehicle and gate they are refused
+RETIRED_KEYS = ('team_dir', 'submission')
+REFERENCE_MODEL = 'autosdv_vehicle'
 PATH_KEYS = ('team_dir', 'submission', 'part1_submission', 'reference', 'bag_dir')
 LAUNCH_RECIPES = ('vehicle', 'gate')
 COURSE_CHOICES = ('auto', 'package')
@@ -112,18 +120,18 @@ TEMPLATE_HEAD = """\
 TEMPLATE_KEYS = [
     ('car', 'A', "the CAR's letter, A, B or C: the TA sets it once per car (`just lab2 init car:=A`); "
      "it is the bags' label and picks the car's vehicle_id (car_a, car_b, car_c)"),
-    ('team', '3', 'optional: `just lab2 run team:=3` names the team per run (record, audit, ...)'),
-    ('team_dir', '~/lab2/team3',
-     'optional: the team directory, for `just lab2 run` with no team:= (and `vehicle`)'),
-    ('submission', '~/lab2/B12345678_lab_2_1',
-     'for `just lab2 gate` (TA): the <id>_lab_2_1 holding lab2_speed/'),
+    ('team', '3', 'optional: `just lab2 run team:=3` names the team per run (record, audit, ...) '
+     'and runs its vehicle model, team3_vehicle'),
+    ('vehicle_model', 'team3_vehicle',
+     'optional: the vehicle model to run; default team<team>_vehicle, else autosdv_vehicle '
+     '(the reference)'),
     ('part1_submission', '~/lab2/B12345678_lab_2_1',
      'optional: `just lab2 sim` finds the one ~/lab2/*_lab_2_1 by itself; this picks one'),
 ]
 INIT_KEYS_HINT = (
     'Nothing here is needed for the student commands:\n'
     '  Part 1, any machine    just lab2 sim             finds ~/lab2/<id>_lab_2_1 itself\n'
-    '  Part 2                 just lab2 run team:=3     ~/lab2/team3; the car or the bench\n'
+    '  Part 2                 just lab2 run team:=3     team3_vehicle; the car or the bench\n'
     'On a car the TA sets its letter once: `just lab2 init car:=A`.\n'
     '`just lab2 config` shows what every command will use.')
 TEMPLATE_DEFAULTS = [
@@ -425,7 +433,14 @@ def vehicle_id_for(c: 'Config', rest, required: bool, fallback: Optional[str] = 
     if explicit is not None and explicit not in _instances.names():
         raise ConfigError(f'vehicle_id:={explicit}: one of {", ".join(_instances.names())}')
     car = c.get('car')
-    mine = vehicle_id_of(car) if car else None
+    if car and str(car).strip().lower() == SIM_VEHICLE_ID:
+        # SIM: the bags' label for the simulated nominal car (the bench, integration-test)
+        if required:
+            raise ConfigError(f'car {car!r} is the simulated car; on a car set its letter, A, B or C '
+                              '(`just lab2 init car:=A`)')
+        mine = SIM_VEHICLE_ID
+    else:
+        mine = vehicle_id_of(car) if car else None
     if explicit and mine and explicit != mine:
         raise ConfigError(f'vehicle_id:={explicit} disagrees with car {car} ({c.source("car")}), '
                           f'which is {mine}: drop vehicle_id:= or fix car')
@@ -441,6 +456,42 @@ def vehicle_id_for(c: 'Config', rest, required: bool, fallback: Optional[str] = 
     if fallback:
         return f'vehicle_id:={fallback}', fallback
     return None, None
+
+
+# ---- the vehicle model ------------------------------------------------------------------
+
+def team_model(team) -> str:
+    """3 -> team3_vehicle (just lab2 new-team 3 generates it); 0 -> the reference, the TA's
+    runs (the integration test records as team 0)."""
+    t = str(team).strip()
+    if not t.isdigit():
+        raise ConfigError(f'team {team!r}: a team NUMBER (team:=3 is team3_vehicle); a team '
+                          'directory is no longer how a team is named')
+    return f'team{int(t)}_vehicle' if int(t) else REFERENCE_MODEL
+
+
+def vehicle_model_for(c: 'Config') -> str:
+    """`vehicle_model` when set, else team<team>_vehicle when `team` is, else the reference.
+    A retired key (team_dir, submission) on the command line is refused, from a file
+    ignored with a warning."""
+    for k in RETIRED_KEYS:
+        if c.get(k) is None:
+            continue
+        if c.source(k) == 'command line':
+            raise ConfigError(
+                f'{k}:= is gone: a team now submits its vehicle model, selected with '
+                'vehicle_model:=teamN_vehicle or team:=N (docs/design/lab2-team-vehicle-models.md)')
+        print(f'warning: {k} in {c.source(k)} is no longer used (the vehicle model is the '
+              'submission); remove it', file=sys.stderr)
+    model = c.get('vehicle_model')
+    if model:
+        if not re.fullmatch(r'[a-z][a-z0-9_]*', model) or model.endswith(('_launch', '_interface')):
+            raise ConfigError(f'vehicle_model {model!r} ({c.source("vehicle_model")}): a model name '
+                              'such as team3_vehicle, without _launch')
+        return model
+    if c.get('team'):
+        return team_model(c.get('team'))
+    return REFERENCE_MODEL
 
 
 # ---- bags -------------------------------------------------------------------------------
@@ -479,7 +530,7 @@ def split_args(recipe, argv):
     own_flags = {'--car': 'car', '--team': 'team', '--out-dir': 'bag_dir'} \
         if recipe in ('record', 'check-bags', 'audit') else {}
     if launch:
-        own_flags = {'--team': 'team_dir', '--submission': 'submission'}
+        own_flags = {'--team': 'team'}
     elif recipe == 'sim':
         own_flags = {'--submission': 'part1_submission'}
     for a in it:
@@ -500,8 +551,6 @@ def split_args(recipe, argv):
             cli[own_flags[flag]] = fval
         elif sep and key == 'config':
             cfg_file = val
-        elif sep and launch and key == 'team':
-            cli['team_dir'] = val
         elif sep and recipe == 'sim' and key == 'submission':
             cli['part1_submission'] = val
         elif sep and key in KEYS and (recipe not in ('loc-check', 'survey') or key == 'car'):
@@ -551,12 +600,9 @@ def plan(recipe, argv, cwd=REPO, bench=False):
             use(k, v)
             if warn:
                 print(f'warning: {warn}', file=sys.stderr)
-        if c.source('submission') == 'command line' and c.source('team_dir') != 'command line':
-            out.append(f'submission:={c.get("submission")}')
-            use('submission')
-        elif c.source('team_dir') == 'command line' or not _has(rest, 'speed_controller_class:='):
-            out.append(f'team:={c.require("team_dir", "the team controller the car drives")}')
-            use('team_dir')
+        model = vehicle_model_for(c)
+        out.append(f'vehicle_model:={model}')
+        use('vehicle_model', model)
         sim = _has(rest, 'hardware:=sim', 'hardware_sim:=true', 'hardware_sim:=True')
         on_car = not bench and not sim
         arg, vid = vehicle_id_for(c, rest, required=on_car,
@@ -574,12 +620,9 @@ def plan(recipe, argv, cwd=REPO, bench=False):
         use('vehicle_id', vid)
     elif recipe == 'gate':
         out = list(rest)
-        if 'team_dir' in c.sources and c.source('team_dir') == 'command line':
-            out.append(f'team:={c.get("team_dir")}')
-            use('team_dir')
-        elif not _has(rest, 'speed_controller_class:='):
-            out.append(f'submission:={c.require("submission", "the controller the gate runs")}')
-            use('submission')
+        model = vehicle_model_for(c)
+        out.append(f'vehicle_model:={model}')
+        use('vehicle_model', model)
     elif recipe == 'sim':
         out = list(rest)
         if c.get('part1_submission') and not _has(rest, '--class', 'speed_controller_class:='):
@@ -590,8 +633,9 @@ def plan(recipe, argv, cwd=REPO, bench=False):
         team = c.require('team', 'recorded into the bag')
         bag_dir = c.require('bag_dir')
         name_given = _has(rest, '--name')
-        out = ['--car', car, '--team', team, '--out-dir', bag_dir]
-        use('car'), use('team'), use('bag_dir')
+        model = vehicle_model_for(c)
+        out = ['--car', car, '--team', team, '--vehicle-model', model, '--out-dir', bag_dir]
+        use('car'), use('team'), use('vehicle_model', model), use('bag_dir')
         if not name_given:
             name = next_bag_name(bag_dir, c.require('route'))
             out += ['--name', name]

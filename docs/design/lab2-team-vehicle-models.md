@@ -1,9 +1,11 @@
 # Lab 2: each team builds its own Autoware vehicle model
 
-Status: proposal, 2026-10-20. Decided with the TA: the team selection merges into
-`vehicle_model:=`, the template is a copy of `autosdv_vehicle_launch`, a team has
-full control of its vehicle interface, and the car-specific files stay keyed to
-the physical car. Not implemented.
+Status: implemented for Part 2 on branch `feat/lab2-vehicle-models`, 2026-10-20 (the
+"Implementation" section at the end); car runs pending. Decided with the TA: the team
+selection merges into `vehicle_model:=`, the template is a copy of
+`autosdv_vehicle_launch`, a team has full control of its vehicle interface, and the
+car-specific files stay keyed to the physical car. Part 1 stays on the SpeedPID class
+until the course decides.
 
 ## What Lab 2 becomes
 
@@ -119,9 +121,31 @@ own cars, and only then is the template cut from it:
    deliberately broken copies (wrong neutral, no watchdog, reverse arming);
 4. `new-team`, then one generated team package through gate, car and grade.
 
-## Open
+## Decided
 
-- Where the template comes from at release: a copy committed per release, or
-  generated from the `autosdv_vehicle_launch` the release pins.
-- How Part 1's grader finds the controller inside a team's interface, now that
-  the interface, not a class, is the submission.
+- The template is **generated** at release, from the `autosdv_vehicle_launch` commit the
+  release pins (`git archive` of the submodule entry in HEAD), never from a working tree.
+- Part 1's grader needs no controller: it reads topics, so a team model runs under
+  `vehicle_model:=teamN_vehicle vehicle_id:=sim` as it is. Whether Part 1 moves to models
+  is the course's call; until then `lab2_part1_sim.launch.xml` keeps its
+  `speed_controller_class` path, which `waypoint_follow.launch.xml` still passes on when
+  one is given.
+
+## Implementation
+
+| piece | where |
+|---|---|
+| the vehicle interface by model | `waypoint_follow.launch.xml` includes `$(var vehicle_model)_launch/launch/vehicle_interface.launch.xml`; `speed_controller_class` defaults to `""`, the model's own |
+| the template | `scripts/testing/lab2/new_team.py` (`just lab2 new-team N`): the interface and launch packages renamed, the description generated to install autosdv_vehicle_description's config, URDF and meshes by reference (symlinks under `--symlink-install`), the launch's tuning retargeted to `teamN_vehicle_launch/config/speed_controller.param.yaml`, the car's `individual_params` actuator file kept and checked for |
+| the workspace | `~/lab2/ws` (`$LAB2_HOME/ws`), `just lab2 build-teams`; the lab2 recipes source it (`lab2_ws.sh`) |
+| selection | `lab2_config.vehicle_model_for`: `vehicle_model`, else `team<team>_vehicle`, else the reference; `team:=N` is a number everywhere, team 0 the reference; `team_dir:=` and `submission:=` refused on the command line |
+| the gate, safety half | `vehicle_gate.py` + `lab2_vehicle_gate.launch.xml` + the probe `autosdv_waypoint_lab/vehicle_gate.py`: the model on `hardware:=sim`, `rc_sim_plant` given each car's ESC points (`pwm_param_files`); neutral, drives, stop, watchdog, MRM, emergency, no reverse arming, read back from `/rc_sim/pwm` |
+| the gate, route half | `bench_gate.py`, unchanged checks, `vehicle_model:=` passed to the bench |
+| gate before car | a full pass writes `~/lab2/gate/<model>.json` with a digest of the model's source; `just lab2 run` on a car refuses a team model without a matching pass |
+| broken copies | `just lab2 gate-selftest`: wrong neutral, no watchdog, a reverse-arming brake; each fails its own check |
+| bags | `vehicle_model`, `vehicle_model_commit`, `vehicle_model_dirty` in the metadata; the audit header shows `model <name>@<commit>` |
+
+One finding from the gate already: a template whose tuning turned on
+`esc_deadzone_compensation` refuses to start on car A, which has no measured
+`forward_hold_pwm`. The seed is therefore `actuator.yaml`'s defaults, with no per-car
+numbers in it.

@@ -1,13 +1,14 @@
 """`just lab2 record`: the submission bag.
 
-    lab2_record --car A --team 3 [--name NAME] [--course-dir DIR] [--bench]
+    lab2_record --car A --team 3 [--vehicle-model team3_vehicle] [--name NAME] [--course-dir DIR] [--bench]
 
 Records bag_meta.RECORD_TOPICS plus two topics this tool makes itself:
 
     /lab2/camera/image/compressed   the ZED's own compressed stream, thinned to
                                     10 Hz and resized to 960 x 600 (JPEG)
     /lab2/record_meta               a latched JSON String: course name and
-                                    hashes, car, team, git commit
+                                    hashes, car, team, git commit, the vehicle
+                                    model and its source's commit
 
 and writes the same JSON beside the bag as lab2_meta.json.
 
@@ -190,6 +191,8 @@ def main(argv=None):
     ap = argparse.ArgumentParser(description='Record the Lab 2 submission bag.')
     ap.add_argument('--car', required=True, help='car ID: A, B or C')
     ap.add_argument('--team', required=True, help='team ID')
+    ap.add_argument('--vehicle-model', default='autosdv_vehicle',
+                    help='the vehicle model the stack runs (default the reference, autosdv_vehicle)')
     ap.add_argument('--name', default='', help='bag name (default: the time)')
     ap.add_argument('--out-dir', default='rosbags')
     ap.add_argument('--course-dir', default=None,
@@ -222,11 +225,14 @@ def main(argv=None):
     meta = bm.build_meta(course, args.car, args.team, commit, time.time())
     meta['git_dirty'] = dirty
     meta['course_dir'] = os.path.abspath(course)
+    meta.update(bm.model_version(args.vehicle_model))
     if args.bench:
         meta['bench'] = True
     meta_json = json.dumps(meta, sort_keys=True)
     print(f'course {meta["course_name"]} ({meta["route_kind"]})  route_hash {meta["route_hash"][:12]}  '
-          f'car {args.car}  team {args.team}  commit {commit[:10]}{"+dirty" if dirty else ""}')
+          f'car {args.car}  team {args.team}  commit {commit[:10]}{"+dirty" if dirty else ""}  '
+          f'model {args.vehicle_model} {meta["vehicle_model_commit"][:10] or "(no git)"}'
+          f'{"+dirty" if meta["vehicle_model_dirty"] else ""}')
 
     out = os.path.join(args.out_dir, 'lab2_' + (args.name or time.strftime('%Y%m%d_%H%M%S')))
     os.makedirs(args.out_dir, exist_ok=True)

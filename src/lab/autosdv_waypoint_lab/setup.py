@@ -51,6 +51,7 @@ setup(
             'lab2_record = autosdv_waypoint_lab.record:main',
             'lab2_check_bags = autosdv_waypoint_lab.check_bags:main',
             'lab2_steer_cal = autosdv_waypoint_lab.steer_cal:main',
+            'lab2_vehicle_gate_probe = autosdv_waypoint_lab.vehicle_gate:main',
             'lab2_make_uturn = autosdv_waypoint_lab.uturn:main',
             'lab2_make_straight = autosdv_waypoint_lab.straight:main',
             'lab2_audit = autosdv_waypoint_lab.audit:main',

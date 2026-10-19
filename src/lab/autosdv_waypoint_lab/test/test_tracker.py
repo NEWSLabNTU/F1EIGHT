@@ -92,3 +92,20 @@ def test_reference_tolerates_localization_noise():
     r = kb.run(Reference({}, V), cp, (0.0, 0.0, 0.0),
                params=kb.BenchParams(pose_noise_std=0.03, yaw_noise_std=math.radians(1.0)))
     assert r.finished and r.cross_track_rmse <= 0.10
+
+
+def test_reference_lookahead_does_not_shrink_at_the_path_end():
+    """The target past the end continues along the last heading (car C, lab2_straight_2m_3:
+    full lock 0.5 m before the stop, then the opposite lock past it)."""
+    path = Path([0.0, 1.0, 2.0], [0.0, 0.0, 0.0], [0.8, 0.8, 0.8])
+    ref = Reference({}, V)
+    # 5 cm left of the line, 0.2 m before the end, at speed: a gentle correction to the right
+    near = ref.step(VehicleState(1.8, 0.05, 0.0, 0.8), path, 0.03).steering_angle
+    assert -0.1 < near < 0.0
+    # past the end, still left of it: the same direction, not the opposite lock
+    past = ref.step(VehicleState(2.1, 0.05, 0.0, 0.8), path, 0.03).steering_angle
+    assert -0.1 < past < 0.0
+    # before the end the target is the path's own point
+    from autosdv_waypoint_lab.reference.path_tracker import target_point
+    assert target_point(path, 1.5) == pytest.approx((1.5, 0.0))
+    assert target_point(path, 2.6) == pytest.approx((2.6, 0.0))

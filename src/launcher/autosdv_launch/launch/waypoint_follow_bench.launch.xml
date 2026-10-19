@@ -28,8 +28,10 @@
   detected), so the default stays camera:=virtual; the TA integration test
   (`just lab2 integration-test`) runs camera:=mock.
 
-  The EKF, the student tracker and SpeedPID, the gate
-  and the actuator's safety shell are the car's.
+  The EKF, the tracker, the gate and the vehicle model's interface (vehicle_model:=,
+  the reference autosdv_vehicle by default) are the car's. The plant reads the motor
+  PWM from the interface's /autosdv/actuator_node/debug/pwm_values, so a model that
+  stops publishing it does not move on the bench.
 -->
 <launch>
   <!-- `route` is the name the Lab 2 handout uses (a "course" reads as a class);
@@ -43,7 +45,10 @@
 
   <arg name="tracker_class" default="autosdv_waypoint_lab.reference.path_tracker:PathTracker"/>
   <arg name="tracker_param_file" default="$(find-pkg-share autosdv_waypoint_lab)/config/path_tracker.param.yaml"/>
-  <arg name="speed_controller_class" default="autosdv_vehicle_interface.speed_controller:AckermannSpeedPID"/>
+  <arg name="vehicle_model" default="autosdv_vehicle"
+       description="the vehicle model under test: autosdv_vehicle (the reference) or a team's, e.g. team3_vehicle"/>
+  <arg name="speed_controller_class" default=""
+       description="empty: the vehicle model's own controller; else passed to its vehicle interface"/>
   <arg name="speed_controller_params" default=""/>
   <arg name="speed_controller_dt_source" default="loop"/>
   <arg name="actuator_param_overrides"
@@ -74,6 +79,7 @@
 
   <include file="$(find-pkg-share autosdv_launch)/launch/waypoint_follow.launch.xml">
     <arg name="vehicle_id" value="$(var vehicle_id)"/>
+    <arg name="vehicle_model" value="$(var vehicle_model)"/>
     <arg name="course_dir" value="$(var course_dir)"/>
     <arg name="laps" value="$(var laps)"/>
     <arg name="is_simulation" value="true"/>
