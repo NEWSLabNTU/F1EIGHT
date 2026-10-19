@@ -1,8 +1,8 @@
 # Lab 2 Part 1: the TA REFERENCE's tuned parameters (TA-only; removed from the student branch).
 # Used with autosdv_waypoint_lab.reference.speed_pid_part1:SpeedPID by --class runs,
 # part1_calibrate.py (the limits are 1.5 x this controller's worst case) and part1_tolerance.py.
-# The students' starting point is config/speed_pid_part1.yaml (detuned, = the handout's and the
-# stub's defaults): a correct implementation with those values passed 18/27 checks on --final
+# The students' starting point is config/speed_pid_part1.yaml (detuned, = the stub's defaults
+# and every team model's starting sim tuning): a correct implementation with those values passed 18/27 checks on --final
 # (16.67/25; hold_rmse_11, stop_lag and stop_error fail on every variant), measured 2026-10-19
 # on the simplified course with this reference's code.
 #

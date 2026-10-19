@@ -38,8 +38,9 @@ two modes:
     brake_pwm(), which skips the dead band.
 
 `params` holds the actuator's motor parameters (init_pwm, min_pwm, max_pwm,
-brake_pwm, rate, ...) merged with the mapping in config/speed_pid.yaml, which
-wins on a collision. Every key is read below with a default.
+brake_pwm, rate, ...) merged with the speed_controller_params mapping of your
+model's config/sim/speed_controller.param.yaml (config/car_<x>/ on a real car),
+which wins on a collision. Every key is read below with a default.
 
 `measured_speed` is the hall-sensor speed after the shell's low-pass filter; it
 is never negative, since the sensor has no direction. `dt` is the time since the
@@ -73,7 +74,8 @@ class SpeedPID:
         self.init_pwm = int(get('init_pwm', 370))   # neutral [counts]
         self.min_pwm = int(get('min_pwm', 360))     # lowest count the shell passes
         self.max_pwm = int(get('max_pwm', 470))     # highest count the shell passes
-        # The PID (config/speed_pid.yaml). The defaults are a starting point, not tuned.
+        # The PID (config/sim/speed_controller.param.yaml, under speed_controller_params).
+        # The defaults are a starting point, not tuned.
         self.kp = float(get('kp', 12.0))            # [counts per m/s]
         self.ki = float(get('ki', 10.0))            # [counts per m]
         self.kd = float(get('kd', 0.0))             # [counts per m/s^2]
@@ -90,7 +92,7 @@ class SpeedPID:
         self.brake_enter = float(get('brake_enter', 0.15))  # enter when e < -brake_enter [m/s]
         self.brake_exit = float(get('brake_exit', 0.05))    # leave when e > -brake_exit [m/s]
         self.brake_deadband = int(get('brake_deadband', 5))  # counts below neutral that do nothing
-        # The feed-forward, calibrated on a fresh battery (config/speed_pid.yaml says more)
+        # The feed-forward, calibrated on a fresh battery (the tuning file says more)
         self.ff_deadband = float(get('ff_deadband', 5.27))   # d [counts]
         self.ff_gain = float(get('ff_gain', 0.1433))         # g [m/s per count]
         self.reset()
