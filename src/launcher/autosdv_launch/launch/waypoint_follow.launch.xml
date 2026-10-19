@@ -99,6 +99,11 @@
   <!-- the car -->
   <arg name="sensor_suite" default="robin_zed" description="autosdv.launch.yaml sensor suite; default: the vehicle_id preset's"/>
   <arg name="rviz" default="false"/>
+  <!-- live_view: RViz with the route (white), the trail the localizer has put the car on
+       (red) and the marker fixes, on viewer_display; `just lab2 run` turns it on when it
+       has a display. The stack itself never has one (the ZED: scripts/camera_display.sh). -->
+  <arg name="live_view" default="false"/>
+  <arg name="viewer_display" default="$(env DISPLAY '')" description="the X display the live view opens on"/>
   <arg name="actuator_param_overrides"
        default="$(find-pkg-share autosdv_waypoint_lab)/config/actuator_lab2.param.yaml"
        description="the measured steering ratio for this car"/>
@@ -265,6 +270,13 @@
     <arg name="course_dir" value="$(var course_dir)"/>
     <arg name="use_ar_tag_localizer" value="$(var use_ar_tag_localizer)"/>
     <arg name="ar_tag_container" value="$(var ar_tag_container)"/>
+  </include>
+
+  <include file="$(find-pkg-share autosdv_aruco_localization)/launch/loc_check.launch.xml" if="$(var live_view)">
+    <arg name="course_dir" value="$(var course_dir)"/>
+    <arg name="rviz" value="true"/>
+    <arg name="viewer_display" value="$(var viewer_display)"/>
+    <arg name="use_sim_time" value="$(var use_sim_time)"/>
   </include>
 
   <include file="$(find-pkg-share autosdv_launch)/launch/components/autosdv_pursuit_control_component.launch.xml">

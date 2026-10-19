@@ -262,8 +262,15 @@ def _align_module():
     return align
 
 
-def _tree_bytes(d: Path) -> dict:
-    return {str(p.relative_to(d)): p.read_bytes() for p in sorted(d.rglob('*')) if p.is_file()}
+def _same_files(new: Path, old: Path) -> bool:
+    """Every file in new is in old with the same bytes. Files a run adds (the live view's
+    loc_check_summary.txt) do not count: they are not the course."""
+    for p in new.rglob('*'):
+        if p.is_file():
+            q = old / p.relative_to(new)
+            if not q.is_file() or q.read_bytes() != p.read_bytes():
+                return False
+    return True
 
 
 def run_course(latest: Path, route: str) -> Tuple[Optional[Path], str]:
@@ -291,7 +298,7 @@ def run_course(latest: Path, route: str) -> Tuple[Optional[Path], str]:
     try:
         _align_module().write_route_course(str(real), str(t), str(tmp))
         (tmp / RUN_COURSE_KEY).write_text(f'{real}\n{t}\n')
-        if out.is_dir() and _tree_bytes(out) == _tree_bytes(tmp):
+        if out.is_dir() and _same_files(tmp, out):
             shutil.rmtree(tmp)
             return out, f'{real.name} with route {t.name}'
         old = None
