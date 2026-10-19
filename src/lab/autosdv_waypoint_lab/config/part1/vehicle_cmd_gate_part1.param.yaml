@@ -7,8 +7,9 @@
 # come in bursts (two commands a few ms apart), so the 5 m/s^2 default clipped commands on
 # the profile's 2.5 m/s^2 ramps in some runs and not others: the target the student's
 # controller saw depended on the host's load. 50 m/s^2 never binds. The profile itself limits
-# acceleration to 2.5 m/s^2, lab2_part1_scenario ramps the resume after the e-stop, and the
-# e-stop brakes through the emergency flag, not the target, so nothing relied on the limit.
+# acceleration to 2.5 m/s^2, and an e-stop (only on a profile that asks for one; the graded
+# course has none) brakes through the emergency flag and ramps its resume in
+# lab2_part1_scenario, not through this limit, so nothing relied on it.
 # on_transition: the same for the first ~0.1 s after the engage (1 m/s^2 there, measured
 # clipping the launch from 0.25 m/s).
 # Everything else in the gate (engage, emergency, operation mode, steering limits) is as
