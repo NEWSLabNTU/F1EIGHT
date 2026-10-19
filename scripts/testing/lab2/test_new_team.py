@@ -96,12 +96,14 @@ def test_generate_renames_packages_and_keeps_the_car_file(tmp_path):
     assert (root / 'team3_vehicle_interface/test/golden.bin').read_bytes() == b'\x00\xff'
     assert 'config' in (root / 'team3_vehicle_launch/CMakeLists.txt').read_text()
     import yaml
-    # the car model: the car files only, from the car seed
-    assert [p.name for p in (root / 'team3_vehicle_launch/config').iterdir()] == ['car_a']
-    f = root / 'team3_vehicle_launch/config/car_a/speed_controller.param.yaml'
-    assert yaml.safe_load(f.read_text())['/**']['ros__parameters']['speed_controller_params'] == \
-        {'kp': 20.0}
-    assert 'Keep equal' not in f.read_text()
+    # the car model: every car, and sim for the vehicle bench, all from the car seed
+    assert sorted(p.name for p in (root / 'team3_vehicle_launch/config').iterdir()) == ['car_a', 'sim']
+    for vid in ('car_a', 'sim'):
+        f = root / f'team3_vehicle_launch/config/{vid}/speed_controller.param.yaml'
+        assert yaml.safe_load(f.read_text())['/**']['ros__parameters']['speed_controller_params'] == \
+            {'kp': 20.0}
+        assert 'Keep equal' not in f.read_text()
+    assert 'vehicle bench' in (root / 'team3_vehicle_launch/config/sim/speed_controller.param.yaml').read_text()
     desc = (root / 'team3_vehicle_description/CMakeLists.txt').read_text()
     assert 'find_package(autosdv_vehicle_description REQUIRED)' in desc
     assert not (root / 'team3_vehicle_description/config').exists()   # by reference, no copy
@@ -143,8 +145,8 @@ def test_the_pinned_reference_generates(tmp_path):
     files, source = nt.read_reference()
     root = nt.generate(5, tmp_path, files, source, nt.read_lab_files(worktree=True),
                        nt.vehicle_ids())
-    assert {'car_a', 'car_b', 'car_c'} == {p.name for p in
-                                          (root / 'team5_vehicle_launch/config').iterdir()}
+    assert {'car_a', 'car_b', 'car_c', 'sim'} == {p.name for p in
+                                                 (root / 'team5_vehicle_launch/config').iterdir()}
     assert (root / 'team5_vehicle_launch/launch/vehicle_interface.launch.xml').is_file()
     for p in root.rglob('*'):
         if p.is_file() and p.suffix in ('.py', '.xml', '.cfg'):

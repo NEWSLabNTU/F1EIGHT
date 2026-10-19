@@ -234,7 +234,7 @@ ament_package()
     }
 
 
-def tuning_file(model: str, vehicle_id: str, seed: str, seed_name: str) -> str:
+def tuning_file(model: str, vehicle_id: str, seed: str, seed_name: str, bench: bool = False) -> str:
     """config/<vehicle_id>/speed_controller.param.yaml: the seed's SpeedPID mapping, nested
     under speed_controller_params (the actuator merges speed_controller_params.<key> into the
     controller's parameters), comments kept."""
@@ -242,11 +242,13 @@ def tuning_file(model: str, vehicle_id: str, seed: str, seed_name: str) -> str:
     if lines and lines[0].startswith('# A copy of the Lab 2 handout'):   # our provenance note
         lines = lines[lines.index('#') + 1:] if '#' in lines else lines
     body = ''.join(('      ' + ln if ln.strip() else '') + '\n' for ln in lines)
+    bench_note = (" This sim file is the Part 2 vehicle bench's (`just lab2 run` on a\n"
+                  "# workstation, the gate's route): vehicle_id:=sim, the nominal car, with the car\n"
+                  "# gains." if bench else '')
     return f'''# {model}'s speed controller tuning on {vehicle_id}: YOURS. The vehicle interface loads
 # it after the car's individual_params actuator.param.yaml (the car's PWM points, which are
 # not yours to change), so these values win over both actuator.yaml and the car's file.
-# One file per vehicle_id: sim is the RC simulator's car (Part 1), car_a/b/c the real cars.
-# Seeded from autosdv_waypoint_lab's {seed_name}.
+# One file per vehicle_id.{bench_note} Seeded from autosdv_waypoint_lab's {seed_name}.
 /**:
   ros__parameters:
     speed_controller_params:
@@ -378,7 +380,10 @@ def generate(n, dest: Path, files: Dict[str, bytes], source: str,
         raise NewTeamError(f'kind {kind!r}: one of {", ".join(KINDS)}')
     model = {'car': model_name(n) if kind == 'car' else None, 'template': PLACEHOLDER,
              'sim': lab2_ws.SIM_MODEL}[kind]
-    ids = [i for i in ids if (i == SIM_ID) == (kind == 'sim')]
+    # the sim model: the simulator's car only. A car model: every car, plus sim with the CAR
+    # gains, because the Part 2 vehicle bench (`just lab2 run` on a workstation, the gate's
+    # route) runs vehicle_id:=sim, the nominal car, and the launch needs its file
+    ids = [i for i in ids if i == SIM_ID] if kind == 'sim' else list(ids)
     if not ids:
         raise NewTeamError(f'no vehicle_id for a {kind} model among the individual_params instances')
     root = Path(dest) / f'{model}_launch'
@@ -414,9 +419,10 @@ def generate(n, dest: Path, files: Dict[str, bytes], source: str,
     lab = read_lab_files() if lab is None else lab
     out[f'{model}_interface/{model}_interface/speed_pid.py'] = lab[STUB]   # byte for byte
     for vid in ids:
-        seed = SIM_SEED if vid == SIM_ID else CAR_SEED
+        seed = SIM_SEED if kind == 'sim' else CAR_SEED
         out[f'{model}_launch/config/{vid}/speed_controller.param.yaml'] = tuning_file(
-            model, vid, lab[seed].decode(), Path(seed).name).encode()
+            model, vid, lab[seed].decode(), Path(seed).name,
+            bench=(vid == SIM_ID and kind != 'sim')).encode()
     out['README.md'] = readme(model, {'car': n, 'template': 'N', 'sim': 0}[kind], source,
                               'sim' if kind == 'sim' else 'car').encode()
     tmp = root.with_name(root.name + '.tmp')
