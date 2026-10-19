@@ -17,10 +17,8 @@ Two halves, in order (docs/design/lab2-team-vehicle-models.md):
     just lab2 gate ... --only hall_demo             another course instead
     just lab2 gate --list
 
-A full pass (both halves, every car, no --cars or --only) is recorded in
-~/lab2/gate/<model>.json with a digest of the model's source; `just lab2 run` on a car
-refuses a team model whose source is not the one that passed. Exit status is the number of
-FAILs. Arguments after the options go to the bench's launch file unchanged.
+A model must pass the gate before it goes on a car: a rule the TA checks, not something
+`just lab2 run` enforces. Exit status is the number of FAILs. Arguments after the options go to the bench's launch file unchanged.
 
 A route PASSES when all of these hold:
 
@@ -340,9 +338,9 @@ def main():
     ap.add_argument('--timeout', type=float, default=150.0, help='per route [s]')
     ap.add_argument('--workdir', default=str(REPO / 'tmp/lab2_bench_gate'))
     ap.add_argument('--cars', default='', help='the safety half on these cars only (comma list; '
-                    'default every car_* instance); a partial gate is not recorded')
+                    'default every car_* instance)')
     ap.add_argument('--skip-safety', action='store_true',
-                    help='the route half only (debugging; not recorded)')
+                    help='the route half only (debugging)')
     args, extra = ap.parse_known_args()
     if args.list:
         print('\n'.join(ROUTES))
@@ -374,7 +372,6 @@ def main():
         if not safety_ok:
             print(f'route not run: {model} failed the safety half', flush=True)
             print('\n  -> GATE FAILED')
-            record(model, False, args, safety, [], routes)
             return 1
     print('launch args: ' + (' '.join(extra) or '(defaults)'), flush=True)
     rclpy, mon = make_monitor()
@@ -397,22 +394,7 @@ def main():
     fails = sum(1 for r in results if not r['ok'])
     print(f'\n{len(results) - fails}/{len(results)} routes passed'
           + ('  -> GATE PASSED' if not fails and safety_ok else '  -> GATE FAILED'))
-    record(model, not fails and safety_ok, args, safety, results, routes)
     return fails
-
-
-def record(model, ok, args, safety, results, routes):
-    """~/lab2/gate/<model>.json for a FULL gate (every car, the graded routes); a partial
-    one (--cars, --only, --skip-safety) proves less and is not recorded."""
-    if args.cars or args.only or args.skip_safety:
-        print(f'(a partial gate: not recorded for `just lab2 run`)')
-        return
-    import gate_stamp
-    p = gate_stamp.write(model, ok, {
-        'routes': [{k: v for k, v in r.items()} for r in results],
-        'safety': [{k: v for k, v in r.items() if k != 'samples'} for r in safety],
-        'route_names': routes})
-    print(f'recorded: {p}')
 
 
 if __name__ == '__main__':

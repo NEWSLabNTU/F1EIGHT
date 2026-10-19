@@ -229,19 +229,6 @@ def test_an_unbuilt_model_says_how_to_build_it():
         lr.resolve_model(lr.parse_args(['team:=3']), Settings(), built())
 
 
-def test_the_car_needs_a_gate_pass_of_this_source(tmp_path):
-    import gate_stamp as gs
-    assert gs.check('autosdv_vehicle', tmp_path, digest='x') == (True, '')
-    ok, why = gs.check('team3_vehicle', tmp_path, digest='abc')
-    assert not ok and 'has not passed' in why
-    gs.write('team3_vehicle', False, {}, tmp_path, digest='abc')
-    assert 'FAILED' in gs.check('team3_vehicle', tmp_path, digest='abc')[1]
-    gs.write('team3_vehicle', True, {}, tmp_path, digest='abc')
-    assert gs.check('team3_vehicle', tmp_path, digest='abc') == (True, '')
-    ok, why = gs.check('team3_vehicle', tmp_path, digest='edited')
-    assert not ok and 'changed since' in why
-
-
 def test_gate_verdict_passes_a_clean_finish():
     ok, line = lr.gate_verdict(lr.End('finished', 'stopped'), 'lab2_uturn', 0.8, 1,
                                [0.0, 0.8, 0.8, 0.79, 0.0], laps_done=1, faults=[],

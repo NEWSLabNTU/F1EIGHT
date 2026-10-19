@@ -16,8 +16,8 @@ The model: a team submits its Autoware vehicle model (docs/design/lab2-team-vehi
 built in ~/lab2/ws (`just lab2 new-team N`, `just lab2 build-teams`). team:=N runs
 teamN_vehicle and records team N; vehicle_model:=M runs M, its team number from a teamN_vehicle
 name, else team_number:=, else the settings' `team`, else 0 for the reference
-(autosdv_vehicle). On a car a team model must have passed `just lab2 gate` on this machine
-with its current source (gate_stamp.py); the reference is the TA's and is not held to it.
+(autosdv_vehicle). Passing `just lab2 gate` before a car run is a rule of the lab, which the
+TA checks; this command does not enforce it.
 
 Car or bench (lab2_env.decide_mode): --bench / --car decide; otherwise a Jetson
 (/etc/nv_tegra_release) is a car and anything else a workstation. A car needs its letter
@@ -1001,11 +1001,6 @@ def main(argv=None) -> int:
         c = lc.Config(cli, cfg_file)
         extra, note, model = resolve_model(o, c)
         mode = le.decide_mode(le.car_hardware(), c.get('car'), o.bench, o.car)
-        if mode == 'car':
-            import gate_stamp
-            may, why = gate_stamp.check(model)
-            if not may:
-                raise UsageError(f'{why}. A model drives a car only after it passed the gate')
     except (UsageError, lc.ConfigError, le.Lab2EnvError) as e:
         print(f'lab2 run: {e}', file=sys.stderr)
         return 2

@@ -25,8 +25,9 @@ Checks (protocol 3.1 numbering in brackets):
               because a dry run does not publish its exit write
   fault   [4] a SpeedPID that raises in update(): neutral, retry after the
               holdoff, disabled after 3 faults, the node stays up
-  speedpid    the course's reference SpeedPID drives the car; the handout's
-              stub (returns neutral) does not
+  speedpid    the course's reference SpeedPID drives the car; the student stub
+              (autosdv_waypoint_lab/stub/speed_pid_part1.py, a team template's
+              speed_pid.py; returns neutral) does not
 
 Rules it keeps on a shared host: it runs on ROS_DOMAIN_ID (default 73, refuses
 0), starts each bench with setsid and stops it by process group, signals only
@@ -525,11 +526,14 @@ def check_fault(mon, args, env, workdir):
 
 def check_speedpid(mon, args, env, workdir):
     ref = args.course / 'ta' / 'reference' / 'speed_pid.py'
-    ref_yaml = args.course / 'handout' / 'lab2_speed' / 'config' / 'speed_pid_car.yaml'
+    # the car gains and the stub as a team model's template has them (new_team.py's seeds);
+    # the reference SpeedPID is the TA's, from the course repository
+    lab = REPO / 'src/lab/autosdv_waypoint_lab'
+    ref_yaml = lab / 'config' / 'speed_pid_car.yaml'
     ref_cal = args.course / 'ta' / 'cars' / 'car_A' / 'calibration_ref.yaml'
-    stub = args.course / 'handout' / 'lab2_speed' / 'lab2_speed' / 'speed_pid.py'
-    if not (ref.exists() and stub.exists()):
-        report('speedpid', False, f'{ref} or {stub} not found (--course)')
+    stub = lab / 'autosdv_waypoint_lab' / 'stub' / 'speed_pid_part1.py'
+    if not ref.exists():
+        report('speedpid', False, f'{ref} not found (--course)')
         return
     plug = workdir / 'plugins' / 'lab2_bench_plugins'
     shutil.rmtree(plug.parent, ignore_errors=True)
