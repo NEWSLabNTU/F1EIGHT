@@ -162,9 +162,11 @@ class SpeedPID:
         # TODO 3: the derivative term D, on the MEASUREMENT, not on the error (a step in
         #   the target must not kick the output):
         #       raw = -kd * (measured_speed - last_measured) / dt
-        #   only when dt > 0 and there is a previous measurement; otherwise raw is not
-        #   defined and D is 0. Pass raw through self.filter_derivative() and use what it
-        #   returns. Remember measured_speed in self.last_measured for the next call.
+        #   only when dt > 0 and there is a previous measurement: pass raw through
+        #   self.filter_derivative() and use what it returns as D. Otherwise (dt == 0, or
+        #   no previous measurement, as on the first call after a start or a reset()) raw
+        #   is not defined: D is 0 for this call, and filter_derivative() is not called.
+        #   Either way, remember measured_speed in self.last_measured for the next call.
         #
         # TODO 4: the BRAKING MODE (self.braking), with hysteresis:
         #   - not braking: enter it when e < -brake_enter (the car too fast by more

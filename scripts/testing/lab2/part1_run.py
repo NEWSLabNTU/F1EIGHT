@@ -55,8 +55,12 @@ does not resolve).
 ROS_DOMAIN_ID: an exported non-zero value is used as it is. Unset or 0, the runner uses a
 per-user domain, 1 + uid % 100 (never 0), so two users' runs on one host do not cross-talk
 and a laptop's `export ROS_DOMAIN_ID=0` does not collide with other stacks; it prints the
-value to export for `ros2 topic echo` beside the run. LAB2_WEB_ADDR (or --web-addr) moves
-the web UI.
+value to export for `ros2 topic echo` beside the run. The web UI (play_launch's) is likewise
+per user, 127.0.0.1:(8081 + uid % 100), unless LAB2_WEB_ADDR (or --web-addr) moves it, so
+two users on one workstation run side by side without colliding.
+
+Each run overwrites <out>/<variant>/: the runner ends by saying where the outputs are and,
+unless --name or --out was given, that `--name LABEL` keeps a run for the report.
 """
 import argparse
 import json
@@ -138,7 +142,9 @@ def parse(argv):
                     help='[s wall] simulated time frozen this long ends the run (default 30)')
     ap.add_argument('--startup-timeout', type=float, default=120.0,
                     help='[s wall] until the grader reports (default 120)')
-    ap.add_argument('--web-addr', default=os.environ.get('LAB2_WEB_ADDR', '127.0.0.1:8081'))
+    ap.add_argument('--web-addr', default=os.environ.get('LAB2_WEB_ADDR') or default_web_addr(),
+                    help='play_launch web UI (default: $LAB2_WEB_ADDR, else 127.0.0.1:'
+                         '8081 + uid %% 100, per user)')
     ap.add_argument('launch_args', nargs='*', metavar='key:=value',
                     help='passed to the launch file; submission:=, variant:=, rviz:=, gui:=, '
                          'out:= are the options above')
@@ -237,6 +243,12 @@ def domain_id(env):
     if v and v != '0':
         return v, 'exported'
     return str(1 + os.getuid() % 100), 'per-user default, 1 + uid % 100'
+
+
+def default_web_addr(uid=None):
+    """The per-user web UI address: 127.0.0.1:(8081 + uid % 100), as the domain id."""
+    uid = os.getuid() if uid is None else uid
+    return f'127.0.0.1:{8081 + uid % 100}'
 
 
 def launch_rtf(launch_args):
@@ -547,6 +559,14 @@ def print_marks(marks, run, table=True):
         f"wall {run['wall_s']} s)")
 
 
+def keep_hint(out_root, chosen):
+    """The closing line: where the outputs are, and how to keep them from the next run."""
+    if chosen:
+        return f'\noutputs in {out_root}'
+    return (f'\noutputs in {out_root}; the next run with the same name overwrites them; '
+            'add --name LABEL to keep this one')
+
+
 def main(argv=None):
     args = parse(sys.argv[1:] if argv is None else argv)
     try:
@@ -571,7 +591,7 @@ def main(argv=None):
         loud('WARNING: no submission given: running the STUB, which holds neutral (the car will '
              'not move). Pass submission:=DIR, or set `part1_submission:` in ~/lab2/lab2.yaml.')
     dim(f'ROS_DOMAIN_ID {env["ROS_DOMAIN_ID"]} ({why_domain}; export it to watch with ros2), '
-        f'controller: {" ".join(ctrl_args)}')
+        f'web UI {args.web_addr}, controller: {" ".join(ctrl_args)}')
     results = [run_one(args, v, ctrl_args, pythonpath, out_root, env) for v in variants]
 
     valid = all(m.get('valid', False) for m in results)
@@ -592,6 +612,7 @@ def main(argv=None):
              f"{out_root / 'final.json'}")
     if stub:
         loud('(that was the stub: pass submission:=DIR to run your SpeedPID)')
+    info(keep_hint(out_root, chosen=bool(args.name or args.out)))
     return 0 if valid else 1
 
 
