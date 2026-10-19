@@ -1,12 +1,12 @@
 #!/usr/bin/env python3
-"""`just lab2 survey-align [SURVEY_DIR]`: stage 2 of the Lab 2 survey.
+"""`just aruco-map align [SURVEY_DIR]`: stage 2 of the Lab 2 survey.
 
-    just lab2 survey-align                     surveys/latest, route and car from the settings (--vehicle-id car_b: another car)
-    just lab2 survey-align surveys/2026-10-16_10-02-11 [--route lab2_uturn]
-    just lab2 survey-align --force             write even if a check refuses (with a warning)
-    just lab2 survey-align --bench --truth DIR the vehicle bench: no car (below)
+    just aruco-map align                     surveys/latest, route and car from the settings (--vehicle-id car_b: another car)
+    just aruco-map align surveys/2026-10-16_10-02-11 [--route lab2_uturn]
+    just aruco-map align --force             write even if a check refuses (with a warning)
+    just aruco-map align --bench --truth DIR the vehicle bench: no car (below)
 
-Stage 1 (`just lab2 survey ID`) measured where the boards stand relative to one
+Stage 1 (`just aruco-map scan ID`) measured where the boards stand relative to one
 another, in a frame anchored on one board. This puts that map into the ROUTE's
 frame, the one the taped route and path.csv use: origin at the start box, x
 along the first leg (autosdv_marker_survey/align.py has the maths).
@@ -27,7 +27,7 @@ along the first leg (autosdv_marker_survey/align.py has the maths).
      only the report; `lab2_survey_align_solve SURVEY_DIR --force` aligns the
      recorded drive again without the car.
 
-Afterwards `just lab2 loc-check` and `just lab2 run` use the aligned survey
+Afterwards `just aruco-map check` and `just lab2 run` use the aligned survey
 (surveys/latest) with the route's path.
 
 --bench: the same on the vehicle bench. The bench plant starts at the start
@@ -76,7 +76,7 @@ class Usage(Exception):
 
 def parse(argv):
     import argparse
-    ap = argparse.ArgumentParser(prog='just lab2 survey-align', description=__doc__,
+    ap = argparse.ArgumentParser(prog='just aruco-map align', description=__doc__,
                                  formatter_class=argparse.RawDescriptionHelpFormatter)
     ap.add_argument('survey_dir', nargs='?', default='surveys/latest')
     ap.add_argument('--route', default=None, help='the route template (default: the settings\' route)')
@@ -92,7 +92,7 @@ def parse(argv):
     ap.add_argument('--config', default=None)
     ap.add_argument('--vehicle-id', default=None,
                     help='car_a, car_b or car_c: the car\'s instance, individual_params/config/<id> '
-                         '(default: the settings\' car; --bench: sim, the nominal car)')
+                         '(default: the settings\' car, else sim, the nominal car)')
     a = ap.parse_args(argv)
     if a.vehicle_id is None and not a.bench:
         try:
@@ -100,9 +100,7 @@ def parse(argv):
             a.vehicle_id = lc.vehicle_id_of(car) if car else None
         except lc.ConfigError as e:
             ap.error(str(e))
-        if a.vehicle_id is None:
-            ap.error('no car: pass --vehicle-id car_a|car_b|car_c, or set `car` '
-                     '(`just lab2 init car:=A|B|C`)')
+    # nothing here drives (the actuator is a dry run): no car is the nominal car
     if a.vehicle_id is None:
         a.vehicle_id = 'sim'
     if a.bench and not a.truth:
@@ -364,14 +362,14 @@ def main(argv=None) -> int:
     try:
         a = parse(argv)
     except Usage as e:
-        print(f'lab2 survey-align: {e}', file=sys.stderr)
+        print(f'aruco-map align: {e}', file=sys.stderr)
         return 2
     from autosdv_marker_survey import align as al
     survey = Path(a.survey_dir)
     if not survey.is_absolute():
         survey = REPO / survey
     if not survey.is_dir():
-        print(f'lab2 survey-align: no survey directory {survey}: run `just lab2 survey ID` first',
+        print(f'aruco-map align: no survey directory {survey}: run `just aruco-map scan ID` first',
               file=sys.stderr)
         return 1
     survey = survey.resolve()
@@ -379,13 +377,13 @@ def main(argv=None) -> int:
         route = resolve_route(a)
         stage1 = al.prepare_stage1(str(survey))
     except (ValueError, lc.ConfigError) as e:
-        print(f'lab2 survey-align: {e}', file=sys.stderr)
+        print(f'aruco-map align: {e}', file=sys.stderr)
         return 1
     truth = None
     if a.bench:
         truth = Path(a.truth).resolve()
         if not (truth / 'course.yaml').is_file():
-            print(f'lab2 survey-align: --truth {truth} has no course.yaml', file=sys.stderr)
+            print(f'aruco-map align: --truth {truth} has no course.yaml', file=sys.stderr)
             return 2
     tty = sys.stdout.isatty()
 
@@ -403,7 +401,7 @@ def main(argv=None) -> int:
     if a.bench:
         env.setdefault('ROS_DOMAIN_ID', '73')
         if env['ROS_DOMAIN_ID'] == '0':
-            print('lab2 survey-align: refusing the bench on ROS_DOMAIN_ID 0 (shared host)', file=sys.stderr)
+            print('aruco-map align: refusing the bench on ROS_DOMAIN_ID 0 (shared host)', file=sys.stderr)
             return 2
         env.setdefault('LAB2_WEB_ADDR', '127.0.0.1:8093')
         os.environ['ROS_DOMAIN_ID'] = env['ROS_DOMAIN_ID']
@@ -515,7 +513,7 @@ def main(argv=None) -> int:
         kw['max_lateral'] = a.max_lateral
     res, _ = al.solve_dir(str(survey), route, samples, force=a.force, log=say, pnp=pnp, **kw)
     if res.ok:
-        say('next: `just lab2 loc-check` (drive the route by hand), then `just lab2 run`')
+        say('next: `just aruco-map check` (drive the route by hand), then `just lab2 run`')
     return 0 if res.ok else 1
 
 

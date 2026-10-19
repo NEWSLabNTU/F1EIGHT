@@ -221,7 +221,7 @@ preflight *ARGS:
     source scripts/env.sh
     exec python3 scripts/testing/lab2/waypoint_preflight.py "$@"
 
-#   just lab2 health                         beside `just lab2 run` / loc-check, in a second tmux window; Ctrl-C ends it
+#   just lab2 health                         beside `just lab2 run` / `just aruco-map check`, in a second tmux window; Ctrl-C ends it
 #   just lab2 health --duration 120          two minutes
 #   just lab2 health --with-run              file it under <bag_dir>/run_logs/<the run's bag>/
 #   just lab2 health --kernel                also one kernel_cpu_report.sh snapshot at the end
@@ -395,31 +395,7 @@ camera-check COURSE="src/lab/autosdv_waypoint_lab/config/courses/hall_demo" SECO
     source scripts/env.sh
     exec ros2 run autosdv_waypoint_lab lab2_camera_check '{{ COURSE }}' --duration '{{ SECONDS }}'
 
-#   just lab2 loc-check courses/my_hall       car in the start box; selector on the joystick
-# Nothing here can drive the car (no tracker, no engage, the actuator as a dry run).
-#   just lab2 loc-check                         surveys/latest, the most recent survey
-# Localization check: drive the surveyed course BY HAND, watch the trail in RViz
-[positional-arguments]
-loc-check *ARGS:
-    #!/usr/bin/env bash
-    dir=surveys/latest
-    if [ $# -gt 0 ] && [[ $1 != -* && $1 != *:=* ]]; then dir=$1; shift; fi
-    if [ ! -d "$dir" ]; then
-        echo "error: no course directory '$dir': run \`just lab2 survey ORIGIN_ID\` first, or name one" >&2; exit 1
-    fi
-    dir=$(realpath "$dir")
-    # car (settings file or car:=) -> vehicle_id:=car_<car>; without one, sim (nothing drives)
-    source scripts/testing/lab2/lab2_config.sh
-    lab2_config loc-check "$@" || exit 2
-    # The ZED never gets a DISPLAY (camera_display.sh says why); viewers get it back.
-    source scripts/testing/lab2/camera_display.sh
-    lab2_camera_display
-    rviz=false; [ -n "$VIEWER_DISPLAY" ] && rviz=true
-    cmd=(play_launch launch --web-addr '{{ web_addr }}' autosdv_launch waypoint_loc_check.launch.xml
-         "course_dir:=$dir" "rviz:=$rviz" "viewer_display:=$VIEWER_DISPLAY" "${LAB2_ARGS[@]}")
-    printf '\033[2m%s\033[0m\n' "${cmd[*]}"
-    source scripts/env.sh
-    exec "${cmd[@]}"
+# The localization check moved: `just aruco-map check` (just/aruco_map.just).
 
 # --- Steering calibration (car gate): hold a servo offset, fit the ratio from the circles ----
 #   just control basic vehicle_id:=car_b     terminal 1: actuator on this car's PWM; no gate, spotter stops
@@ -443,80 +419,7 @@ steer-fit *PAIRS:
     source scripts/env.sh
     exec ros2 run autosdv_waypoint_lab lab2_steer_cal fit "$@"
 
-# --- Marker survey: map the hall's markers with the car's ZED --------------------------------
-# Drive or push the car slowly past every marker, then Ctrl-C (or `just lab2 survey-save`):
-#   just lab2 survey 24                                    a new surveys/<date>_<time>, origin marker 24
-#   just lab2 survey courses/my_hall 24                    or name the directory
-#   just lab2 survey courses/my_hall 3 dictionary:=ARUCO_MIP_36h12 marker_size:=0.25
-# surveys/latest points at the directory of the most recent survey, named or dated, and
-# survey-solve and loc-check use it when no directory is given.
-# Writes COURSE_DIR (default surveys/<date>_<time>)/course.yaml, the map, and a report.
-[positional-arguments]
-survey *ARGS:
-    #!/usr/bin/env bash
-    if [[ ${1-} =~ ^[0-9]+$ ]]; then
-        dir=$PWD/surveys/$(date +%Y-%m-%d_%H-%M-%S)
-    elif [ $# -ge 2 ]; then
-        dir=$(realpath -m "$1"); shift
-    else
-        echo "usage: just lab2 survey [COURSE_DIR] ORIGIN_ID [ARGS...]" >&2; exit 2
-    fi
-    origin="$1"; shift
-    if ! [[ $origin =~ ^[0-9]+$ ]]; then
-        echo "error: ORIGIN_ID must be a marker id, got '$origin'" >&2; exit 2
-    fi
-    mkdir -p "$dir" surveys
-    case "$dir" in "$PWD"/surveys/*) target=${dir#"$PWD"/surveys/} ;; *) target=$dir ;; esac
-    ln -sfn "$target" surveys/latest
-    echo "survey -> $dir (surveys/latest)"
-    # car (settings file or car:=) -> vehicle_id:=car_<car>: the survey's URDF is that car's;
-    # without one, sim, the nominal car (no car's calibration is measured yet)
-    source scripts/testing/lab2/lab2_config.sh
-    lab2_config survey "$@" || exit 2
-    # The ZED never gets a DISPLAY (camera_display.sh says why); viewers get it back.
-    source scripts/testing/lab2/camera_display.sh
-    lab2_camera_display
-    viewer=false; [ -n "$VIEWER_DISPLAY" ] && viewer=true   # the detection video, given a display
-    cmd=(play_launch launch --web-addr '{{ web_addr }}' autosdv_marker_survey marker_survey.launch.xml
-         "course_dir:=$dir" "origin_id:=$origin" "viewer:=$viewer" "viewer_display:=$VIEWER_DISPLAY" "${LAB2_ARGS[@]}")
-    printf '\033[2m%s\033[0m\n' "${cmd[*]}"
-    source scripts/env.sh
-    exec "${cmd[@]}"
-
-# Solve and write the survey now, without stopping it
-survey-save:
-    #!/usr/bin/env bash
-    source scripts/env.sh
-    ros2 service call /marker_survey/save std_srvs/srv/Trigger {}
-
-#   just lab2 survey-solve                       surveys/latest
-#   just lab2 survey-solve courses/my_hall --origin 3
-# Solve a saved survey again (COURSE_DIR/survey_data.npz, default surveys/latest)
-[positional-arguments]
-survey-solve *ARGS:
-    #!/usr/bin/env bash
-    dir=surveys/latest
-    if [ $# -gt 0 ] && [[ $1 != -* && $1 != *:=* ]]; then dir=$1; shift; fi
-    if [ ! -d "$dir" ]; then
-        echo "error: no survey directory '$dir': run \`just lab2 survey ORIGIN_ID\` first, or name one" >&2; exit 1
-    fi
-    source scripts/env.sh
-    exec ros2 run autosdv_marker_survey lab2_marker_survey_solve "$dir/survey_data.npz" --course "$dir" "$@"
-
-#   just lab2 survey-align                       surveys/latest, the settings' car (--vehicle-id car_b: another); the car in the taped start box
-#   just lab2 survey-align surveys/<dir> [--route lab2_uturn] [--force]
-#   just lab2 survey-align DIR --bench --truth TRUTH_DIR      the vehicle bench, no car
-# READY, then drive the car STRAIGHT along the taped first leg (2 m or more), stop, Ctrl-C.
-# Nothing here can drive the car (no tracker, the actuator as a dry run). Writes the aligned
-# course (the route's path.csv, the boards in its frame) and align_report.txt into the survey;
-# the stage-1 result stays in DIR/stage1/. Then: loc-check, run.
-# Survey stage 2: put the survey into the route's frame (origin at the start box, x along the first leg)
-[positional-arguments]
-survey-align *ARGS:
-    #!/usr/bin/env bash
-    unset DISPLAY                       # the ZED cannot have one: scripts/testing/lab2/camera_display.sh
-    source scripts/env.sh
-    exec python3 scripts/testing/lab2/survey_align.py "$@"
+# The marker survey moved: `just aruco-map survey|scan|align|solve` (just/aruco_map.just).
 
 #   just lab2 plot                           the latest bag
 #   just lab2 plot rosbags/lab2_uturn_1

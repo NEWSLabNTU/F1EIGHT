@@ -297,7 +297,7 @@ def test_show_names_every_source(tmp_path):
 
 
 def _aligned_survey(root, route='lab2_uturn', path_text=None):
-    """A survey directory as `just lab2 survey-align` leaves it."""
+    """A survey directory as `just aruco-map align` leaves it."""
     import shutil
     src = lc.COURSES / route
     d = root / 'surveys' / '2026-10-16_10-00-00'
@@ -337,7 +337,7 @@ def test_a_stale_or_unaligned_survey_is_not_run(tmp_path, monkeypatch, capsys):
     ok, why = lc.aligned_for(d, 'lab2_uturn')
     assert not ok and 'older' in why
     assert lc.plan('vehicle', ['team_dir:=/t', 'car:=A'])[0][0] == 'route:=lab2_uturn'
-    assert 'run `just lab2 survey-align` again' in capsys.readouterr().err
+    assert 'run `just aruco-map align` again' in capsys.readouterr().err
     t = yaml.safe_load((d / 'course.yaml').read_text())
     del t['alignment']
     (d / 'course.yaml').write_text(yaml.safe_dump(t))

@@ -8,20 +8,20 @@ written for you.
 
 That is **stage 1**: it fixes where the boards stand relative to one another,
 in the origin board's frame. For a taped route (Lab 2's `lab2_uturn`),
-**stage 2**, `just lab2 survey-align`, puts the result into the route's
+**stage 2**, `just aruco-map align`, puts the result into the route's
 start-box frame from one straight drive along the taped first leg
 (`autosdv_marker_survey/align.py`; the field procedure is in
 `docs/guides/lab2-waypoint-stack.md`, "On the field").
 
 ```bash
-just lab2 survey courses/my_hall 24          # origin: marker 24 (one of the lab boards)
+just aruco-map scan courses/my_hall 24          # origin: marker 24 (one of the lab boards)
 #   ...drive slowly past every marker; the log names each new one...
-#   Ctrl-C, or in another terminal: just lab2 survey-save
+#   Ctrl-C, or in another terminal: ros2 service call /marker_survey/save std_srvs/srv/Trigger {}
 just lab2 course-map courses/my_hall         # coverage check, as for any course
 just lab2 camera-check courses/my_hall       # car in the start box: verify
 ```
 
-With a display (`DISPLAY` set), `just lab2 survey` also opens **rqt_image_view
+With a display (`DISPLAY` set), `just aruco-map scan` also opens **rqt_image_view
 on `/marker_survey/debug/image`**: the processed frames (5 Hz) with every
 detection drawn.
 - **Green:** a known marker, labelled `id (views)`.
@@ -108,7 +108,7 @@ and yaw uncertainty, and lean from vertical (`tilt_deg`; the orientation also sp
 `roll_deg`). It flags markers seen fewer than 3
 times, with more than 5 cm or 1° of uncertainty, or tilted more than 10°.
 `survey_data.npz` keeps the recording's keyframes and detections, so
-`just lab2 survey-solve courses/my_hall [--origin ID]` can solve it again
+`just aruco-map solve courses/my_hall [--origin ID]` can solve it again
 without the car.
 
 ## Driving the survey
@@ -139,7 +139,7 @@ ros2 run autosdv_marker_survey lab2_marker_survey_synthetic_bag tmp/synth \
 ros2 launch autosdv_marker_survey marker_survey.launch.xml origin_id:=10 \
     course_dir:=$PWD/tmp/synth/course launch_camera:=false use_sim_time:=true &
 ros2 bag play tmp/synth/bag --clock
-just lab2 survey-save
+ros2 service call /marker_survey/save std_srvs/srv/Trigger {}
 ros2 run autosdv_marker_survey lab2_marker_survey_compare tmp/synth/course tmp/synth/truth.yaml
 ```
 

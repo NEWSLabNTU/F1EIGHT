@@ -140,7 +140,7 @@ def test_lab2_uturn_path_is_the_declared_geometry():
 
 
 def test_lab2_uturn_is_in_the_start_box_frame():
-    # `just lab2 survey-align` writes the boards in the start-box frame (origin at
+    # `just aruco-map align` writes the boards in the start-box frame (origin at
     # the start box, x along the first leg) beside this path.csv: the template's
     # boards are a placement guide measured from the start box. The anchor board
     # stands on the first leg's line beyond the turn, facing the start box.

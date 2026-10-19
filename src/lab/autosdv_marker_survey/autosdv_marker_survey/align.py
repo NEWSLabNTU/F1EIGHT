@@ -1,11 +1,11 @@
 """Stage 2 of the Lab 2 survey: put a surveyed board map into the START-BOX frame. No ROS.
 
-Stage 1 (`just lab2 survey ID`) measures where the boards stand relative to one
+Stage 1 (`just aruco-map scan ID`) measures where the boards stand relative to one
 another, in a frame anchored on one board: origin on the floor below it, x the
 way it faces, z the floor's normal fitted from the car's own poses (so a board
 that leans does not tilt that frame; a board that is turned or misplaced does
 turn and shift it). The taped route does not care about that board. Stage 2
-(`just lab2 survey-align`) runs the localization stack on the stage-1 map, the
+(`just aruco-map align`) runs the localization stack on the stage-1 map, the
 TA drives the car STRAIGHT from the taped start box along the taped first leg,
 and this module turns the localized poses of that drive into the route's frame:
 
@@ -517,15 +517,15 @@ def prepare_stage1(survey_dir: str) -> str:
     if is_aligned(survey_dir):
         if not os.path.isfile(os.path.join(s1, 'course.yaml')):
             raise ValueError(f'{survey_dir} is aligned but has no {STAGE1_DIR}/course.yaml: '
-                             'survey again (`just lab2 survey ID`)')
+                             'survey again (`just aruco-map scan ID`)')
         return s1
     src = os.path.join(survey_dir, 'course.yaml')
     if not os.path.isfile(src):
-        raise ValueError(f'{survey_dir} has no course.yaml: run `just lab2 survey ID` first')
+        raise ValueError(f'{survey_dir} has no course.yaml: run `just aruco-map scan ID` first')
     with open(src) as f:
         d = yaml.safe_load(f) or {}
     if not d.get('markers'):
-        raise ValueError(f'{src} has no markers: run `just lab2 survey ID` first')
+        raise ValueError(f'{src} has no markers: run `just aruco-map scan ID` first')
     os.makedirs(s1, exist_ok=True)
     for name in STAGE1_FILES:
         p = os.path.join(survey_dir, name)
@@ -578,12 +578,12 @@ def write_aligned(survey_dir: str, a: Alignment, route_dir: str, report: str,
         'forced': bool(a.forced and a.problems),
     }
     course['markers'] = transform_markers(stage1.get('markers') or [], a)
-    header = (f'# ALIGNED {stamp} by `just lab2 survey-align` (autosdv_marker_survey/align.py).\n'
+    header = (f'# ALIGNED {stamp} by `just aruco-map align` (autosdv_marker_survey/align.py).\n'
               f'# Route {course["alignment"]["route"]}: path, start_pose, laps and v_ref are the\n'
               '# route template\'s (path.csv is its copy, byte for byte); the markers are the\n'
               f'# stage-1 survey ({STAGE1_DIR}/course.yaml) in the START-BOX frame: origin at the\n'
               '# car\'s start pose, x along the straight drive, y to its left, z up.\n'
-              f'# {REPORT_FILE} says how well the drive fixed it. Re-surveying (`just lab2 survey`)\n'
+              f'# {REPORT_FILE} says how well the drive fixed it. Re-surveying (`just aruco-map scan`)\n'
               '# into this directory drops the alignment; run survey-align again after it.\n')
     written = []
     p = os.path.join(survey_dir, 'course.yaml')

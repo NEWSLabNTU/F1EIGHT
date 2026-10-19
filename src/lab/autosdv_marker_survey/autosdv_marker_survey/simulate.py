@@ -90,7 +90,7 @@ def simulate(markers: Dict[int, np.ndarray], base_poses: List[np.ndarray], marke
 
 
 def stage1_map(truth: Dict[int, Tuple[float, ...]], origin_id: int):
-    """What stage 1 (`just lab2 survey ORIGIN`) makes of boards whose TRUE poses are
+    """What stage 1 (`just aruco-map scan ORIGIN`) makes of boards whose TRUE poses are
     `truth` = {id: (x, y, z, yaw, pitch, roll)} in a level world frame, noise aside:
     the floor normal from the car's poses (the world's z), the origin below the
     origin board's centre, x the horizontal part of the way it faces. Returns
