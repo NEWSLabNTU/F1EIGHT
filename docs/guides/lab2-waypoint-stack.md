@@ -399,7 +399,7 @@ calibration boards are 600 mm with a 480 mm square, ID 24; a course using those
 sets `marker_size: 0.48`.) A Lab 2 course sets
 
 ```yaml
-marker_size: 0.38     # the black square, not the plate: measure it
+marker_size: 0.4667   # the black square, not the board: measure it
 dictionary: DICT_5X5_1000
 marker_height: 0.25   # the square's centre above the floor (plate 0.50 m, standing)
 markers:
@@ -521,7 +521,7 @@ and places the boards from `course.yaml`'s header, surveys, and aligns.
 | anchor board (id 24) | (4.5, 0), facing -x: on the first leg's line beyond the turn |
 | path | 7.45 m; the turn is s = 2.00 to 5.45 m |
 
-Four floor-standing 500 mm boards (`DICT_5X5_1000`, black square 0.38 m,
+Four floor-standing 600 mm boards (`DICT_5X5_1000`, black square 0.4667 m,
 `marker_height: 0.25`; the ids are placeholders the survey replaces):
 
 | board | start-box frame (m) | facing | in view |
@@ -556,7 +556,7 @@ It writes `path.csv`, `course.yaml` (start pose, boards, `uturn: {radius, leg}`
 and a header whose numbers it computes), `lanelet2_map.osm`,
 `ar_tag.param.yaml` and `map_projector_info.yaml`. The boards come from a
 coverage search with the bench's detector model (`marker_sim.visible`: 100°
-hfov, 5 m = `ar_tag` `distance_threshold`, 60° incidence, 0.38 m marker): boards
+hfov, 5 m = `ar_tag` `distance_threshold`, 60° incidence, 0.4667 m marker): boards
 on a 0.5 m grid facing every 15°, at least 1.4 m from the car's track (1 m clear
 of the car), the fewest that give
 

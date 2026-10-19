@@ -24,8 +24,8 @@
   <arg name="origin_id" description="the marker that defines the course frame"/>
   <arg name="course_dir" description="where to write the course (created if new; an existing course.yaml keeps everything but its markers)"/>
   <arg name="dictionary" default="DICT_5X5_1000" description="the printed markers' family: DICT_5X5_1000 (the lab's boards) or ARUCO_MIP_36h12"/>
-  <arg name="marker_size" default="0.38"
-       description="[m] edge of the BLACK SQUARE (not the board): measure it. the lab's 0.50 m plate with a 0.38 m square: 0.38 (default); an LCTK 600 mm board: 0.48"/>
+  <arg name="marker_size" default="0.4667"
+       description="[m] edge of the BLACK SQUARE (not the board): measure it. The lab's boards, a 7x7-cell DICT_5X5_1000 marker with one cell of white margin on a 600 mm board: 0.4667 (default; W x 7/9 for a W board)"/>
   <arg name="floor_offset" default="0.0"
        description="[m] how far the floor lies below base_link: 0 on the floor, the stand height if the car's wheels are off the floor"/>
   <arg name="launch_camera" default="true" description="false: survey a bag instead"/>

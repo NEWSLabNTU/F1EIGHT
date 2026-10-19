@@ -149,15 +149,15 @@ def test_lab2_uturn_is_in_the_start_box_frame():
     anchor = c.markers[0]
     assert anchor.id == 24 and anchor.y == 0.0 and anchor.x > leg + radius
     assert abs(anchor.yaw) == pytest.approx(math.pi, abs=1e-3)
-    assert all(m.z == pytest.approx(0.25) for m in c.markers)   # floor-standing 500 mm board
+    assert all(m.z == pytest.approx(0.30) for m in c.markers)   # floor-standing 600 mm board
     assert sorted(m.id for m in c.markers) == list(range(24, 24 + len(c.markers)))
 
 
 def _check_coverage(xs, ys, boards, start, stop):
     from autosdv_waypoint_lab import uturn
     from autosdv_waypoint_lab.course import Course, Marker, Pose2D
-    c = Course('.', 'path.csv', False, 1, 0.8, Pose2D(*start), 0.38,
-               [Marker(i, bx, by, 0.25, byaw) for i, (bx, by, byaw) in enumerate(boards)], 'DICT_5X5_1000')
+    c = Course('.', 'path.csv', False, 1, 0.8, Pose2D(*start), 0.4667,
+               [Marker(i, bx, by, 0.30, byaw) for i, (bx, by, byaw) in enumerate(boards)], 'DICT_5X5_1000')
     cov, turn, _, _, _ = uturn.course_coverage(c, (xs, ys))
     assert cov.start_box_min >= 2                  # a fix (two) before the car moves
     assert cov.longest_gap <= 3.2                  # ~4 s at 0.8 m/s, under error_age 5 s
