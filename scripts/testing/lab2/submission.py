@@ -325,17 +325,46 @@ def _own_modules(pkg_dir: Path, start: Path):
     return seen
 
 
+def _builtin_names_in_code(path: Path):
+    """[(line, name)]: the built-in controllers named in CODE -- an import, a name, an
+    attribute, or a string that is not a docstring (a class path) -- never in a comment
+    or a docstring, where mentioning them is fine."""
+    try:
+        tree = ast.parse(path.read_text(errors='replace'), filename=str(path))
+    except SyntaxError:
+        return []       # a speed_pid.py that does not parse is reported on its own
+    docstrings = set()
+    for n in ast.walk(tree):
+        if isinstance(n, (ast.Module, ast.ClassDef, ast.FunctionDef, ast.AsyncFunctionDef)):
+            body = getattr(n, 'body', [])
+            if body and isinstance(body[0], ast.Expr) and isinstance(body[0].value, ast.Constant):
+                docstrings.add(id(body[0].value))
+    out = []
+    for n in ast.walk(tree):
+        names = []
+        if isinstance(n, (ast.Import, ast.ImportFrom)):
+            names = [a.name.rsplit('.', 1)[-1] for a in n.names]
+        elif isinstance(n, ast.Name):
+            names = [n.id]
+        elif isinstance(n, ast.Attribute):
+            names = [n.attr]
+        elif (isinstance(n, ast.Constant) and isinstance(n.value, str)
+              and id(n) not in docstrings):
+            names = _BUILTIN_NAME.findall(n.value)
+        for name in names:
+            if name in BUILTIN_CONTROLLERS:
+                out.append((n.lineno, name))
+    return sorted(set(out))
+
+
 def builtin_controller_uses(root: Path, model: str):
     """['file:line: what', ...]: a SpeedPID that is, imports or selects AutoSDV's built-in
     controller instead of the student's own (the grader rule: the run must be speed_pid.py's)."""
     hits = []
     pkg_dir = root / f'{model}_interface' / f'{model}_interface'
     for path in _own_modules(pkg_dir, pkg_dir / 'speed_pid.py'):
-        for i, line in enumerate(path.read_text(errors='replace').splitlines(), 1):
-            code = line.split('#', 1)[0]
-            m = _BUILTIN_NAME.search(code)
-            if m:
-                hits.append(f'{path.relative_to(root)}:{i}: {m.group(1)}')
+        for line, name in _builtin_names_in_code(path):
+            hits.append(f'{path.relative_to(root)}:{line}: {name}')
     want = expected_controller(model)
     launch = root / f'{model}_launch' / 'launch' / 'vehicle_interface.launch.xml'
     if launch.is_file():

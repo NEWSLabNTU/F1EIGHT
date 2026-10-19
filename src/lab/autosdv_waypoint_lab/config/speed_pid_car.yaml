@@ -1,9 +1,8 @@
-# A copy of the Lab 2 handout's lab2_speed/config/speed_pid_car.yaml (ntu-sdv-course
-# 2026/labs/Lab2/handout), so `just lab2 new-team` seeds a team model's config/car_*/ tuning
-# from the pinned tree. Keep the two equal.
+# The seed of a team car package's config/car_*/ tuning (scripts/testing/lab2/new_team.py);
+# this note is dropped from the generated files.
 #
 # The REAL car's SpeedPID parameters (Part 2): the same class as the simulated car's
-# (config/speed_pid_part1.yaml). Given and tested on the car bench (`python3 selfcheck.py --car`
+# (lab2_sim_vehicle's config/sim/). Given and tested on the car bench (`python3 selfcheck.py --car`
 # in the handout's lab2_speed); a team may adjust them on the car. The car's motor gives about
 # 0.03 m/s per count where the simulated car gives 0.14, so gains in counts per m/s are about
 # five times the simulated car's.
@@ -17,7 +16,7 @@ error_limit: 0.5
 integral_band: 0.25
 enable_conditional_integration: true
 derivative_filter_alpha: 0.15
-max_pwm_offset: 75                # fits every car: car B has 470 - 395 = 75 counts above neutral
+max_pwm_offset: 75                # throttle authority above neutral [counts]: fits every car's range
 max_brake_offset: 10
 kp_brake: 20.0
 brake_enter: 0.2

@@ -14,6 +14,8 @@
     controller_problems(model) why a TEAM model's controller is not its own speed_pid.py
                             SpeedPID (submission.builtin_controller_uses on its source); []
                             for the reference
+    calibrated_cars(root, model) the cars ('A', 'B', 'C') whose config/car_<x>/ tuning file
+                            in the model's source sets ff_gain: the bench drives that car
 
 lab2_run (Part 2) and part1_run (Part 1) both resolve team:=N with these, so the two parts
 name and find a team's model the same way. A student's models live under this repository's
@@ -81,3 +83,26 @@ def model_installed(model: str) -> bool:
         return True
     except Exception:
         return False
+
+
+def calibrated_cars(root: Optional[Path], model: str) -> list:
+    """The car letters whose <model>_launch/config/car_<x>/speed_controller.param.yaml sets
+    ff_gain > 0 (the team's motor fit), sorted; [] without a source root.
+
+    The car tools of the handout's lab2_speed pick their car by the same rule, so the bench
+    of `just lab2 run` drives the car whose file the team calibrated, not the nominal car."""
+    if root is None:
+        return []
+    import yaml
+    cars = []
+    for f in sorted(Path(root, f'{model}_launch', 'config').glob('car_*/speed_controller.param.yaml')):
+        try:
+            doc = yaml.safe_load(f.read_text()) or {}
+            params = doc['/**']['ros__parameters']['speed_controller_params'] or {}
+            gain = float(params.get('ff_gain') or 0.0)
+        except (OSError, yaml.YAMLError, KeyError, TypeError, ValueError, AttributeError):
+            continue
+        letter = f.parent.name[len('car_'):]
+        if gain > 0.0 and re.fullmatch(r'[a-z]', letter):
+            cars.append(letter.upper())
+    return cars

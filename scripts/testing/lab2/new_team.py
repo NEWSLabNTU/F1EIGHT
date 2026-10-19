@@ -239,16 +239,14 @@ def tuning_file(model: str, vehicle_id: str, seed: str, seed_name: str, bench: b
     under speed_controller_params (the actuator merges speed_controller_params.<key> into the
     controller's parameters), comments kept."""
     lines = seed.splitlines()
-    if lines and lines[0].startswith('# A copy of the Lab 2 handout'):   # our provenance note
+    if lines and lines[0].startswith('# The seed of a team car package'):   # our provenance note
         lines = lines[lines.index('#') + 1:] if '#' in lines else lines
     body = ''.join(('      ' + ln if ln.strip() else '') + '\n' for ln in lines)
-    bench_note = (" This sim file is the Part 2 vehicle bench's (`just lab2 run` on a\n"
-                  "# workstation, the gate's route): vehicle_id:=sim, the nominal car, with the car\n"
-                  "# gains." if bench else '')
+    bench_note = (" This sim file is used only by the Part 2 vehicle bench (`just lab2 run`\n"
+                  "# on a workstation) when none of your car files holds a motor calibration." if bench else '')
     return f'''# {model}'s speed controller tuning on {vehicle_id}: YOURS. The vehicle interface loads
-# it after the car's individual_params actuator.param.yaml (the car's PWM points, which are
-# not yours to change), so these values win over both actuator.yaml and the car's file.
-# One file per vehicle_id.{bench_note} Seeded from autosdv_waypoint_lab's {seed_name}.
+# it after the car's own PWM points (which are not yours to change), so these values win.
+# One file per vehicle_id.{bench_note}
 /**:
   ros__parameters:
     speed_controller_params:

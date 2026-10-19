@@ -298,3 +298,22 @@ def test_part1_selecting_another_class_is_refused(tmp_path, where):
         cfg.write_text('/**:\n  ros__parameters:\n    speed_controller_class: x.y:Z\n')
     with pytest.raises(submission.SubmissionError, match='built-in controller'):
         submission.resolve_part1(root)
+
+
+def test_part1_the_builtin_named_in_a_docstring_or_comment_is_fine(tmp_path):
+    pid = ('"""Like speed_controller.AckermannPID, D is taken on the measurement."""\n'
+           'class SpeedPID:\n'
+           '    """Unlike AckermannSpeedPID this one brakes."""\n'
+           '    def update(self, t, m, dt):  # AckermannPID does the same\n'
+           '        return 0\n')
+    model, root = make_model(tmp_path, pid=pid)
+    assert submission.resolve_part1(root)[0] == model
+
+
+def test_part1_the_builtin_as_a_class_path_string_is_refused(tmp_path):
+    pid = ('import importlib\nclass SpeedPID:\n'
+           '    def __init__(self, p):\n'
+           '        self.c = importlib.import_module("x.speed_controller").__dict__["AckermannSpeedPID"]\n')
+    model, root = make_model(tmp_path, pid=pid)
+    with pytest.raises(submission.SubmissionError, match='built-in controller'):
+        submission.resolve_part1(root)
