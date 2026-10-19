@@ -31,6 +31,10 @@ from typing import Dict, List, Optional, Tuple
 import numpy as np
 
 # OpenCV names for the course.yaml dictionary names (autosdv_aruco_localization.marker_map).
+# The bundle adjustment's evaluation cap: 300 stopped short on a 44-keyframe, 6-board survey
+# (car C, 2026-10-20), which converged within 2000.
+MAX_NFEV = 2000
+
 OPENCV_DICTIONARY = {
     'ARUCO_MIP_36h12': 'DICT_ARUCO_MIP_36h12',
     'ARUCO': 'DICT_ARUCO_ORIGINAL',
@@ -240,7 +244,7 @@ class Survey:
         return new
 
     # -------------------------------------------------------------- the solve
-    def solve(self, max_nfev: int = 300):
+    def solve(self, max_nfev: int = MAX_NFEV):
         """Bundle adjustment. Returns (markers {id: T_world_marker}, keyframe poses,
         per-marker stats {id: dict}) in the tracking's world frame."""
         from scipy.optimize import least_squares
@@ -346,7 +350,8 @@ class Survey:
             stats[mid] = {'views': int(sel.sum()), 'reproj_rms_px': rms,
                           'cov_world': cov[mi[mid]] if cov is not None else None}
         info = {'keyframes': nk, 'observations': len(obs), 'cost': float(sol.cost),
-                'reproj_rms_px': float(np.sqrt(np.mean(proj ** 2))), 'status': sol.message}
+                'reproj_rms_px': float(np.sqrt(np.mean(proj ** 2))), 'status': sol.message,
+                'converged': sol.status > 0}
         return markers, poses, stats, info
 
 
