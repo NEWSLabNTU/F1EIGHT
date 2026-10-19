@@ -223,7 +223,12 @@
   <!-- the model's vehicle interface; a controller class only when one is given -->
   <let name="vi_launch" value="$(find-pkg-share $(var vehicle_model)_launch)/launch/vehicle_interface.launch.xml"/>
   <let name="vi_own_controller" value="$(eval &quot;'$(var speed_controller_class)' == ''&quot;)"/>
-  <include file="$(var vi_launch)" if="$(var vi_own_controller)">
+  <!-- through model_vehicle_interface.launch.py, which unsets speed_controller_class and
+       _params first: declared here (default ""), they would otherwise leak into the model's
+       file and beat its own default class (the actuator's built-in controller would run) -->
+  <include file="$(find-pkg-share autosdv_launch)/launch/components/model_vehicle_interface.launch.py"
+           if="$(var vi_own_controller)">
+    <arg name="vehicle_interface_launch" value="$(var vi_launch)"/>
     <arg name="hardware" value="$(var vi_hardware)"/>
     <arg name="launch_vehicle_interface" value="true"/>
     <arg name="is_simulation" value="$(var vi_is_simulation)"/>
