@@ -43,9 +43,16 @@ export XDG_CURRENT_DESKTOP=ubuntu:GNOME
 export GNOME_SHELL_SESSION_MODE=ubuntu
 vnc_data="$HOME/.vnc/xdg-data${DISPLAY#*:}"
 mkdir -p "$vnc_data/applications"
-sed 's|^Exec=/usr/bin/gnome-shell$|Exec=/usr/bin/gnome-shell --x11|' \
+#
+# Only the shell runs under vglrun. vglrun works by LD_PRELOAD, which every
+# child inherits: wrap the whole session and every terminal on this desktop
+# carries libvglfaker into whatever it starts, and the ZED, whose Argus buffers
+# go through EGL, stops at "CAMERA OPENING" with "(Argus) Error BadParameter".
+# Terminals are D-Bus activated, so they inherit the session's environment, not
+# the shell's; a GL viewer started from one wants `vglrun` explicitly.
+vgl_display="${AUTOSDV_VGL_DISPLAY:-egl}"
+sed "s|^Exec=/usr/bin/gnome-shell\$|Exec=/usr/bin/vglrun -d $vgl_display /usr/bin/gnome-shell --x11|" \
     /usr/share/applications/org.gnome.Shell.desktop \
     > "$vnc_data/applications/org.gnome.Shell.desktop"
 export XDG_DATA_DIRS="$vnc_data:${XDG_DATA_DIRS:-/usr/local/share:/usr/share}"
-exec dbus-run-session -- vglrun -d "${AUTOSDV_VGL_DISPLAY:-egl}" \
-    gnome-session --session=ubuntu --builtin
+exec dbus-run-session -- gnome-session --session=ubuntu --builtin
