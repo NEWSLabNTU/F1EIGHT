@@ -13,8 +13,8 @@ Precedence, highest first:
     the user's file                     ~/lab2/lab2.yaml, or config:=FILE / --config FILE
     the built-in defaults               src/lab/autosdv_waypoint_lab/config/lab2_defaults.yaml
 
-Keys: car, team, vehicle_model, part1_submission, route, course_dir, reference, bag_dir (and
-team_dir, submission: read from an old file and ignored, refused on the command line). A missing
+Keys: car, team, vehicle_model, route, course_dir, reference, bag_dir (and team_dir,
+submission, part1_submission: read from an old file and ignored, refused on the command line). A missing
 user file is fine as long as every key a recipe needs has a value; a missing
 required key is one error line naming the key and the file to put it in.
 
@@ -33,9 +33,11 @@ Recipes:
                 argument passes through
     survey      the same as loc-check (the survey's URDF is that car's calibration)
     gate        vehicle_model:= (below)
-    sim         submission:=PART1_SUBMISSION when set (no default: without one the runner
-                warns and runs the stub), unless --class / speed_controller_class:= is given;
-                on its command line submission:= means part1_submission
+    sim         nothing from the file: Part 1 runs the one simulation model,
+                lab2_sim_vehicle, for everyone (`team` and `vehicle_model` name Part 2's car
+                model). vehicle_model:= on the command line passes on as model:= (TA),
+                team:= as team:= (the runner ignores it); submission:= passes through (the
+                TA's model source directory)
     record      --car --team --vehicle-model --out-dir, and --name ROUTE_N (the next free one)
     grade       no bag: --score LATEST --reference REFERENCE
     check-bags  no bag: LATEST; --car --team when set
@@ -98,13 +100,15 @@ USER_FILE = Path('~/lab2/lab2.yaml')     # ~/lab2 is $LAB2_HOME when that is set
 
 def user_file() -> Path:
     return lab2_env.lab2_home() / 'lab2.yaml'
-KEYS = ('car', 'team', 'vehicle_model', 'team_dir', 'submission', 'part1_submission', 'route',
+KEYS = ('car', 'team', 'vehicle_model', 'team_dir', 'submission', 'route',
         'course_dir', 'reference', 'bag_dir')
+#: read from an old file and ignored with a warning, never set: Part 1 runs the team's model
+IGNORED_KEYS = ('part1_submission',)
 #: the SpeedPID-only lab's keys: an old file that sets them still loads (they are ignored, with
 #: a warning); on the command line of vehicle and gate they are refused
 RETIRED_KEYS = ('team_dir', 'submission')
 REFERENCE_MODEL = 'autosdv_vehicle'
-PATH_KEYS = ('team_dir', 'submission', 'part1_submission', 'reference', 'bag_dir')
+PATH_KEYS = ('team_dir', 'submission', 'reference', 'bag_dir')
 LAUNCH_RECIPES = ('vehicle', 'gate')
 COURSE_CHOICES = ('auto', 'package')
 SURVEY_LATEST = REPO / 'surveys' / 'latest'
@@ -125,12 +129,10 @@ TEMPLATE_KEYS = [
     ('vehicle_model', 'team3_vehicle',
      'optional: the vehicle model to run; default team<team>_vehicle, else autosdv_vehicle '
      '(the reference)'),
-    ('part1_submission', '~/lab2/B12345678_lab_2_1',
-     'optional: `just lab2 sim` finds the one ~/lab2/*_lab_2_1 by itself; this picks one'),
 ]
 INIT_KEYS_HINT = (
     'Nothing here is needed for the student commands:\n'
-    '  Part 1, any machine    just lab2 sim             finds ~/lab2/<id>_lab_2_1 itself\n'
+    '  Part 1, any machine    just lab2 sim             lab2_sim_vehicle on the simulated car\n'
     '  Part 2                 just lab2 run team:=3     team3_vehicle; the car or the bench\n'
     'On a car the TA sets its letter once: `just lab2 init car:=A`.\n'
     '`just lab2 config` shows what every command will use.')
@@ -155,6 +157,11 @@ def _load_yaml(path: Path) -> dict:
         return {}
     if not isinstance(data, dict):
         raise ConfigError(f'{path}: expected key: value lines')
+    for k in IGNORED_KEYS:
+        if k in data:
+            print(f'warning: {k} in {path} is no longer used (Part 1 runs the simulation model, '
+                  'lab2_sim_vehicle: `just lab2 sim`); remove it', file=sys.stderr)
+            del data[k]
     unknown = sorted(set(data) - set(KEYS))
     if unknown:
         raise ConfigError(f'{path}: unknown key {unknown[0]!r}; the keys are {", ".join(KEYS)}')
@@ -532,7 +539,7 @@ def split_args(recipe, argv):
     if launch:
         own_flags = {'--team': 'team'}
     elif recipe == 'sim':
-        own_flags = {'--submission': 'part1_submission'}
+        own_flags = {'--team': 'team'}
     for a in it:
         key, sep, val = a.partition(':=')
         flag, eq, fval = a.partition('=')
@@ -552,7 +559,7 @@ def split_args(recipe, argv):
         elif sep and key == 'config':
             cfg_file = val
         elif sep and recipe == 'sim' and key == 'submission':
-            cli['part1_submission'] = val
+            rest.append(a)                  # the TA's model source: the runner's
         elif sep and key in KEYS and (recipe not in ('loc-check', 'survey') or key == 'car'):
             cli[key] = val
         else:
@@ -625,9 +632,10 @@ def plan(recipe, argv, cwd=REPO, bench=False):
         use('vehicle_model', model)
     elif recipe == 'sim':
         out = list(rest)
-        if c.get('part1_submission') and not _has(rest, '--class', 'speed_controller_class:='):
-            out.append(f'submission:={c.get("part1_submission")}')
-            use('part1_submission')
+        for k in ('vehicle_model', 'team'):     # the command line's only; the file's are Part 2's
+            if c.source(k) == 'command line':
+                out.append(f'{"model" if k == "vehicle_model" else k}:={c.get(k)}')
+                use(k)
     elif recipe == 'record':
         car = c.require('car', 'recorded into the bag')
         team = c.require('team', 'recorded into the bag')

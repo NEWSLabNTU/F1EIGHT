@@ -92,12 +92,13 @@ EDITS = [
               'staff on a reference run of the course. Each run prints')),
     ('just/lab2.just', 'the `just lab2 sim --class <reference>` example',
      _cut_between('#   just lab2 sim --class autosdv_waypoint_lab.reference',
-                  '# No submission anywhere')),
+                  '# ROS_DOMAIN_ID: yours if exported')),
     ('scripts/testing/lab2/part1_run.py', 'the help text naming the TA reference',
-     _replace('''    --class/--params   a controller by import path, e.g. the TA reference
-                       autosdv_waypoint_lab.reference.speed_pid_part1:SpeedPID with the
-                       parameters of config/speed_pid_part1.yaml
-''', '''    --class/--params   a controller by import path, with its parameters
+     _replace('''    --class/--params   a controller by import path on the reference model (autosdv_vehicle),
+                       e.g. the TA reference autosdv_waypoint_lab.reference.speed_pid_part1:
+                       SpeedPID with the parameters of config/speed_pid_part1_reference.yaml
+''', '''    --class/--params   a controller by import path on the reference model (autosdv_vehicle),
+                       with its parameters
 ''')),
     (f'{LAB}/autosdv_waypoint_lab/part1/metrics.py',
      "the calibration note and the reference's worst cases beside the limits", _limits_comments),

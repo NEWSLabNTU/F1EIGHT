@@ -1,27 +1,55 @@
 #!/usr/bin/env python3
-"""Lab 2 Part 1 runner: a SpeedPID on the simulated car, live, graded, plotted.
+"""Lab 2 Part 1 runner: the simulation vehicle model on the simulated car, live, graded.
 
     just lab2 sim                           the graded set (nominal, low_batt, low_mu), mark / 25
     just lab2 sim --no-gui                  the same without windows (SSH, batch)
     just lab2 plot-sim                      redraw the latest run's curves.png
 
     TA:
-    just lab2 sim submission:=DIR           another submission
+    just lab2 sim submission:=DIR           a student's model source, built here first (below)
     just lab2 sim variant:=low_mu           one car only (no mark out of 25)
+    just lab2 sim model:=NAME               another model than lab2_sim_vehicle
     python3 scripts/testing/lab2/part1_run.py --class pkg.module:Class --params '{kp: 30.0}'
         [--out DIR] [--no-rviz] [--no-gui] [--timeout S] [--stall S] [key:=value ...]
 
-The submission, in order: submission:=DIR on the command line, `part1_submission` from
-~/lab2/lab2.yaml (scripts/testing/lab2/lab2_config.py), else the single
-~/lab2/*_lab_2_1 directory holding lab2_speed/. None or several: stop, listing what was
-found and the fix. $LAB2_HOME moves ~/lab2 (tests; a TA grading elsewhere).
+Part 1 runs ONE simulation vehicle model, the same name for everyone: lab2_sim_vehicle
+(packages lab2_sim_vehicle_{description,interface,launch}; docs/design/lab2-team-vehicle-
+models.md), as `vehicle_model:=lab2_sim_vehicle vehicle_id:=sim` in
+lab2_part1_sim.launch.xml: the model's own SpeedPID (lab2_sim_vehicle_interface/speed_pid.py)
+with its own tuning (lab2_sim_vehicle_launch/config/sim/speed_controller.param.yaml). The
+car models, teamN_vehicle, are Part 2's. team:= is not needed (accepted and ignored). The
+grader reads topics only.
 
-    --submission DIR   a Part 1 submission (<id>_lab_2_1/ holding lab2_speed/, or the
-                       package): scripts/testing/lab2/submission.py --part1 gives the class,
-                       the parameters and the PYTHONPATH entry
-    --class/--params   a controller by import path, e.g. the TA reference
-                       autosdv_waypoint_lab.reference.speed_pid_part1:SpeedPID with the
-                       parameters of config/speed_pid_part1.yaml
+The model resolves from the sourced install's ament index: the student copies the handout's
+lab2_sim_vehicle_launch/ into this repository's src/lab2_vehicles/ (gitignored) and builds
+it with
+
+    colcon build --base-paths src --symlink-install --cmake-args -DCMAKE_BUILD_TYPE=Release \
+        --packages-up-to lab2_sim_vehicle_launch
+
+Not installed: stop with that fix. The source is found through the installed package.xml,
+which --symlink-install makes a symlink into src/lab2_vehicles/; an install without it is
+refused with the same fix (it cannot be traced to a source, and edits would not run).
+
+Before anything starts, the model is checked (scripts/testing/lab2/submission.py --part1:
+the three packages, class SpeedPID in speed_pid.py, the sim tuning's keys, types and ranges,
+no use of the TA reference), and its speed_pid.py must be the one the install imports. With
+--symlink-install an edit to speed_pid.py or to config/sim/speed_controller.param.yaml runs
+without a rebuild; a new file or package needs the colcon build again.
+
+    submission:=DIR    TA: DIR is a student's model source (lab2_sim_vehicle_launch/, or a
+                       directory holding it, such as <student_id>_lab_2_1/ with a report
+                       beside it): checked as above, then built on its own (colcon build of
+                       that directory alone, no --symlink-install, the sourced AutoSDV
+                       install as the underlay) into <out>/ws/, and that install is sourced
+                       on top for the runs. Every submission has the same package names, so
+                       each gets its own workspace; nothing in src/lab2_vehicles/ is used
+                       or changed, and the mark is for the code as handed in. The run directory is
+                       labelled with DIR's name (<date>_<time>_<DIR name>) unless --name is
+                       given. A build failure exits 2 with the log's tail (<out>/ws/build.log).
+    --class/--params   a controller by import path on the reference model (autosdv_vehicle),
+                       e.g. the TA reference autosdv_waypoint_lab.reference.speed_pid_part1:
+                       SpeedPID with the parameters of config/speed_pid_part1_reference.yaml
     --final            accepted, a no-op: the graded set is the default
 
 Each car starts `play_launch launch autosdv_launch lab2_part1_sim.launch.xml` in its own
@@ -49,18 +77,18 @@ simulated time under load:
 While simulated time advances the runner waits: the grader ends every run itself (finish,
 no progress, MRM, its own timeout) and writes the reason into marks.json.
 
-Outputs: <out> = tmp/lab2/part1/<submission name>/<YYYY-mm-dd_HH-MM-SS>[_<--name>]/, a new
-directory per run, with tmp/lab2/part1/<submission name>/latest pointing at the newest.
-An explicit --out DIR writes DIR/<variant>/ instead (no date, no latest: the TA tools
-the TA's calibration and tolerance tools read it back). Per car: <variant>/trace.csv and
+Outputs: <out> = tmp/lab2/part1/<model>/<YYYY-mm-dd_HH-MM-SS>[_<--name>]/ (--class: the class
+path instead of the model), a new directory per run, with tmp/lab2/part1/<model>/latest
+pointing at the newest. An explicit --out DIR writes DIR/<variant>/ instead (no date, no
+latest: the TA's calibration and tolerance tools read it back). Per car: <variant>/trace.csv and
 <variant>/marks.json (the grader's), <variant>/run.json (the command, the play_log, the
 timings), <variant>/curves.png (plot_part1.py, drawn when the run ends, no display needed),
 <variant>/dashboard.png (with the dashboard). The graded set adds final.json:
 marks = 25 * sum(passed) / sum(total), an invalid run counting 0 of its checks.
 
 Exit status: 0 when every run was valid (passed or not), 1 when a run was invalid or never
-produced marks, 2 on a usage error (bad arguments, an unknown variant, a submission that
-does not resolve).
+produced marks, 2 on a usage error (bad arguments, an unknown variant, a model that is not
+found, fails its check or is not built, a submission that does not build).
 
 ROS_DOMAIN_ID: an exported non-zero value is used as it is. Unset or 0, the runner uses a
 per-user domain, 1 + uid % 100 (never 0), so two users' runs on one host do not cross-talk
@@ -85,11 +113,11 @@ import yaml
 HERE = Path(__file__).resolve().parent
 sys.path.insert(0, str(HERE))
 import lab2_env as le  # noqa: E402
+import lab2_ws  # noqa: E402
+import submission as sub  # noqa: E402
 
 REPO = Path(__file__).resolve().parents[3]
 PART1_TMP = REPO / 'tmp/lab2/part1'
-SUBMISSION_GLOB = '*_lab_2_1'
-SUBMISSION = REPO / 'scripts/testing/lab2/submission.py'
 VEHICLE_YAML = REPO / 'src/sim/autosdv_rc_sim/autosdv_rc_sim/vehicle.yaml'
 VARIANTS_FINAL = ('nominal', 'low_batt', 'low_mu')
 METRICS = REPO / 'src/lab/autosdv_waypoint_lab/autosdv_waypoint_lab/part1/metrics.py'
@@ -139,10 +167,14 @@ def loud(msg):
 def parse(argv):
     ap = argparse.ArgumentParser(
         description='Run a SpeedPID on the simulated car, live, and grade the run.')
-    who = ap.add_mutually_exclusive_group()
-    who.add_argument('--submission', metavar='DIR', help='a Part 1 submission directory')
-    who.add_argument('--class', dest='cls', metavar='PKG.MOD:CLASS',
-                     help='a controller by import path')
+    ap.add_argument('--team', default=None, metavar='N',
+                    help='accepted and ignored: Part 1 has one simulation model')
+    ap.add_argument('--model', default=None, metavar='NAME',
+                    help=f'TA: another model than {sub.SIM_MODEL}, from the sourced install')
+    ap.add_argument('--submission', metavar='DIR',
+                    help="TA: a team's model source directory, built into the run's ws/ first")
+    ap.add_argument('--class', dest='cls', metavar='PKG.MOD:CLASS',
+                    help='TA: a controller by import path, on the reference model')
     ap.add_argument('--params', default=None, help='with --class: its parameters, a YAML mapping')
     ap.add_argument('--name', default=None,
                     help='a label for the run directory (<date>_<time>_LABEL); not needed')
@@ -175,8 +207,8 @@ def parse(argv):
                     help='play_launch web UI (default: $LAB2_WEB_ADDR, else 127.0.0.1:'
                          '8081 + uid %% 100, per user)')
     ap.add_argument('launch_args', nargs='*', metavar='key:=value',
-                    help='passed to the launch file; submission:=, variant:=, rviz:=, gui:=, '
-                         'out:= are the options above')
+                    help='passed to the launch file; team:=, model:= (vehicle_model:=), '
+                         'submission:=, variant:=, rviz:=, gui:=, out:= are the options above')
     args = ap.parse_intermixed_args(argv)   # key:=value before and after the options
     rest = []
     for a in args.launch_args:
@@ -184,9 +216,14 @@ def parse(argv):
         if not sep:
             ap.error(f'unexpected argument {a!r} (launch arguments are key:=value)')
         if key == 'submission':
-            if args.cls:
-                ap.error('submission:= and --class are exclusive')
             args.submission = val
+        elif key == 'team':
+            args.team = val
+        elif key in ('model', 'vehicle_model'):
+            args.model = val
+        elif key == 'part1_submission':
+            ap.error('part1_submission:= is gone: Part 1 runs the simulation model, '
+                     'lab2_sim_vehicle (docs/guides/lab2-part1-sim.md)')
         elif key == 'variant':
             args.variant = val
         elif key in ('rviz', 'gui'):
@@ -195,11 +232,17 @@ def parse(argv):
             setattr(args, key, val.lower() == 'true')
         elif key == 'out':
             args.out = val
-        elif key in ('speed_controller_class', 'speed_controller_params', 'out_dir'):
-            ap.error(f'{key}:= is set by the runner: use --class/--params, --out')
+        elif key in ('speed_controller_class', 'speed_controller_params', 'out_dir', 'vehicle_id'):
+            ap.error(f'{key}:= is set by the runner: use team:=/model:=, --class/--params, --out '
+                     '(Part 1 is always vehicle_id sim)')
         else:
             rest.append(a)
     args.launch_args = rest
+    chosen = [n for n, v in (('submission:=', args.submission), ('--class', args.cls)) if v]
+    if args.cls and args.model:
+        chosen.append('model:=')
+    if len(chosen) > 1:
+        ap.error(f'{" and ".join(chosen)} both name the controller: give one')
     if args.params is not None and not args.cls:
         ap.error('--params needs --class')
     if args.final and args.variant is not None:
@@ -222,25 +265,92 @@ def holds_after(args, variant):
     return bool(args.hold and args.gui and variant == variants_of(args)[-1])
 
 
-def discover_submission(home):
-    """The single <home>/*_lab_2_1 directory holding lab2_speed/, else UsageError naming
-    what was found and the fix."""
-    home = Path(home)
-    dirs = sorted(p for p in home.glob(SUBMISSION_GLOB) if p.is_dir()) if home.is_dir() else []
-    found = [d for d in dirs if (d / 'lab2_speed').is_dir()]
-    if len(found) == 1:
-        return found[0]
-    if found:
-        raise UsageError(
-            f'several Part 1 submissions in {home}:\n'
-            + ''.join(f'    {d}\n' for d in found)
-            + f'  name one: `just lab2 sim submission:={found[0]}`, or set '
-              f'`part1_submission: {found[0]}` in {home / "lab2.yaml"}, or move the others away')
-    near = ''.join(f'    {d}  (no lab2_speed/ inside)\n' for d in dirs)
-    raise UsageError(
-        f'no Part 1 submission found: no {home}/{SUBMISSION_GLOB}/ directory holding lab2_speed/\n'
-        + near
-        + f'  put yours at {home}/<student_id>_lab_2_1/lab2_speed/, or pass submission:=DIR')
+SIM_MODEL = sub.SIM_MODEL      # Part 1's one simulation model (lab2_ws.SIM_MODEL)
+STUDENT_SRC = 'src/lab2_vehicles'   # where a student copies the handout's packages (gitignored)
+
+
+def build_hint(model=SIM_MODEL):
+    """The fix for a model that is missing, not built or built from another copy."""
+    return (f'copy {model}_launch from the handout into {STUDENT_SRC}/ and run, in '
+            f'{REPO}:\n    colcon build --base-paths src --symlink-install --cmake-args '
+            f'-DCMAKE_BUILD_TYPE=Release --packages-up-to {model}_launch\n'
+            '  then open a new shell (or `source install/setup.bash`) and run `just lab2 sim` '
+            'again')
+
+
+def _share(pkg):
+    """The installed share directory of pkg in this process's ament index, or None."""
+    try:
+        from ament_index_python.packages import get_package_share_directory
+        return Path(get_package_share_directory(pkg))
+    except Exception:
+        return None
+
+
+def model_source(model=SIM_MODEL, share=None):
+    """The source root of `model` as the sourced install has it (this repository's install:
+    src/lab2_vehicles/<model>_launch/ built with --symlink-install), else UsageError naming
+    the fix. The root is found through the installed package.xml, a symlink into the source
+    under --symlink-install; a copy (a build without it) cannot say which source it came
+    from, and its edits would not run, so it is refused with the same fix."""
+    share = _share(f'{model}_launch') if share is None else share
+    if share is None or not (Path(share) / 'package.xml').exists():
+        raise UsageError(f'{model} is not built (no {model}_launch in the sourced install): '
+                         + build_hint(model))
+    xml = Path(share) / 'package.xml'
+    if not xml.is_symlink():
+        raise UsageError(f'{model} is installed without --symlink-install ({share}), so it '
+                         'cannot be traced to its source and your edits would not run: '
+                         + build_hint(model))
+    root = xml.resolve().parent.parent
+    if not sub._has_model(root, model):
+        raise UsageError(f'{model}: the installed {xml} points into {root}, which does not hold '
+                         f'{model}_launch/; ' + build_hint(model))
+    return root
+
+
+def check_model(src, model=SIM_MODEL):
+    """(model, source root) after submission.py --part1's checks, warnings printed; UsageError
+    with the first problem."""
+    try:
+        model, root, _, warnings = sub.resolve_part1(src, model=model)
+    except sub.SubmissionError as e:
+        raise UsageError(f'the model does not pass its Part 1 check: {e}') from None
+    for w in warnings:
+        info(f'warning: {w}')
+    return model, root
+
+
+def installed_from(model):
+    """The speed_pid.py the sourced workspaces import as <model>_interface.speed_pid, or None."""
+    import importlib.util
+    try:
+        spec = importlib.util.find_spec(f'{model}_interface')
+    except (ImportError, ValueError):
+        return None
+    if spec is None or not spec.submodule_search_locations:
+        return None
+    for loc in spec.submodule_search_locations:
+        f = Path(loc) / 'speed_pid.py'
+        if f.exists():
+            return f
+    return None
+
+
+def check_built(model, root, installed=None, imported=None):
+    """UsageError unless the sourced install runs THIS source of the model: installed (the
+    ament index has its three packages) and its speed_pid.py imported from root (the
+    --symlink-install build: edits run without a rebuild)."""
+    installed = lab2_ws.model_installed(model) if installed is None else installed
+    fix = build_hint(model)
+    if not installed:
+        raise UsageError(f'{model} is not built (no {model}_launch, _interface, _description in '
+                         f'the sourced workspaces): {fix}')
+    imported = installed_from(model) if imported is None else imported
+    want = (Path(root) / f'{model}_interface' / f'{model}_interface' / 'speed_pid.py').resolve()
+    if imported is None or Path(imported).resolve() != want:
+        raise UsageError(f'{model} is built from another copy (speed_pid.py imports from '
+                         f'{imported}, not {want}), so your edits would not run: {fix}')
 
 
 def run_dir(base, name, label, now):
@@ -283,32 +393,60 @@ def known_variants():
 
 
 def resolve_controller(args):
-    """(launch args, PYTHONPATH entry or None, name) for the chosen controller: --class,
-    submission:= (the command line or part1_submission), else the one in ~/lab2."""
-    if args.submission:
-        sub = Path(args.submission).expanduser()
-        if not sub.exists():
-            raise UsageError(f'no submission directory {sub}')
-        base = [sys.executable, str(SUBMISSION), str(sub), '--part1']
-        try:
-            pkg = subprocess.run(base + ['--pythonpath'], check=True, text=True,
-                                 capture_output=True).stdout.strip()
-            lines = subprocess.run(base + ['--launch-args'], check=True, text=True,
-                                   capture_output=True).stdout.splitlines()
-        except subprocess.CalledProcessError as e:
-            msg = (e.stderr or e.stdout or '').strip()
-            raise UsageError(f'submission {sub}: {msg or "submission.py failed"}') from None
-        return [x for x in lines if x.strip()], pkg or None, sub.resolve().name
+    """(launch args, name, model source root or None): --class; submission:= (TA: checked
+    here, built by build_submission); else lab2_sim_vehicle (model:= names another) from the
+    sourced install.
+    Sets args.model_name and args.model_root for run.json."""
+    args.model_name, args.model_root = None, None
     if args.cls:
         out = [f'speed_controller_class:={args.cls}']
         if args.params is not None:
             out.append(f'speed_controller_params:={args.params}')
         name = re.sub(r'[^A-Za-z0-9_.-]+', '_', args.cls.replace(':', '.'))
-        return out, None, name
-    found = discover_submission(le.lab2_home())
-    info(f'submission: {found} (the one {SUBMISSION_GLOB} in {found.parent})')
-    args.submission = str(found)
-    return resolve_controller(args)
+        return out, name, None
+    model = args.model or SIM_MODEL
+    if model == lab2_ws.REFERENCE_MODEL:
+        raise UsageError(f"{model} is the reference car model: Part 1 runs it only with a class "
+                         "(--class PKG.MOD:CLASS, the TA's)")
+    if args.team:
+        info(f'team:={args.team} is not needed: Part 1 has one simulation model, {SIM_MODEL} '
+             '(ignored)')
+    if args.submission:
+        d = Path(args.submission).expanduser()
+        if not d.is_dir():
+            raise UsageError(f'no submission directory {d}')
+        model, root = check_model(d, model)
+        info(f'submission: {model} from {root} (built for this run)')
+        if not args.name:       # every submission is the same model: label the run by the dir
+            args.name = d.resolve().name
+    else:
+        model, root = check_model(model_source(model), model)
+        check_built(model, root)
+    args.model_name, args.model_root = model, str(root)
+    return [f'vehicle_model:={model}'], model, root
+
+
+def build_submission(root, ws, env):
+    """colcon build of the model source root alone into ws (no --symlink-install: the run
+    grades the copy as built), over the sourced environment; returns the environment with
+    ws/install sourced on top. UsageError with the log's tail when the build fails."""
+    ws = Path(ws)
+    ws.mkdir(parents=True, exist_ok=True)
+    log = ws / 'build.log'
+    cmd = ['colcon', 'build', '--base-paths', str(root),
+           '--cmake-args', '-DCMAKE_BUILD_TYPE=Release']
+    info(f'building {root} into {ws} ...')
+    dim(' '.join(cmd))
+    with open(log, 'w') as f:
+        r = subprocess.run(cmd, cwd=ws, env=env, stdout=f, stderr=subprocess.STDOUT,
+                           stdin=subprocess.DEVNULL)
+    if r.returncode != 0:
+        tail = ''.join(log.read_text(errors='replace').splitlines(True)[-15:])
+        raise UsageError(f'the submission does not build ({log}):\n{tail}')
+    setup = ws / 'install' / 'local_setup.bash'
+    out = subprocess.run(['bash', '-c', f'set +u; . "{setup}" >/dev/null && env -0'],
+                         env=env, capture_output=True, check=True).stdout
+    return dict(kv.split('=', 1) for kv in out.decode().split('\0') if '=' in kv)
 
 
 def check_display(args, env=None):
@@ -536,7 +674,7 @@ def hold_open(proc, out_dir):
 
 
 # ------------------------------------------------------------------ one run
-def run_one(args, variant, ctrl_args, pythonpath, out_root, env, before_hold=None):
+def run_one(args, variant, ctrl_args, out_root, env, before_hold=None):
     out_dir = out_root / variant
     out_dir.mkdir(parents=True, exist_ok=True)
     for f in ('marks.json', 'trace.csv', 'run.json'):
@@ -548,9 +686,6 @@ def run_one(args, variant, ctrl_args, pythonpath, out_root, env, before_hold=Non
            f'rviz:={str(args.rviz).lower()}', f'gui:={str(args.gui).lower()}']
     cmd += ctrl_args + args.launch_args
     run_env = dict(env)
-    if pythonpath:
-        run_env['PYTHONPATH'] = pythonpath + (os.pathsep + env['PYTHONPATH']
-                                              if env.get('PYTHONPATH') else '')
     info(f'\n== {variant}: {out_dir}')
     dim(' '.join(cmd))
     log = open(out_dir / 'stack.log', 'w')
@@ -603,6 +738,8 @@ def run_one(args, variant, ctrl_args, pythonpath, out_root, env, before_hold=Non
                  'source': 'part1_run.py (no grader result)'}
         (out_dir / 'marks.json').write_text(json.dumps(marks, indent=2) + '\n')
     run = {'variant': variant, 'command': cmd, 'play_log': str(play_log.resolve()),
+           'vehicle_model': getattr(args, 'model_name', None) or lab2_ws.REFERENCE_MODEL,
+           'model_source': getattr(args, 'model_root', None),
            'stack_log': str((out_dir / 'stack.log').resolve()),
            'startup_s': None if t_engaged is None else round(t_engaged, 1),
            'wall_s': round(time.monotonic() - t0, 1),
@@ -636,6 +773,8 @@ def print_checks(marks):
 def print_marks(marks, run, table=True):
     if table:
         print_checks(marks)
+    if marks.get('message'):
+        loud(f"  {marks['message']}")
     if marks.get('valid', False):
         info(f"  {marks['variant']}: {marks.get('passed', 0)}/"
              f"{marks.get('total', CHECKS_PER_RUN)} passed")
@@ -707,7 +846,7 @@ def main(argv=None):
         bad = [v for v in variants if v not in known]
         if bad:
             raise UsageError(f'unknown variant {bad[0]!r}; the model has {", ".join(known)}')
-        ctrl_args, pythonpath, name = resolve_controller(args)
+        ctrl_args, name, root = resolve_controller(args)
     except UsageError as e:
         info(f'error: {e}')
         return 2
@@ -719,6 +858,12 @@ def main(argv=None):
     out_root.mkdir(parents=True, exist_ok=True)
     if dated:
         point_latest(out_root)
+    if args.submission:
+        try:
+            env = build_submission(root, out_root / 'ws', env)
+        except UsageError as e:
+            info(f'error: {e}')
+            return 2
     signal.signal(signal.SIGINT, on_signal)
     signal.signal(signal.SIGTERM, on_signal)
     dim(f'ROS_DOMAIN_ID {env["ROS_DOMAIN_ID"]} ({why_domain}; export it to watch with ros2), '
@@ -741,7 +886,7 @@ def main(argv=None):
         shown.append(True)
 
     for v in variants:
-        results.append(run_one(args, v, ctrl_args, pythonpath, out_root, env,
+        results.append(run_one(args, v, ctrl_args, out_root, env,
                                before_hold=report if v == variants[-1] else None))
     if not shown:
         report()

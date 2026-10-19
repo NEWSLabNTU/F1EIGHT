@@ -361,15 +361,24 @@ def test_a_stale_or_unaligned_survey_is_not_run(tmp_path, monkeypatch, capsys):
     assert not ok and 'not aligned' in why
 
 
-def test_sim_reads_part1_submission(tmp_path):
+def test_sim_takes_nothing_from_the_file(tmp_path):
     f = tmp_path / 'lab2.yaml'
-    f.write_text('part1_submission: /s/part1\n')
+    f.write_text('team: 7\nvehicle_model: team7_vehicle\n')     # Part 2's car model
     cf = f'config:={f}'
-    assert lc.plan('sim', [cf, '--final'])[0] == ['--final', 'submission:=/s/part1']
-    assert lc.plan('sim', [cf, 'submission:=/x'])[0] == ['submission:=/x']
+    assert lc.plan('sim', [cf, '--final'])[0] == ['--final']
+    assert lc.plan('sim', [cf, 'team:=3'])[0] == ['team:=3']          # the runner ignores it
+    assert lc.plan('sim', [cf, 'vehicle_model:=other_sim'])[0] == ['model:=other_sim']
+    assert lc.plan('sim', [cf, 'model:=other_sim'])[0] == ['model:=other_sim']
     assert lc.plan('sim', [cf, '--class', 'a.b:C'])[0] == ['--class', 'a.b:C']
-    f.write_text('car: A\n')
-    assert lc.plan('sim', [cf])[0] == []           # no part1_submission: the runner's stub
+    assert lc.plan('sim', [cf, 'submission:=/x'])[0] == ['submission:=/x']   # the TA's
+
+
+def test_part1_submission_in_an_old_file_is_ignored(tmp_path, capsys):
+    f = tmp_path / 'lab2.yaml'
+    f.write_text('part1_submission: /s/part1\nteam: 3\n')
+    assert lc.plan('sim', [f'config:={f}'])[0] == []
+    assert 'part1_submission' in capsys.readouterr().err
+    assert 'part1_submission' not in lc.template()
 
 
 # ---- survey reuse: an aligned survey of the U-turn's field serves a straight on that field

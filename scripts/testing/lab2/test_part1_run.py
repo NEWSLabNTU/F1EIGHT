@@ -7,6 +7,7 @@ import pytest
 
 sys.path.insert(0, str(Path(__file__).resolve().parent))
 import part1_run as R  # noqa: E402
+from test_submission import make_model  # noqa: E402
 
 
 def test_key_value_and_options_intermix():
@@ -22,26 +23,35 @@ def test_final_with_a_variant_is_an_error():
 
 
 def test_runner_owned_launch_args_are_refused():
-    for bad in ('speed_controller_class:=a:B', 'speed_controller_params:={}', 'out_dir:=x'):
+    for bad in ('speed_controller_class:=a:B', 'speed_controller_params:={}', 'out_dir:=x',
+                'vehicle_id:=car_a', 'part1_submission:=x'):
         with pytest.raises(SystemExit):
             R.parse([bad])
     with pytest.raises(SystemExit):
         R.parse(['--params', '{}'])                 # --params needs --class
-    with pytest.raises(SystemExit):
-        R.parse(['--class', 'a.b:C', 'submission:=d'])
+    for pair in (['--class', 'a.b:C', 'submission:=d'], ['model:=x_sim', '--class', 'a:B']):
+        with pytest.raises(SystemExit):
+            R.parse(pair)
     with pytest.raises(SystemExit):
         R.parse(['rviz:=maybe'])
 
 
 def test_class_by_import_path():
-    args, pp, name = R.resolve_controller(R.parse(['--class', 'p.m:C', '--params', '{kp: 1}']))
-    assert pp is None and name == 'p.m.C'
+    args, name, root = R.resolve_controller(R.parse(['--class', 'p.m:C', '--params', '{kp: 1}']))
+    assert root is None and name == 'p.m.C'
     assert args == ['speed_controller_class:=p.m:C', 'speed_controller_params:={kp: 1}']
 
 
 def test_missing_submission_is_a_usage_error(tmp_path):
     with pytest.raises(R.UsageError):
         R.resolve_controller(R.parse(['submission:=' + str(tmp_path / 'nope')]))
+
+
+def test_model_and_vehicle_model_name_the_model():
+    assert R.parse(['model:=x_sim']).model == 'x_sim'
+    assert R.parse(['vehicle_model:=x_sim']).model == 'x_sim'
+    assert R.parse(['team:=3']).launch_args == [] and R.parse(['--team', '3']).team == '3'
+    assert R.parse(['model:=x_sim', 'submission:=d']).submission == 'd'    # TA: both fine
 
 
 def test_domain_id():
@@ -135,41 +145,116 @@ def test_checks_per_run_is_the_metrics_check_list():
 # ---- the simple command: `just lab2 sim` finds the submission, runs the graded set,
 # ---- keeps every run, picks the windows, draws the plots
 
-def sub(home, name, speed=True):
-    d = home / name
-    (d / 'lab2_speed' if speed else d).mkdir(parents=True)
-    return d
+def ws_src(home):
+    return home / 'ws' / 'src'
 
 
-def test_discovery_finds_the_single_submission(tmp_path):
-    d = sub(tmp_path, 'B12345678_lab_2_1')
-    sub(tmp_path, 'team3', speed=False)
-    assert R.discover_submission(tmp_path) == d
-
-
-def test_discovery_with_none_names_the_fix(tmp_path):
-    sub(tmp_path, 'B1_lab_2_1', speed=False)             # no lab2_speed/ inside
-    with pytest.raises(R.UsageError) as e:
-        R.discover_submission(tmp_path)
-    msg = str(e.value)
-    assert str(tmp_path) in msg and 'lab2_speed' in msg and 'submission:=' in msg
-    assert 'B1_lab_2_1' in msg                           # the near miss is named
-    with pytest.raises(R.UsageError):
-        R.discover_submission(tmp_path / 'missing')
-
-
-def test_discovery_with_several_lists_them(tmp_path):
-    a, b = sub(tmp_path, 'B1_lab_2_1'), sub(tmp_path, 'B2_lab_2_1')
-    with pytest.raises(R.UsageError) as e:
-        R.discover_submission(tmp_path)
-    msg = str(e.value)
-    assert str(a) in msg and str(b) in msg and 'part1_submission' in msg
-
-
-def test_no_controller_discovers_under_lab2_home(tmp_path, monkeypatch):
+def lab2_home(tmp_path, monkeypatch):
     monkeypatch.setenv('LAB2_HOME', str(tmp_path))
-    with pytest.raises(R.UsageError, match='lab2_speed'):
+    return {'LAB2_HOME': str(tmp_path)}
+
+
+def install(tmp_path, root, model='lab2_sim_vehicle', symlink=True):
+    """A fake install share dir for <model>_launch, its package.xml a symlink into root (as
+    --symlink-install makes it) or a copy."""
+    share = tmp_path / 'install' / f'{model}_launch' / 'share' / f'{model}_launch'
+    share.mkdir(parents=True)
+    src = root / f'{model}_launch' / 'package.xml'
+    if symlink:
+        (share / 'package.xml').symlink_to(src)
+    else:
+        (share / 'package.xml').write_text(src.read_text())
+    return share
+
+
+def test_the_model_is_found_through_the_install(tmp_path):
+    model, root = make_model(tmp_path / 'repo')     # repo/src/lab2_sim_vehicle_launch
+    assert model == R.SIM_MODEL == 'lab2_sim_vehicle'
+    assert R.model_source(share=install(tmp_path, root)) == root.resolve()
+
+
+def test_not_installed_names_the_copy_and_the_colcon_build(monkeypatch):
+    monkeypatch.setattr(R, '_share', lambda pkg: None)
+    with pytest.raises(R.UsageError) as e:
+        R.model_source()
+    msg = str(e.value)
+    assert 'not built' in msg and 'src/lab2_vehicles/' in msg
+    assert ('colcon build --base-paths src --symlink-install --cmake-args '
+            '-DCMAKE_BUILD_TYPE=Release --packages-up-to lab2_sim_vehicle_launch') in msg
+
+
+def test_an_install_without_symlinks_is_refused(tmp_path):
+    _, root = make_model(tmp_path / 'repo')
+    with pytest.raises(R.UsageError, match='(?s)without --symlink-install.*packages-up-to'):
+        R.model_source(share=install(tmp_path, root, symlink=False))
+
+
+def test_no_controller_and_no_install_is_a_usage_error(monkeypatch):
+    monkeypatch.setattr(R, '_share', lambda pkg: None)
+    with pytest.raises(R.UsageError, match='lab2_vehicles'):
         R.resolve_controller(R.parse([]))
+
+
+def test_a_model_that_fails_its_check_stops_before_the_build_check(tmp_path, monkeypatch):
+    _, root = make_model(tmp_path / 'repo', tuning='kp: 1\n')        # flat: the old layout
+    share = install(tmp_path, root)
+    monkeypatch.setattr(R, '_share', lambda pkg: share)
+    with pytest.raises(R.UsageError, match='Part 1 check.*speed_controller_params'):
+        R.resolve_controller(R.parse([]))
+
+
+def test_the_reference_model_is_refused():
+    with pytest.raises(R.UsageError, match='reference car model'):
+        R.resolve_controller(R.parse(['model:=autosdv_vehicle']))
+
+
+def test_not_built_names_the_colcon_build(tmp_path):
+    model, root = make_model(tmp_path)
+    with pytest.raises(R.UsageError) as e:
+        R.check_built(model, root, installed=False)
+    assert 'not built' in str(e.value) and '--packages-up-to lab2_sim_vehicle_launch' in str(e.value)
+
+
+def test_built_from_another_copy_is_stale(tmp_path):
+    model, root = make_model(tmp_path)
+    pid = root / f'{model}_interface' / f'{model}_interface' / 'speed_pid.py'
+    R.check_built(model, root, installed=True, imported=pid)          # the symlink build
+    link = tmp_path / 'build' / 'speed_pid.py'
+    link.parent.mkdir()
+    link.symlink_to(pid)
+    R.check_built(model, root, installed=True, imported=link)         # resolved through it
+    copy = tmp_path / 'install' / 'speed_pid.py'
+    copy.parent.mkdir()
+    copy.write_text(pid.read_text())
+    with pytest.raises(R.UsageError, match='(?s)another copy.*packages-up-to'):
+        R.check_built(model, root, installed=True, imported=copy)
+
+
+def test_the_model_resolves_to_its_launch_args(tmp_path, monkeypatch, capsys):
+    model, root = make_model(tmp_path / 'repo')
+    shares = {'lab2_sim_vehicle_launch': install(tmp_path, root)}
+    o_model, o_root = make_model(tmp_path / 'other', model='other_sim')
+    shares['other_sim_launch'] = install(tmp_path, o_root, model='other_sim')
+    monkeypatch.setattr(R, '_share', shares.get)
+    monkeypatch.setattr(R, 'check_built', lambda m, r: None)
+    args = R.parse([])
+    assert R.resolve_controller(args) == (['vehicle_model:=lab2_sim_vehicle'], model,
+                                          root.resolve())
+    assert args.model_name == model and args.model_root == str(root.resolve())
+    assert R.resolve_controller(R.parse(['team:=3']))[1] == model      # team:= ignored
+    assert 'not needed' in capsys.readouterr().out
+    assert R.resolve_controller(R.parse(['model:=other_sim']))[:2] == \
+        (['vehicle_model:=other_sim'], 'other_sim')
+
+
+def test_a_submission_is_labelled_by_its_directory(tmp_path):
+    d = tmp_path / 'B12345678_lab_2_1'
+    model, _ = make_model(tmp_path / 'x')
+    (tmp_path / 'x' / 'src').rename(d)               # <id>_lab_2_1/lab2_sim_vehicle_launch/
+    root = d / 'lab2_sim_vehicle_launch'
+    args = R.parse([f'submission:={d}'])
+    assert R.resolve_controller(args) == (['vehicle_model:=lab2_sim_vehicle'], model, root)
+    assert args.name == 'B12345678_lab_2_1'
 
 
 def test_the_graded_set_is_the_default():

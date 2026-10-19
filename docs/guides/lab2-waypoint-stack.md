@@ -26,9 +26,8 @@ localized pose and the path) and the `SpeedPID` (the actuator's inner loop).
 
 ## Settings (`~/lab2/lab2.yaml`)
 
-The student commands need no settings: `just lab2 sim` finds
-`~/lab2/<id>_lab_2_1` itself, and `just lab2 run team:=3` names the team on the
-command line. The file is for the TA (the car's letter, set once per car with
+The student commands need no settings: `just lab2 sim` runs the one simulation model,
+`lab2_sim_vehicle`, and `just lab2 run team:=3` names the team on the command line. The file is for the TA (the car's letter, set once per car with
 `just lab2 init car:=A`) and for the step-by-step recipes, which take their car,
 team and directories from it instead of the command line. `LAB2_HOME` moves
 `~/lab2` (the settings file, the submissions, the team directories, the
