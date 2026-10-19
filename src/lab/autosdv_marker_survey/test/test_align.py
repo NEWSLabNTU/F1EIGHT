@@ -250,3 +250,24 @@ def test_multi_board_poses_beat_a_biased_ekf():
     # uncertain multi-board poses are left out
     c = al.align(biased, pnp=[al.PnpSample(p.t, p.x, p.y + 0.1, p.yaw, 3, 0.4, 0.05) for p in pnp])
     assert 'EKF' in c.start_source
+
+
+def test_solve_main_reuses_the_recorded_multi_board_poses(tmp_path):
+    """lab2_survey_align_solve re-solves as survey-align solved: with SURVEY_DIR/align_pnp.csv
+    when the drive recorded one (--no-pnp: the EKF poses alone)."""
+    truth = _truth()
+    stage1, T_w_s1 = stage1_map(truth, 24)
+    d = tmp_path / 'survey'
+    d.mkdir()
+    (d / 'course.yaml').write_text(yaml.safe_dump(
+        {'path': 'path.csv', 'closed': False, 'laps': 1, 'v_ref': 0.8,
+         'start_pose': {'x': 0.0, 'y': 0.0, 'yaw': 0.0}, 'marker_size': 0.38,
+         'dictionary': 'DICT_5X5_1000', 'survey': {'origin_marker': 24}, 'markers': stage1}))
+    T = np.linalg.inv(T_w_s1)
+    ss = drive(x0=T[0, 3], y0=T[1, 3], yaw0=math.atan2(T[1, 0], T[0, 0]))
+    al.write_samples(str(d / al.POSES_FILE), ss)
+    al.write_pnp(str(d / al.PNP_FILE), [al.PnpSample(s.t, s.x, s.y, s.yaw, 3, 0.4, 0.004) for s in ss])
+    assert al.solve_main([str(d), '--route', ROUTE]) == 0
+    assert 'line fitted to   the EKF' not in (d / al.REPORT_FILE).read_text()
+    assert al.solve_main([str(d), '--route', ROUTE, '--no-pnp']) == 0
+    assert 'line fitted to   the EKF' in (d / al.REPORT_FILE).read_text()

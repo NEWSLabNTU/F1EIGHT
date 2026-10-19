@@ -44,11 +44,23 @@ survey surveys/latest when `just lab2 survey-align` aligned it for `route`,
 else the route's packaged course (its PLANNED boards, with a warning); `package`
 is always the packaged course; a directory is that course. The bench
 (`just lab2 run --bench`) takes `auto` as `package`: a survey is of the field.
+
+A survey aligned for one route serves every route on the same FIELD (same start
+box, boards and start-box frame; a route's course.yaml names its field with
+`field: lab2_uturn`, and a route without one is its own field). When `route` is
+not the one surveys/latest is aligned for but shares its field, `auto` builds a
+sibling surveys/<latest dir>.<route>/ once, re-solved for `route` from latest's
+recorded drive (align_poses.csv, align_pnp.csv; the lab2_survey_align_solve
+solver), and runs that. surveys/latest itself is never written; the sibling is
+rebuilt when latest's alignment inputs change (a hash in its .reused_from). One
+stderr line names the survey a run uses; on any failure, the packaged course
+with the warning, as before.
 """
 import os
 import re
 import sys
 from pathlib import Path
+from typing import Optional, Tuple
 
 import yaml
 
@@ -207,6 +219,119 @@ def aligned_for(course_dir, route: str):
     return True, ''
 
 
+def _template(route: str) -> Path:
+    return Path(route) if '/' in str(route) else COURSES / str(route)
+
+
+def field_of(route: str) -> str:
+    """The field a route stands on: its course.yaml's `field` (a straight test route says
+    `field: lab2_uturn`), else the route itself. Routes on one field share its start box,
+    its boards and its START-BOX frame, so one aligned survey serves them all."""
+    t = _template(route)
+    try:
+        d = yaml.safe_load((t / 'course.yaml').read_text()) or {}
+    except (OSError, yaml.YAMLError):
+        d = {}
+    return str(d.get('field') or t.name)
+
+
+def same_field(a: str, b: str) -> bool:
+    return field_of(a) == field_of(b)
+
+
+REUSE_KEY = '.reused_from'
+
+
+def _reuse_key(latest: Path, route: str) -> str:
+    """What the sibling is derived from: latest's alignment inputs (stage 1, the recorded
+    drive, the multi-board poses, whether it was forced) and the route template."""
+    import hashlib
+    h = hashlib.sha256()
+    t = _template(route)
+    d = yaml.safe_load((latest / 'course.yaml').read_text()) or {}
+    h.update(repr(bool((d.get('alignment') or {}).get('forced'))).encode())
+    for p in (latest / 'stage1' / 'course.yaml', latest / 'align_poses.csv', latest / 'align_pnp.csv',
+              t / 'course.yaml', t / str((yaml.safe_load((t / 'course.yaml').read_text()) or {})
+                                          .get('path', 'path.csv'))):
+        h.update(p.name.encode())
+        h.update(p.read_bytes() if p.is_file() else b'-')
+    return h.hexdigest()
+
+
+def _solve_sibling(sib: Path, route: str, forced: bool) -> Tuple[bool, str]:
+    """Align `sib` (stage1/ and the drive already copied in) for `route`: the solver of
+    `lab2_survey_align_solve`, in this process, its report into sib/align_report.txt."""
+    for pkg in ('autosdv_marker_survey', 'autosdv_waypoint_lab'):
+        p = str(REPO / 'src/lab' / pkg)
+        try:
+            __import__(pkg)
+        except ImportError:
+            sys.path.insert(0, p)
+    from autosdv_marker_survey import align as al
+    samples = al.read_samples(str(sib / al.POSES_FILE))
+    pnp_file = sib / al.PNP_FILE
+    pnp = al.read_pnp(str(pnp_file)) if pnp_file.is_file() else None
+    a, _ = al.solve_dir(str(sib), str(_template(route)), samples, force=forced, log=lambda *x: None,
+                        pnp=pnp)
+    return a.ok, '; '.join(a.problems)
+
+
+def reuse_survey(latest: Path, route: str) -> Tuple[Optional[Path], str]:
+    """(surveys/<latest name>.<route>, how) when `latest` is aligned for another route on
+    the same field: a sibling copy re-solved for `route` from latest's recorded drive,
+    built once and rebuilt when latest's alignment inputs change. latest itself is never
+    written. (None, why not) otherwise, or on any failure."""
+    import shutil
+    try:
+        d = yaml.safe_load((latest / 'course.yaml').read_text()) or {}
+    except (OSError, yaml.YAMLError) as e:
+        return None, str(e)
+    al_ = d.get('alignment')
+    if not isinstance(al_, dict):
+        return None, f'{latest} is not aligned (run `just lab2 survey-align`)'
+    other = str(al_.get('route'))
+    if other == _template(route).name:
+        return None, 'aligned for this route'
+    if not (COURSES / other).is_dir() or not same_field(other, route):
+        return None, (f'{latest} is aligned for route {other!r}, not {_template(route).name!r}, '
+                      'and on another field')
+    if not (latest / 'align_poses.csv').is_file():
+        return None, (f'{latest} is aligned for {other!r} but has no align_poses.csv to re-solve '
+                      f'for {_template(route).name!r} from')
+    if not (latest / 'stage1' / 'course.yaml').is_file():
+        return None, f'{latest} has no stage1/course.yaml'
+    real = latest.resolve()
+    sib = real.parent / f'{real.name}.{_template(route).name}'
+    try:
+        key = _reuse_key(real, route)
+        if (sib / REUSE_KEY).is_file() and (sib / REUSE_KEY).read_text().split('\n')[0] == key \
+                and aligned_for(sib, route)[0]:
+            return sib, f'cached, re-solved from {real.name} (aligned for {other})'
+        if sib.exists():
+            if not (sib / REUSE_KEY).is_file():
+                return None, f'{sib} exists and was not made here; not overwriting it'
+            shutil.rmtree(sib)
+        sib.mkdir()
+        shutil.copytree(real / 'stage1', sib / 'stage1')
+        for name in ('align_poses.csv', 'align_pnp.csv'):
+            if (real / name).is_file():
+                shutil.copy2(real / name, sib / name)
+        shutil.copy2(real / 'stage1' / 'course.yaml', sib / 'course.yaml')
+        ok, why = _solve_sibling(sib, route, bool(al_.get('forced')))
+        if not ok:
+            shutil.rmtree(sib, ignore_errors=True)
+            return None, f're-solving {real.name} for {_template(route).name} refused: {why}'
+        good, why = aligned_for(sib, route)
+        if not good:
+            shutil.rmtree(sib, ignore_errors=True)
+            return None, why
+        (sib / REUSE_KEY).write_text(f'{key}\n{real}\n')
+        return sib, f're-solved from {real.name} (aligned for {other}) for {_template(route).name}'
+    except Exception as e:     # anything: the packaged course, with the warning
+        shutil.rmtree(sib, ignore_errors=True)
+        return None, f'reusing {real.name} for {_template(route).name} failed: {e}'
+
+
 def course_for(c: 'Config', bench: bool = False):
     """(the launch argument naming the course, the summary entry, a warning or '')."""
     route = c.require('route')
@@ -222,7 +347,15 @@ def course_for(c: 'Config', bench: bool = False):
             ok, why = aligned_for(latest, route)
             if ok:
                 d = str(latest.resolve())
+                print(f'survey: {d} (aligned for {_template(route).name})', file=sys.stderr)
                 return f'course_dir:={d}', ('course_dir', d), ''
+            sib, how = reuse_survey(latest, route)
+            if sib is not None:
+                print(f'survey: {sib} ({how})', file=sys.stderr)
+                return f'course_dir:={sib}', ('course_dir', str(sib)), ''
+            if how != 'aligned for this route' and 'another field' not in how and \
+                    'is not aligned' not in how:
+                why = how
             warn = (f'surveys/latest not used: {why}. Running the PACKAGED {route}, whose boards are '
                     'where the plan put them, not where they stand')
         else:
