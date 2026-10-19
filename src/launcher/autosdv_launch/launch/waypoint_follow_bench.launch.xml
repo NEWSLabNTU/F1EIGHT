@@ -34,8 +34,8 @@
 <launch>
   <!-- `route` is the name the Lab 2 handout uses (a "course" reads as a class);
        `course` stays, so older commands keep working. -->
-  <arg name="vehicle_id" default="car_a"
-       description="which car the bench models: individual_params/config/VEHICLE_ID (autosdv_vehicle/actuator.param.yaml, the IMU bias, the preset), for the dry-run vehicle interface and the plant alike. car_a by default: a bench drives no motor"/>
+  <arg name="vehicle_id" default="sim"
+       description="which car the bench models: individual_params/config/VEHICLE_ID (autosdv_vehicle/actuator.param.yaml, the IMU bias, the preset), for the dry-run vehicle interface and the plant alike. sim (the nominal car, actuator.yaml) by default: a bench drives no motor"/>
   <arg name="route" default="hall_demo" description="a directory under autosdv_waypoint_lab/config/courses"/>
   <arg name="course" default="$(var route)" description="old name of route"/>
   <arg name="course_dir" default="$(find-pkg-share autosdv_waypoint_lab)/config/courses/$(var course)"/>

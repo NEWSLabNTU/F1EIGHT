@@ -69,7 +69,7 @@
        so the preset's defaults win over this file's and the command line wins
        over both (as autosdv.launch.yaml does; Autoware's model / instance split:
        docs/design/vehicle-variants-and-instances.md). The benches and Part 1 pass
-       car_a. -->
+       sim, the simulated nominal car. -->
   <arg name="vehicle_id"
        description="REQUIRED: which car, car_a, car_b or car_c: individual_params/config/VEHICLE_ID (sensor calibration, autosdv_vehicle/actuator.param.yaml, autosdv.preset.yaml)"/>
   <include file="$(find-pkg-share individual_params)/config/$(var vehicle_id)/autosdv.preset.yaml"/>

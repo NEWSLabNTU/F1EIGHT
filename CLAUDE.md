@@ -891,20 +891,21 @@ They drifted from it once; read them there when it matters.
 centre and ends, a measured steering ratio), `autosdv_sensor_kit/` (calibration,
 IMU bias) and `autosdv.preset.yaml` (defaults for `sensor_model`,
 `vehicle_model`, `sensor_suite`, `use_gnss`). Instances: `car_a` (VLP16 + ZED,
-`actuator.yaml`'s values), `car_b` (Robin-W + ZED), `car_c` (a copy of B until
-measured). The launch argument `vehicle_id:=<car>` selects one, and it is
+measured), `car_b` (Robin-W + ZED), `car_c` (a copy of B until measured), and
+`sim`, the simulated nominal car (`actuator.yaml`'s values restated, Robin-W +
+ZED preset; never a physical car). The launch argument `vehicle_id:=<car>` selects one, and it is
 **required** on every launch that runs on a car (`just launch vehicle_id:=car_b`,
 `just lab2 stack car_b`, `just control basic vehicle_id:=car_b`); there is no
 default and no environment variable (`$(env VEHICLE_ID default)` is gone),
-because the cars differ in their stop PWM (A 370, B 395) and the wrong one drives
+because the cars differ in their stop PWM (A 380, B 395) and the wrong one drives
 instead of stopping. The preset is included before the arguments it defaults, so
 the command line still wins (`vehicle_id:=car_a use_gnss:=true`). The actuator
 file loads last into the actuator and gear manager. The simulators (`just sim
-rc`, Lab 2 Part 1, the coach sim) pin `car_a`, because their plant models
-`actuator.yaml`; the vehicle benches (dry runs, no motor) default to `car_a`;
+rc`, Lab 2 Part 1, the coach sim) pin `sim`, because their plant models
+`actuator.yaml`; the vehicle benches (dry runs, no motor) default to `sim`;
 the logging simulation defaults to `default` (it also carries
 `sample_sensor_kit`). The lab2 `car:=A|B|C` config key maps to
-`vehicle_id:=car_a|car_b|car_c`. Tools take `--vehicle-id`. A team adds its cars
+`vehicle_id:=car_a|car_b|car_c` (never `sim`). Tools take `--vehicle-id`. A team adds its cars
 in its own `individual_params`, never in ours. Design:
 `docs/design/vehicle-variants-and-instances.md`.
 

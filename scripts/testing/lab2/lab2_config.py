@@ -24,8 +24,8 @@ recipes run from the repository root).
 Recipes:
 
     vehicle     course_dir:= (below), team:=TEAM_DIR, unless given, and vehicle_id:=car_<car>
-                (on the car `car` is required; the bench takes car_a when it is not set,
-                hardware:=sim passes vehicle_id:=car_a)
+                (on the car `car` is required; the bench takes sim, the simulated nominal
+                car, when it is not set, hardware:=sim passes vehicle_id:=sim)
     loc-check   vehicle_id:=car_<car> (`car` required); every other argument passes through
     survey      the same as loc-check (the survey's URDF is that car's calibration)
     gate        submission:=SUBMISSION, unless a controller is given
@@ -394,15 +394,16 @@ def course_for(c: 'Config', bench: bool = False):
 
 # ---- the car's instance (vehicle_id) ----------------------------------------------------
 
-#: what hardware:=sim runs when no car is set: the plant models car A
-SIM_VEHICLE_ID = 'car_a'
+#: what hardware:=sim runs when no car is set: the plant models actuator.yaml's car, the
+#: simulated nominal car individual_params/config/sim (never a physical car)
+SIM_VEHICLE_ID = 'sim'
 
 
 def vehicle_id_of(car: str) -> str:
     """'B' (or 'b', 'car_b') -> 'car_b', one of individual_params' config/<vehicle_id>/."""
     v = str(car).strip().lower()
     name = v if v.startswith('car_') else f'car_{v}'
-    known = _instances.names()
+    known = [n for n in _instances.names() if n.startswith('car_')]   # not sim: no car
     if name not in known:
         raise ConfigError(f'car {car!r}: not a known car; one of '
                           + ', '.join(n[len('car_'):].upper() for n in known))
@@ -414,7 +415,7 @@ def vehicle_id_for(c: 'Config', rest, required: bool, fallback: Optional[str] = 
 
     `car` picks the instance; a vehicle_id:= already among `rest` must agree with it (and
     is then kept, not repeated). required: on the car, where neither is a refusal;
-    elsewhere `fallback` is passed when given, else the launch file's default (car_a)
+    elsewhere `fallback` is passed when given, else the launch file's default (sim)
     stands."""
     given = [a.split(':=', 1)[1] for a in rest if a.startswith('vehicle_id:=')]
     explicit = given[-1] if given else None

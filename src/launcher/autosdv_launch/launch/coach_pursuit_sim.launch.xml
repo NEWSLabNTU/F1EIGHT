@@ -41,7 +41,7 @@
        description="map for placing the simulator; not used by the lab itself"/>
   <arg name="vehicle_model" default="autosdv_vehicle"/>
   <arg name="sensor_model" default="autosdv_sensor_kit"/>
-  <arg name="vehicle_id" default="car_a" description="the individual_params instance; a simulator models car A"/>
+  <arg name="vehicle_id" default="sim" description="the individual_params instance; a simulator models sim, the nominal car (actuator.yaml)"/>
   <arg name="rviz" default="true"/>
   <arg name="launch_map" default="$(var rviz)"
        description="load the map: the RViz backdrop, nothing else; follows rviz"/>

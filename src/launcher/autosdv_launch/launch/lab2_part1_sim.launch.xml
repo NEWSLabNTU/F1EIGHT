@@ -71,9 +71,10 @@
        description="[s wall] a participant silent this long invalidates the run; raise it on a host that stalls at startup"/>
   <arg name="vehicle_model" default="autosdv_vehicle"/>
   <arg name="sensor_model" default="autosdv_sensor_kit"/>
-  <!-- pinned, not an argument: the plant models actuator.yaml's car, which is car A
-       (individual_params/config/car_a: its actuator PWM and IMU bias) -->
-  <let name="vehicle_id" value="car_a"/>
+  <!-- pinned, not an argument: the plant models actuator.yaml's car, the simulated
+       nominal car (individual_params/config/sim: its actuator PWM and IMU bias),
+       never a physical one -->
+  <let name="vehicle_id" value="sim"/>
 
   <let name="cfg" value="$(find-pkg-share autosdv_waypoint_lab)/config/part1"/>
   <let name="profile_file" value="$(var course_dir)/part1_profile.yaml"/>

@@ -8,7 +8,7 @@
 
 vehicle_id:= is required on the car (the stack refuses to start without one,
 and the fit measures deadband and gain from that car's init_pwm); the bench
-defaults to car_a.
+defaults to sim, the simulated nominal car.
 
 In order, with short status lines here and the rest in BAG/run_logs/:
 
@@ -93,7 +93,7 @@ def parse_args(argv):
         from autosdv_vehicle_interface import car_profile
         if car not in car_profile.names():
             ap.error(f'vehicle_id:={car}: one of {", ".join(car_profile.names())}')
-    opts.vehicle_id = car or 'car_a'      # coach_pursuit_bench.launch.xml's default
+    opts.vehicle_id = car or 'sim'      # coach_pursuit_bench.launch.xml's default
     try:
         opts.speeds = [float(x) for x in opts.steps.split(',') if x.strip()]
     except ValueError:

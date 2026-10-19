@@ -83,7 +83,7 @@ PART1_CLASS = 'lab2_speed.speed_pid:SpeedPID'
 CLASS = PART1_CLASS            # Part 2 drives the same class, with the car file
 CAR_YAML = 'speed_pid_car.yaml'
 FF_KEYS = ('ff_deadband', 'ff_gain')
-DEFAULT_VEHICLE_ID = 'car_a'     # where no car is known: the sims and the bench run car A
+DEFAULT_VEHICLE_ID = 'sim'       # where no car is known: the sims and the bench run sim, the nominal car
 PWM_KEYS = ('init_pwm', 'min_pwm', 'max_pwm')
 
 
@@ -99,7 +99,7 @@ def _instances():
 def actuator_pwm(vehicle_id: str = None) -> dict:
     """init_pwm, min_pwm and max_pwm of the car (the limits of the offsets): actuator.yaml
     with individual_params/config/<vehicle_id>/autosdv_vehicle/actuator.param.yaml over it.
-    No vehicle_id: car_a."""
+    No vehicle_id: sim, the simulated nominal car."""
     try:
         p = _instances().load(vehicle_id or DEFAULT_VEHICLE_ID)
     except ValueError as e:
@@ -109,7 +109,7 @@ def actuator_pwm(vehicle_id: str = None) -> dict:
 
 def part1_keys(pwm: dict = None) -> dict:
     """{key: (type, low, high, low_inclusive)}: what config/speed_pid.yaml may hold. pwm: the
-    car's actuator_pwm() (default car_a's): forward headroom max_pwm - init_pwm, brake room
+    car's actuator_pwm() (default sim's): forward headroom max_pwm - init_pwm, brake room
     init_pwm - min_pwm.
 
     The course handout's lab2_speed/selfcheck.py carries a copy of this table (KEYS); a change
@@ -386,7 +386,7 @@ def main(argv=None) -> int:
                       help='DIR is a Part 1 submission for the simulated car (lab2_speed/)')
     ap.add_argument('--vehicle-id', default=None,
                     help='the car whose PWM bounds the offsets: car_a, car_b or car_c (default '
-                    'car_a; `just lab2 vehicle` passes the vehicle_id:= that `car` picked)')
+                    'sim, the simulated nominal car; `just lab2 vehicle` passes the vehicle_id:= that `car` picked)')
     what = ap.add_mutually_exclusive_group()
     what.add_argument('--pythonpath', action='store_true', help='print the PYTHONPATH entry only')
     what.add_argument('--launch-args', action='store_true', help='print the launch args, one per line')

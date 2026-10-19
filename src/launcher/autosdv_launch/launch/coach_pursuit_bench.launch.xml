@@ -34,8 +34,8 @@
 -->
 <launch>
   <!-- the student's law and inner loop, as on the car -->
-  <arg name="vehicle_id" default="car_a"
-       description="which car the bench models: individual_params/config/VEHICLE_ID (autosdv_vehicle/actuator.param.yaml, the IMU bias), for the dry-run vehicle interface and the plant alike. car_a by default: a bench drives no motor"/>
+  <arg name="vehicle_id" default="sim"
+       description="which car the bench models: individual_params/config/VEHICLE_ID (autosdv_vehicle/actuator.param.yaml, the IMU bias), for the dry-run vehicle interface and the plant alike. sim (the nominal car, actuator.yaml) by default: a bench drives no motor"/>
   <arg name="controller_class" default="autosdv_coach_lab.reference.cruise_controller:CruiseController"/>
   <arg name="controller_param_file" default=""/>
   <arg name="launch_planner" default="true"/>

@@ -23,8 +23,8 @@ def test_vehicle_id_is_checked_and_passed_through():
         rp.parse_args(['vehicle_id:=car_z'])
 
 
-def test_bench_defaults_to_car_a():
-    assert rp.parse_args(['--bench', '--yes']).vehicle_id == 'car_a'
+def test_bench_defaults_to_sim():
+    assert rp.parse_args(['--bench', '--yes']).vehicle_id == 'sim'
     assert rp.parse_args(['--bench', 'vehicle_id:=car_b']).vehicle_id == 'car_b'
 
 

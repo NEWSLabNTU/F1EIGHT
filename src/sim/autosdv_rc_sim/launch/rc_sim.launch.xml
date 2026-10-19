@@ -32,9 +32,10 @@
   <arg name="rviz" default="true"/>
   <arg name="vehicle_model" default="autosdv_vehicle"/>
   <arg name="sensor_model" default="autosdv_sensor_kit"/>
-  <!-- pinned, not an argument: the plant models actuator.yaml's car, which is car A
-       (individual_params/config/car_a: its actuator PWM, IMU bias and calibration) -->
-  <let name="vehicle_id" value="car_a"/>
+  <!-- pinned, not an argument: the plant models actuator.yaml's car, the simulated
+       nominal car (individual_params/config/sim: its actuator PWM, IMU bias and
+       calibration), never a physical one -->
+  <let name="vehicle_id" value="sim"/>
   <arg name="data_path" default="$(env AUTOSDV_DATA_PATH ./data/autoware_data)"/>
 
   <!-- tier4_simulator_component reads this from its including scope (planning_simulator declares it) -->

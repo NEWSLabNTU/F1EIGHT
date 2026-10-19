@@ -131,7 +131,7 @@ just coach engage                                             # terminal 4: star
 
 Or all four from one terminal, which also fits and exports at the end:
 `just coach record-part1 vehicle_id:=car_b --name steps1` (`vehicle_id:=`
-is required; `--bench` defaults to `car_a`).
+is required; `--bench` defaults to `sim`, the simulated nominal car).
 
 `record-cal` first saves the running actuator's parameters
 (`ros2 param dump /autosdv/actuator_node`: `init_pwm`, `brake_pwm`,

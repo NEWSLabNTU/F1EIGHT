@@ -92,7 +92,7 @@ def parse(argv):
     ap.add_argument('--config', default=None)
     ap.add_argument('--vehicle-id', default=None,
                     help='car_a, car_b or car_c: the car\'s instance, individual_params/config/<id> '
-                         '(default: the settings\' car; --bench: car_a)')
+                         '(default: the settings\' car; --bench: sim, the nominal car)')
     a = ap.parse_args(argv)
     if a.vehicle_id is None and not a.bench:
         try:
@@ -104,7 +104,7 @@ def parse(argv):
             ap.error('no car: pass --vehicle-id car_a|car_b|car_c, or set `car` '
                      '(`just lab2 init car:=A|B|C`)')
     if a.vehicle_id is None:
-        a.vehicle_id = 'car_a'
+        a.vehicle_id = 'sim'
     if a.bench and not a.truth:
         raise Usage('--bench needs --truth DIR: the course the mock camera renders')
     if a.truth and not a.bench:

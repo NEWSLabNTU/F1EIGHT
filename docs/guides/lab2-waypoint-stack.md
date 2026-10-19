@@ -49,7 +49,7 @@ just lab2 plot                    # the latest bag
 
 | Key | Used by | Default |
 | --- | --- | --- |
-| `car` | `A`, `B` or `C`: the bags' label (`record`, `check-bags`, `audit`) AND the car's instance: `vehicle`, `run`, `loc-check` and `survey` pass `vehicle_id:=car_<car>` (`individual_params/config/car_<car>/`), and the submission's PWM offsets are bounded by that car's neutral. A `vehicle_id:=` given as well must agree | none: required by `record`, and by `vehicle`/`run`/`loc-check` on the car (they refuse without it); the bench (`run --bench`) and the sims run `car_a` |
+| `car` | `A`, `B` or `C`: the bags' label (`record`, `check-bags`, `audit`) AND the car's instance: `vehicle`, `run`, `loc-check` and `survey` pass `vehicle_id:=car_<car>` (`individual_params/config/car_<car>/`), and the submission's PWM offsets are bounded by that car's neutral. A `vehicle_id:=` given as well must agree | none: required by `record`, and by `vehicle`/`run`/`loc-check` on the car (they refuse without it); the bench (`run --bench`) and the sims run `sim`, the simulated nominal car |
 | `team` | `record`, `check-bags` (the team number) | none (required by `record`) |
 | `team_dir` | `vehicle`: the team's controller and `path_tracker.param.yaml` (what `team:=DIR` passes) | none (required by `vehicle`) |
 | `submission` | `gate`: the controller to gate (what `submission:=DIR` passes) | none (required by `gate`) |

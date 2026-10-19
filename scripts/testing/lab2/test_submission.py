@@ -284,8 +284,8 @@ def test_part1_cli_and_shell_helper(tmp_path, capsys):
 
 def test_offset_limits_follow_the_vehicle_id(tmp_path):
     cp = submission._instances()
-    a, b = cp.load('car_a'), cp.load('car_b')
-    assert submission.actuator_pwm() == submission.actuator_pwm('car_a') == \
+    a, b = cp.load('sim'), cp.load('car_b')
+    assert submission.actuator_pwm() == submission.actuator_pwm('sim') == \
         {k: a[k] for k in ('init_pwm', 'min_pwm', 'max_pwm')}
     pwm_b = submission.actuator_pwm('car_b')
     assert pwm_b['init_pwm'] == b['init_pwm'] != a['init_pwm']

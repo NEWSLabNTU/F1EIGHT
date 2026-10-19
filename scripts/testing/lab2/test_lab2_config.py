@@ -240,6 +240,10 @@ def test_car_picks_the_vehicle_id(tmp_path):
         lc.plan('vehicle', [cf, 'vehicle_id:=car_z'])
     with pytest.raises(lc.ConfigError, match="car 'D'"):
         lc.plan('vehicle', [cf, 'car:=D'])
+    # sim is the simulators' nominal car, not a car `car` can name
+    with pytest.raises(lc.ConfigError, match="car 'sim'") as e:
+        lc.plan('vehicle', [cf, 'car:=sim'])
+    assert 'SIM' not in str(e.value) and ', ,' not in str(e.value)
     assert lc.plan('loc-check', [cf, 'rviz:=true'])[0] == ['rviz:=true', 'vehicle_id:=car_b']
     # loc-check passes course_dir:= etc. through, and takes car:= as the setting
     assert lc.plan('loc-check', [cf, 'course_dir:=/d', 'car:=C'])[0] == \
@@ -252,13 +256,13 @@ def test_no_car_is_refused_on_the_car_not_on_the_bench(no_real_home):
     assert 'just lab2 init car:=A|B|C' in str(e.value) and '\n' not in str(e.value)
     with pytest.raises(lc.ConfigError, match='no car set'):
         lc.plan('loc-check', [])
-    # the bench keeps its launch default, car_a; the hardware sim is passed car_a
+    # the bench keeps its launch default, sim; the hardware sim is passed sim
     # (waypoint_follow.launch.xml requires vehicle_id)
     args = lc.plan('vehicle', ['team_dir:=/t'], bench=True)[0]
     assert not any(a.startswith('vehicle_id:=') for a in args)
     for sim in ('hardware:=sim', 'hardware_sim:=true'):
         assert [a for a in lc.plan('vehicle', ['team_dir:=/t', sim])[0]
-                if a.startswith('vehicle_id:=')] == ['vehicle_id:=car_a']
+                if a.startswith('vehicle_id:=')] == ['vehicle_id:=sim']
     # the survey takes the car the same way loc-check does
     assert lc.plan('survey', ['car:=B', 'marker_size:=0.25'])[0] == \
         ['marker_size:=0.25', 'vehicle_id:=car_b']

@@ -8,7 +8,7 @@
 # `team:=DIR` (or `--team DIR`) does the same for a Part 2 team directory, and
 # adds tracker_param_file:= for its path_tracker.param.yaml.
 # A vehicle_id:=CAR (passes through) bounds the PWM offsets by that car's PWM;
-# without one, car_a's. Every other argument passes through unchanged. Source scripts/env.sh first:
+# without one, sim's (the simulated nominal car). Every other argument passes through unchanged. Source scripts/env.sh first:
 # it must not run after this, or it would not know about PYTHONPATH.
 #
 #   lab2_apply_submission --part1 "$@"   # `just lab2 sim`: submission:=DIR is a Part 1

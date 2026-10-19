@@ -55,6 +55,7 @@ individual_params/config/
     autosdv.preset.yaml      <- the deployment layer below
   car_b/ ...
   car_c/ ...
+  sim/                       <- the simulated nominal car: actuator.yaml's values, never a physical car
 ```
 
 The `autosdv_vehicle/actuator.param.yaml` file replaces
@@ -91,8 +92,9 @@ just lab2 run car:=B                           # lab2's car key becomes vehicle_
 `vehicle_id` gets no default and no environment variable (Autoware's
 `$(env VEHICLE_ID default)` is dropped, matching the rule that the shell sets
 nothing): on a car, a launch without it refuses, naming the instances that
-exist. The simulator and the benches pass their own instance (`car_a`, the
-car `actuator.yaml` and the plant model).
+exist. The simulator and the benches pass their own instance (`sim`, the
+simulated nominal car: `actuator.yaml`'s values, which the plant models; never a
+physical car. `car_a` was this car until it was measured).
 
 ## What it costs
 
@@ -124,7 +126,7 @@ and the command line beats both.
 |---|---|---|---|
 | `sensor_model` | file default `autosdv_sensor_kit`; waypoint_follow: hardware:=sim only | preset default (file default as fallback), passed to `autosdv.launch.yaml` too | model |
 | `vehicle_model` | file default `autosdv_vehicle` | preset default (file default as fallback) | model |
-| `vehicle_id` | `$(env VEHICLE_ID default)`: Autoware's `default` calibration on every car | **required**, no environment; sims pin and benches default to `car_a` | instance |
+| `vehicle_id` | `$(env VEHICLE_ID default)`: Autoware's `default` calibration on every car | **required**, no environment; sims pin and benches default to `sim` | instance |
 | `config_dir` (URDF calibration) | `individual_params/config/default/<sensor_model>` | `individual_params/config/<vehicle_id>/<sensor_model>` | instance |
 | actuator PWM file | `car_profile:=` (optional at parse, refused at start) -> `autosdv_vehicle_interface/params/cars/<car>.param.yaml` | `individual_params/config/<vehicle_id>/autosdv_vehicle/actuator.param.yaml`, from `vehicle_id` | instance |
 | `sensor_suite` | file default (`robin_zed` in waypoint_follow, loc-check, survey-align; `vlp32c_zed_imu` in autosdv.launch.yaml) | preset default (car A `vlp16_zed`, B and C `robin_zed`); loc-check and survey-align take the preset's | preset |
