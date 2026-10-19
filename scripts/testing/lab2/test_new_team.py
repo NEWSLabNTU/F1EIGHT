@@ -37,7 +37,7 @@ FILES = {
 STUB_BYTES = b'class SpeedPID:  # TODO\n    pass\n'
 LAB = {nt.STUB: STUB_BYTES,
        nt.SIM_SEED: b'# sim\nkp: 12.0\nff_gain: 0.1433\n',
-       nt.CAR_SEED: b'# A copy of the Lab 2 handout\'s file\n# Keep equal.\n#\n# car\nkp: 20.0\n'}
+       nt.CAR_SEED: b'# The seed of a team car package\n# Keep equal.\n#\n# car\nkp: 20.0\n'}
 IDS = ('car_a', 'sim')
 
 

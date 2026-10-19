@@ -1,13 +1,10 @@
-# Lab 2 Part 1 SpeedPID: the STARTING parameters (autosdv_waypoint_lab.stub.speed_pid_part1's
-# defaults, and the seed of every team model's config/sim/speed_controller.param.yaml, where
-# `just lab2 new-team` nests these keys under speed_controller_params).
-# A starting point, not tuned: you are expected to tune them.
+# Lab 2 Part 1: your SpeedPID's parameters on the simulated car. The starting values are
+# not tuned: tuning them is part of the task.
 #
-# A plain mapping. The actuator merges it over its own motor parameters (init_pwm, min_pwm,
-# max_pwm, brake_pwm, rate, ...), so SpeedPID(params) sees both; these keys win on a
-# collision. Only the keys below are accepted (scripts/testing/lab2/submission.py
-# --part1 checks names, types and ranges; the handout's selfcheck.py has a copy of that table,
-# and the two must match).
+# The actuator merges these over its own motor parameters (init_pwm, min_pwm, max_pwm,
+# brake_pwm, rate, ...), so SpeedPID(params) sees both, and these keys win on a collision.
+# Only the keys below are accepted: `just lab2 sim` and the handout's selfcheck.py check
+# their names, types and ranges.
 kp: 12.0                               # [counts per m/s], >= 0
 ki: 10.0                               # [counts per m], >= 0
 kd: 0.0                                # [counts per m/s^2], >= 0
