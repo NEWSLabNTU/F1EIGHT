@@ -4,10 +4,12 @@
 # command line only, and nothing here drives the car.
 #
 #   survey ORIGIN_ID [DIR] [ARGS]  scan, Ctrl-C solves: a map in the ORIGIN BOARD's frame.
-#                                  With --route NAME: then align it to that route (below)
-#   scan   ORIGIN_ID [DIR] [ARGS]  the same as survey without --route (DIR ORIGIN_ID works too)
-#   align  [DIR] --route NAME      optional: put the map in a route's start-box frame
-#                                  from one straight drive from the start box, Ctrl-C
+#                                  With --align: then align it to the start box (below)
+#   scan   ORIGIN_ID [DIR] [ARGS]  the same as survey without --align (DIR ORIGIN_ID works too)
+#   align  [DIR]                   optional: put the map in the START-BOX frame (origin at
+#                                  the start box, x along the first leg) from one straight
+#                                  drive from the start box, Ctrl-C. No route: every route
+#                                  taped from that box runs on it
 #   solve  [DIR] [ARGS]            solve the scan again, from DIR/survey_data.npz, no car
 #   check  [DIR] [ARGS]            drive by hand, watch the localization on the map
 #   save                           solve and write the running scan now, without stopping it
@@ -21,7 +23,7 @@
 # (default DICT_5X5_1000) and marker_size:= (default 0.4667 m, the lab's 600 mm
 # boards: the black square's edge, measured; a wrong one scales every distance)
 # for the scan, and any other argument of the launch file the command runs.
-# align takes --route, --force, --vehicle-id (or vehicle_id:=), --bench --truth DIR.
+# align takes --force, --vehicle-id (or vehicle_id:=), --bench --truth DIR.
 #
 # After a Ctrl-C, just (1.58) always ends with "error: interrupted by SIGINT":
 # the line before it is this script's verdict.
@@ -149,11 +151,13 @@ scan_verdict() {
 CMD=${1-}; [ $# -gt 0 ] && shift
 case "$CMD" in
 scan|survey)
-    # key:=value arguments go to the scan; --route (or route:=) and the other
-    # --options to the alignment, which runs only when a route is named
-    pos=(); scan_args=(); align_args=(); align_opts=0; route=
+    # key:=value arguments go to the scan; --align and the other --options to the
+    # alignment, which runs only with --align. --route NAME (before alignments lost
+    # their route) still means --align, with a note
+    pos=(); scan_args=(); align_args=(); align_opts=0; align=0; route=
     while [ $# -gt 0 ]; do
         case "$1" in
+            --align) align=1 ;;
             route:=*) route=${1#route:=} ;;
             --route) [ $# -ge 2 ] || die "--route needs a value"; route=$2; shift ;;
             --route=*) route=${1#--route=} ;;
@@ -166,28 +170,33 @@ scan|survey)
         esac
         shift
     done
-    [ "$CMD" = scan ] && [ -n "$route" ] && die "scan takes no route: \`just aruco-map survey ORIGIN_ID --route $route\` scans and aligns"
-    [ $align_opts = 1 ] && [ -z "$route" ] && die "alignment options need a route: --route NAME"
+    if [ -n "$route" ]; then
+        echo "note: --route $route is not needed: the alignment measures the start box, and a run names" \
+             "its route (just lab2 run route:=$route). Aligning (--align)." >&2
+        align=1
+    fi
+    [ "$CMD" = scan ] && [ $align = 1 ] && die "scan does not align: \`just aruco-map survey ORIGIN_ID --align\` scans and aligns"
+    [ $align_opts = 1 ] && [ $align = 0 ] && die "alignment options need --align"
     new_survey_dir "${pos[@]}" "${scan_args[@]}"
     # Ctrl-C reaches the stage running in the foreground, which ends it; this
     # script only notes it and carries on to the verdict
     trap ':' INT
-    stages=1; [ -n "$route" ] && stages=2
+    stages=1; [ $align = 1 ] && stages=2
     echo
     echo "[1/$stages] Scan: drive or push the car slowly past every board, then press Ctrl-C to solve the map."
     run_scan
     scan_verdict || exit 1
-    [ -z "$route" ] && exit 0
+    [ $align = 0 ] && exit 0
     echo
-    echo "[2/2] Align to route $route: put the car in the taped start box, facing along the first leg."
+    echo "[2/2] Align to the start box: put the car in the taped start box, facing along the first leg."
     if ! read -r -p "      Press Enter when it is there (q or Ctrl-C to stop here): " answer || [ "${answer-}" = q ]; then
-        echo; echo "stopped; the map is kept. Align later: just aruco-map align $DIR --route $route"; exit 0
+        echo; echo "stopped; the map is kept. Align later: just aruco-map align $DIR"; exit 0
     fi
     echo "      Wait for READY, drive STRAIGHT along the first leg (2 m or more), stop, press Ctrl-C."
-    ARGS=(--route "$route" "${align_args[@]}")
+    ARGS=("${align_args[@]}")
     run_align
     status=$?
-    [ $status -eq 0 ] && echo "aruco-map: aligned to $route -> $DIR. Next: just aruco-map check"
+    [ $status -eq 0 ] && echo "aruco-map: aligned to the start box -> $DIR. Next: just aruco-map check, or a run on any route taped from that box"
     exit $status
     ;;
 align)

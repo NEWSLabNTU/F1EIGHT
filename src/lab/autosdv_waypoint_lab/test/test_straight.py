@@ -31,10 +31,10 @@ def test_the_boards_and_frame_are_the_uturns():
     uturn = course_mod.load_course(os.path.join(COURSES, 'lab2_uturn'))
     assert [(b.id, b.x, b.y, b.yaw) for b in lay.boards] == \
         [(m.id, m.x, m.y, m.yaw) for m in uturn.markers]
-    d = yaml.safe_load(straight.course_yaml(lay).split('\nfield:', 1)[0] + '\n') or {}
+    d = yaml.safe_load(straight.course_yaml(lay).split('\npath:', 1)[0] + '\n') or {}
     assert d == {}          # the header is comments only
     c = yaml.safe_load(straight.course_yaml(lay))
-    assert c['field'] == 'lab2_uturn'
+    assert 'field' not in c  # alignments have no route: nothing to name
     assert c['start_pose'] == {'x': 0.0, 'y': 0.0, 'yaw': 0.0}
     assert c['closed'] is False and c['laps'] == 1 and c['v_ref'] == 0.8
     assert c['marker_size'] == uturn.marker_size and c['dictionary'] == uturn.dictionary
@@ -103,4 +103,4 @@ def test_shipped_straights_are_up_to_date(name, length):
     for fname, text in straight.files(lay, d).items():
         with open(os.path.join(d, fname)) as f:
             assert f.read() == text, f'{name}/{fname}: run just lab2 make-straight {length:g} --write'
-    assert _yaml(d)['field'] == 'lab2_uturn'
+    assert 'field' not in _yaml(d)

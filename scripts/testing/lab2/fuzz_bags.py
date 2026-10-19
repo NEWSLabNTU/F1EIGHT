@@ -660,12 +660,12 @@ def catalogue(out: Path) -> List[Case]:
     add('mode:disengage_after_finish', dis_after, Expect(A, V))
 
     # localization
-    add('loc:lateral_0.35m_1s',
-        lambda b, c, r: offset_kin(b, *c.w1, 0.35 * c.w1_normal[0], 0.35 * c.w1_normal[1]),
-        Expect(R, I, metric=m_path_dev(0.30, 0.40)))
-    add('loc:lateral_0.25m_1s',
-        lambda b, c, r: offset_kin(b, *c.w1, 0.25 * c.w1_normal[0], 0.25 * c.w1_normal[1]),
-        Expect(A, V, metric=m_path_dev(0.24, 0.30)))
+    add('loc:lateral_0.55m_1s',
+        lambda b, c, r: offset_kin(b, *c.w1, 0.55 * c.w1_normal[0], 0.55 * c.w1_normal[1]),
+        Expect(R, I, metric=m_path_dev(0.50, 0.60)))
+    add('loc:lateral_0.45m_1s',
+        lambda b, c, r: offset_kin(b, *c.w1, 0.45 * c.w1_normal[0], 0.45 * c.w1_normal[1]),
+        Expect(A, V, metric=m_path_dev(0.44, 0.50)))
     add('loc:jump_lateral_0.6m_2s',
         lambda b, c, r: offset_kin(b, *c.w2, 0.6 * c.w2_normal[0], 0.6 * c.w2_normal[1]),
         Expect(R, I))

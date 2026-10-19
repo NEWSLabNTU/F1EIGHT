@@ -283,12 +283,12 @@ def test_no_car_is_refused_on_the_car_not_on_the_bench(no_real_home):
     assert lc.plan('survey', ['car:=B', 'marker_size:=0.25'])[0] == \
         ['marker_size:=0.25', 'vehicle_id:=car_b']
     assert lc.plan('survey', ['marker_size:=0.25'])[0] == ['marker_size:=0.25', 'vehicle_id:=sim']
-    # survey-align: the settings' route and car for `just lab2 survey-align`, which reads no settings
-    assert lc.plan('survey-align', ['car:=B'])[0] == ['--route', 'lab2_uturn', 'vehicle_id:=car_b']
-    assert lc.plan('survey-align', ['/s', '--force'])[0] == \
-        ['/s', '--force', '--route', 'lab2_uturn', 'vehicle_id:=sim']
+    # survey-align: the settings' car for `just aruco-map align`, which reads no settings; no
+    # route (the alignment measures the start box)
+    assert lc.plan('survey-align', ['car:=B'])[0] == ['vehicle_id:=car_b']
+    assert lc.plan('survey-align', ['/s', '--force'])[0] == ['/s', '--force', 'vehicle_id:=sim']
     assert lc.plan('survey-align', ['route:=lab2_straight_2m', '--vehicle-id', 'car_c'])[0] == \
-        ['--vehicle-id', 'car_c', '--route', 'lab2_straight_2m']
+        ['--vehicle-id', 'car_c']
     assert lc.plan('survey-align', ['--route', 'x', 'car:=B', '--bench', '--truth', '/t'])[0] == \
         ['--route', 'x', '--bench', '--truth', '/t']
     # a car set on the bench is still that car's profile
@@ -320,8 +320,12 @@ def test_show_names_every_source(tmp_path):
     assert f'# {f}' in out and '# command line' in out and '# default' in out and '# not set' in out
 
 
+MAP_FILES = ('lanelet2_map.osm', 'ar_tag.param.yaml', 'map_projector_info.yaml')
+
+
 def _aligned_survey(root, route='lab2_uturn', path_text=None):
-    """A survey directory as `just lab2 survey-align` leaves it."""
+    """A survey directory as `just lab2 survey-align` left it before alignments lost their
+    route: the route's keys and path.csv copied in, `alignment.route` named."""
     import shutil
     src = lc.COURSES / route
     d = root / 'surveys' / '2026-10-16_10-00-00'
@@ -333,11 +337,13 @@ def _aligned_survey(root, route='lab2_uturn', path_text=None):
     shutil.copyfile(src / 'path.csv', d / 'path.csv')
     if path_text is not None:
         (d / 'path.csv').write_text(path_text)
+    for name in MAP_FILES:
+        shutil.copyfile(src / name, d / name)
     (root / 'surveys' / 'latest').symlink_to(d.name)
     return d
 
 
-def test_vehicle_runs_the_aligned_survey(tmp_path, monkeypatch, capsys):
+def test_vehicle_runs_the_aligned_survey_with_the_route(tmp_path, monkeypatch, capsys):
     monkeypatch.setattr(lc, 'SURVEY_LATEST', tmp_path / 'surveys' / 'latest')
     f = tmp_path / 'x.yaml'
     f.write_text('car: A\n')
@@ -347,26 +353,38 @@ def test_vehicle_runs_the_aligned_survey(tmp_path, monkeypatch, capsys):
     assert 'PACKAGED' in capsys.readouterr().err
     d = _aligned_survey(tmp_path)
     args, line = lc.plan('vehicle', [cf])
-    assert args[0] == f'course_dir:={d.resolve()}' and 'course_dir' in line
-    # the bench, `package`, and another route never take it
+    run = tmp_path / 'surveys' / f'{d.name}.lab2_uturn'
+    assert args[0] == f'course_dir:={run}' and 'course_dir' in line
+    assert (run / 'path.csv').read_bytes() == (lc.COURSES / 'lab2_uturn' / 'path.csv').read_bytes()
+    assert yaml.safe_load((run / 'course.yaml').read_text())['markers'] == \
+        yaml.safe_load((d / 'course.yaml').read_text())['markers']
+    # the bench and `package` never take it
     assert lc.plan('vehicle', [cf], bench=True)[0][0] == 'route:=lab2_uturn'
     assert lc.plan('vehicle', [cf, 'course_dir:=package'])[0][0] == 'route:=lab2_uturn'
-    assert lc.plan('vehicle', [cf, 'route:=hall_demo'])[0][0] == 'route:=hall_demo'
-    assert "aligned for route 'lab2_uturn'" in capsys.readouterr().err
+    # another route on the same aligned survey: no realignment, no route match needed
+    args = lc.plan('vehicle', [cf, 'route:=lab2_quarter_r2'])[0]
+    q = tmp_path / 'surveys' / f'{d.name}.lab2_quarter_r2'
+    assert args[0] == f'course_dir:={q}'
+    assert yaml.safe_load((q / 'course.yaml').read_text())['alignment']['route'] == 'lab2_quarter_r2'
 
 
-def test_a_stale_or_unaligned_survey_is_not_run(tmp_path, monkeypatch, capsys):
+def test_an_old_route_copy_or_an_unaligned_survey(tmp_path, monkeypatch, capsys):
     monkeypatch.setattr(lc, 'SURVEY_LATEST', tmp_path / 'surveys' / 'latest')
+    # aligned before alignments lost their route, with a path that is not today's: the
+    # route template's path runs, the survey's boards with it
     d = _aligned_survey(tmp_path, path_text='0,0\n1,0\n')
-    ok, why = lc.aligned_for(d, 'lab2_uturn')
-    assert not ok and 'older' in why
-    assert lc.plan('vehicle', ['car:=A'])[0][0] == 'route:=lab2_uturn'
-    assert 'run `just lab2 survey-align` again' in capsys.readouterr().err
+    lc.plan('vehicle', ['car:=A'])
+    run = tmp_path / 'surveys' / f'{d.name}.lab2_uturn'
+    assert (run / 'path.csv').read_bytes() == (lc.COURSES / 'lab2_uturn' / 'path.csv').read_bytes()
     t = yaml.safe_load((d / 'course.yaml').read_text())
     del t['alignment']
     (d / 'course.yaml').write_text(yaml.safe_dump(t))
-    ok, why = lc.aligned_for(d, 'lab2_uturn')
+    ok, why = lc.is_aligned(d)
     assert not ok and 'not aligned' in why
+    capsys.readouterr()
+    assert lc.plan('vehicle', ['car:=A'])[0][0] == 'route:=lab2_uturn'
+    err = capsys.readouterr().err
+    assert 'PACKAGED' in err and 'not aligned' in err
 
 
 def test_sim_takes_nothing_from_the_file(tmp_path):
@@ -389,19 +407,19 @@ def test_part1_submission_in_an_old_file_is_ignored(tmp_path, capsys):
     assert 'part1_submission' not in lc.template()
 
 
-# ---- survey reuse: an aligned survey of the U-turn's field serves a straight on that field
+# ---- one alignment, any route: the run course is the aligned survey with the route
 
-def _real_aligned_survey(root, route='lab2_uturn'):
-    """A survey aligned for `route` by the real solver, from a synthetic stage 1 and a
-    synthetic straight drive (as autosdv_marker_survey/test/test_align.py makes them),
-    with surveys/latest pointing at it."""
+def _real_aligned_survey(root):
+    """A survey aligned by the real solver, from a synthetic stage 1 and a synthetic
+    straight drive (as autosdv_marker_survey/test/test_align.py makes them), with
+    surveys/latest pointing at it."""
     import math
     import random
     import numpy as np
-    for pkg in ('autosdv_marker_survey', 'autosdv_waypoint_lab'):
-        p = str(lc.REPO / 'src/lab' / pkg)
-        if p not in sys.path:
-            sys.path.insert(0, p)
+    for p in (lc.REPO / 'src/localization/autosdv_marker_survey',
+              lc.REPO / 'src/localization/autosdv_aruco_localization'):
+        if str(p) not in sys.path:
+            sys.path.insert(0, str(p))
     from autosdv_marker_survey import align as al
     from autosdv_marker_survey.simulate import stage1_map
     t = yaml.safe_load((lc.COURSES / 'lab2_uturn' / 'course.yaml').read_text())
@@ -411,8 +429,7 @@ def _real_aligned_survey(root, route='lab2_uturn'):
     d = root / 'surveys' / '2026-10-16_10-00-00'
     d.mkdir(parents=True)
     (d / 'course.yaml').write_text(yaml.safe_dump(
-        {'path': 'path.csv', 'closed': True, 'laps': 1, 'v_ref': 0.8,
-         'start_pose': {'x': 0.0, 'y': 0.0, 'yaw': 0.0}, 'marker_size': 0.38,
+        {'start_pose': {'x': 0.0, 'y': 0.0, 'yaw': 0.0}, 'marker_size': 0.38,
          'dictionary': 'DICT_5X5_1000', 'survey': {'origin_marker': 24}, 'markers': stage1}))
     al.prepare_stage1(str(d))
     T = np.linalg.inv(T_w_s1)
@@ -430,7 +447,7 @@ def _real_aligned_survey(root, route='lab2_uturn'):
                                  y0 + math.sin(yaw0) * dd + rng.gauss(0, 0.004), 0.0, yaw0, 0.0, 0.0, 0.3))
         tt += 0.02
     al.write_samples(str(d / al.POSES_FILE), samples)
-    a, _ = al.solve_dir(str(d), str(lc.COURSES / route), samples, log=lambda *x: None)
+    a, _ = al.solve_dir(str(d), samples, log=lambda *x: None)
     assert a.ok, a.problems
     (root / 'surveys' / 'latest').symlink_to(d.name)
     return d
@@ -440,69 +457,70 @@ def _tree(d: Path) -> dict:
     return {str(p.relative_to(d)): p.read_bytes() for p in sorted(d.rglob('*')) if p.is_file()}
 
 
-def test_same_field_follows_the_field_key():
-    assert lc.same_field('lab2_uturn', 'lab2_straight_3m')
-    assert lc.same_field('lab2_straight_2m', 'lab2_straight_3m')
-    assert not lc.same_field('lab2_uturn', 'hall_demo')
-
-
-def test_a_straight_reuses_the_uturn_survey_in_a_sibling(tmp_path, monkeypatch, capsys):
+def test_every_route_runs_on_one_alignment(tmp_path, monkeypatch, capsys):
     monkeypatch.setattr(lc, 'SURVEY_LATEST', tmp_path / 'surveys' / 'latest')
     d = _real_aligned_survey(tmp_path)
     before = _tree(d)
-    args, _ = lc.plan('vehicle', ['car:=A', 'route:=lab2_straight_3m'])
-    sib = tmp_path / 'surveys' / f'{d.name}.lab2_straight_3m'
-    assert args[0] == f'course_dir:={sib}'
-    err = capsys.readouterr().err
-    assert f'survey: {sib}' in err and 're-solved' in err
-    ok, why = lc.aligned_for(sib, 'lab2_straight_3m')
-    assert ok, why
-    # the same drive, the same frame: the boards stand where latest has them
-    mine = yaml.safe_load((sib / 'course.yaml').read_text())['markers']
     theirs = yaml.safe_load((d / 'course.yaml').read_text())['markers']
-    assert mine == theirs
+    for route in ('lab2_uturn', 'lab2_straight_3m', 'lab2_quarter_r2'):
+        args, _ = lc.plan('vehicle', ['car:=A', f'route:={route}'])
+        run = tmp_path / 'surveys' / f'{d.name}.{route}'
+        assert args[0] == f'course_dir:={run}'
+        assert f'survey: {run}' in capsys.readouterr().err
+        # the route's path byte for byte (check-bags' route hash), the survey's boards
+        assert (run / 'path.csv').read_bytes() == (lc.COURSES / route / 'path.csv').read_bytes()
+        assert yaml.safe_load((run / 'course.yaml').read_text())['markers'] == theirs
     # latest itself is never touched
     assert _tree(d) == before
-    # cached: the second run re-solves nothing
-    stamp = (sib / 'course.yaml').stat().st_mtime_ns
-    args2, _ = lc.plan('vehicle', ['car:=A', 'route:=lab2_straight_3m'])
-    assert args2 == args and (sib / 'course.yaml').stat().st_mtime_ns == stamp
-    assert 'cached' in capsys.readouterr().err
-    # the U-turn still runs latest itself
-    assert lc.plan('vehicle', ['car:=A'])[0][0] == f'course_dir:={d.resolve()}'
 
 
-def test_the_sibling_follows_a_new_alignment_of_latest(tmp_path, monkeypatch, capsys):
+def test_the_run_course_follows_a_new_alignment_of_latest(tmp_path, monkeypatch):
     monkeypatch.setattr(lc, 'SURVEY_LATEST', tmp_path / 'surveys' / 'latest')
     d = _real_aligned_survey(tmp_path)
     lc.plan('vehicle', ['car:=A', 'route:=lab2_straight_2m'])
-    sib = tmp_path / 'surveys' / f'{d.name}.lab2_straight_2m'
-    old = (sib / 'course.yaml').read_text()
-    # survey-align again: another drive (shifted 2 cm) -> other alignment inputs
-    from autosdv_marker_survey import align as al
-    ss = al.read_samples(str(d / al.POSES_FILE))
-    for s in ss:
-        s.y += 0.02
-    al.write_samples(str(d / al.POSES_FILE), ss)
-    capsys.readouterr()
+    run = tmp_path / 'surveys' / f'{d.name}.lab2_straight_2m'
+    old = (run / 'course.yaml').read_text()
+    # survey-align again: the boards move in latest; the next run follows
+    t = yaml.safe_load((d / 'course.yaml').read_text())
+    t['markers'][0]['x'] += 0.05
+    (d / 'course.yaml').write_text(yaml.safe_dump(t))
     lc.plan('vehicle', ['car:=A', 'route:=lab2_straight_2m'])
-    assert 're-solved' in capsys.readouterr().err
-    assert (sib / 'course.yaml').read_text() != old
+    new = yaml.safe_load((run / 'course.yaml').read_text())
+    assert (run / 'course.yaml').read_text() != old and new['markers'] == t['markers']
 
 
-def test_reuse_falls_back_to_the_packaged_course(tmp_path, monkeypatch, capsys):
+def test_an_unchanged_run_course_is_left_in_place(tmp_path, monkeypatch):
+    """lab2_run plans, then `just lab2 vehicle` plans again inside the stack it starts: the
+    second plan must not tear the directory down under the running nodes."""
     monkeypatch.setattr(lc, 'SURVEY_LATEST', tmp_path / 'surveys' / 'latest')
     d = _real_aligned_survey(tmp_path)
-    # another field: never reused
-    assert lc.plan('vehicle', ['car:=A', 'route:=hall_demo'])[0][0] == 'route:=hall_demo'
-    assert 'PACKAGED' in capsys.readouterr().err
-    # no recorded drive: nothing to re-solve from
-    (d / 'align_poses.csv').unlink()
+    lc.plan('vehicle', ['car:=A'])
+    run = tmp_path / 'surveys' / f'{d.name}.lab2_uturn'
+    ino, mtime = run.stat().st_ino, (run / 'course.yaml').stat().st_mtime_ns
+    lc.plan('vehicle', ['car:=A'])
+    assert run.stat().st_ino == ino and (run / 'course.yaml').stat().st_mtime_ns == mtime
+    # no temporary siblings left behind
+    assert sorted(p.name for p in (tmp_path / 'surveys').iterdir()) == \
+        sorted(['latest', d.name, run.name])
+
+
+def test_a_directory_not_made_here_is_never_overwritten(tmp_path, monkeypatch, capsys):
+    monkeypatch.setattr(lc, 'SURVEY_LATEST', tmp_path / 'surveys' / 'latest')
+    d = _real_aligned_survey(tmp_path)
+    mine = tmp_path / 'surveys' / f'{d.name}.lab2_straight_3m'
+    mine.mkdir()
+    (mine / 'notes.txt').write_text('mine')
     assert lc.plan('vehicle', ['car:=A', 'route:=lab2_straight_3m'])[0][0] == \
         'route:=lab2_straight_3m'
     err = capsys.readouterr().err
-    assert 'PACKAGED' in err and 'align_poses.csv' in err
-    assert not (tmp_path / 'surveys' / f'{d.name}.lab2_straight_3m').exists()
+    assert 'PACKAGED' in err and 'not made here' in err
+    assert (mine / 'notes.txt').read_text() == 'mine'
+    # a per-route sibling of before (.reused_from) is replaced
+    old = tmp_path / 'surveys' / f'{d.name}.lab2_uturn'
+    old.mkdir()
+    (old / '.reused_from').write_text('x\n')
+    assert lc.plan('vehicle', ['car:=A'])[0][0] == f'course_dir:={old}'
+    assert (old / lc.RUN_COURSE_KEY).is_file() and not (old / '.reused_from').exists()
 
 
 def test_lab2_home_moves_the_settings_file_and_the_reference(tmp_path, monkeypatch):

@@ -326,7 +326,7 @@ that otherwise costs days. See `docs/design/map-handling-per-localization-method
 ```bash
 just aruco-map survey 24 [DIR] [vehicle_id:=car_c]   # drive past the boards, Ctrl-C solves
 just aruco-map check [DIR]                           # drive by hand, watch the localization
-just aruco-map align [DIR] --route NAME              # optional: into a route's start-box frame
+just aruco-map align [DIR]                           # optional: into the start-box frame (no route)
 just aruco-map solve [DIR] [--origin ID]             # re-solve the recording, no car
 ```
 A survey's map is in the **origin board's frame**: origin on the floor below

@@ -282,6 +282,28 @@ def test_car_stack_carries_the_vehicle_id(tmp_path, monkeypatch):
         lr.Run(lr.parse_args([f'config:={f}'])).plan()
 
 
+def test_the_live_view_opens_on_the_runs_display(tmp_path, monkeypatch):
+    import lab2_config as lc
+    monkeypatch.setattr(lc, 'SURVEY_LATEST', tmp_path / 'no_survey')
+    f = tmp_path / 'lab2.yaml'
+    f.write_text(f'car: A\nteam: 3\nbag_dir: {tmp_path / "bags"}\n')
+    run = lr.Run(lr.parse_args([f'config:={f}']))
+    run.viewer = ':1'
+    run.plan()
+    assert run.stack_cmd[-2:] == ['live_view:=true', 'viewer_display:=:1']
+    # `just lab2 vehicle` passes them on to the launch
+    again, _ = lc.plan('vehicle', run.stack_cmd[5:])
+    assert 'live_view:=true' in again and 'viewer_display:=:1' in again
+    # headless: none; live_view:=false: kept closed
+    run = lr.Run(lr.parse_args([f'config:={f}']))
+    run.plan()
+    assert not any(a.startswith('live_view:=') for a in run.stack_cmd)
+    run = lr.Run(lr.parse_args([f'config:={f}', 'live_view:=false']))
+    run.viewer = ':1'
+    run.plan()
+    assert [a for a in run.stack_cmd if a.startswith('live_view:=')] == ['live_view:=false']
+
+
 def test_the_loaded_controller_is_read_from_the_actuator_log(tmp_path):
     d = tmp_path / 'play_log' / '2026' / 'node' / 'actuator_node'
     d.mkdir(parents=True)

@@ -440,8 +440,8 @@ steer-fit *PAIRS:
     exec ros2 run autosdv_waypoint_lab lab2_steer_cal fit "$@"
 
 # --- Marker survey: Lab 2's wrappers of `just aruco-map` (docs/guides/aruco-map.md) ----------
-# The same tool with the lab's settings: the car (car:= or ~/lab2/lab2.yaml) and, for the
-# alignment, the route. Outputs as before: surveys/<date>_<time>, surveys/latest -> it.
+# The same tool with the lab's settings: the car (car:= or ~/lab2/lab2.yaml). Outputs as
+# before: surveys/<date>_<time>, surveys/latest -> it.
 #   just lab2 survey 24                 a new surveys/<date>_<time>, origin marker 24
 #   just lab2 survey courses/my_hall 24 or name the directory
 #   just lab2 survey courses/my_hall 3 dictionary:=ARUCO_MIP_36h12 marker_size:=0.25
@@ -471,14 +471,15 @@ survey-solve *ARGS:
     #!/usr/bin/env bash
     exec scripts/aruco_map/aruco_map.sh solve "$@"
 
-#   just lab2 survey-align                       surveys/latest, the settings' route and car; the car in the taped start box
-#   just lab2 survey-align surveys/<dir> [--route lab2_uturn] [--vehicle-id car_b] [--force]
+#   just lab2 survey-align                       surveys/latest, the settings' car; the car in the taped start box
+#   just lab2 survey-align surveys/<dir> [--vehicle-id car_b] [--force]
 #   just lab2 survey-align DIR --bench --truth TRUTH_DIR      the vehicle bench, no car
 # READY, then drive the car STRAIGHT along the taped first leg (2 m or more), stop, Ctrl-C.
-# Nothing here can drive the car. Writes the aligned course (the route's path.csv, the boards
-# in its frame) and align_report.txt into the survey; the stage-1 result stays in DIR/stage1/.
-# Then: loc-check, run. `just aruco-map align --route ROUTE` with the lab's route and car.
-# Survey stage 2: put the survey into the route's frame (origin at the start box, x along the first leg)
+# Nothing here can drive the car. Writes the aligned map (the boards in the start-box frame,
+# no route) and align_report.txt into the survey; the stage-1 result stays in DIR/stage1/.
+# Every route taped from that start box runs on it: `just lab2 run route:=NAME` adds the
+# route's path. `just aruco-map align` with the lab's car.
+# Survey stage 2: put the survey into the start-box frame (origin at the start box, x along the first leg)
 [positional-arguments]
 survey-align *ARGS:
     #!/usr/bin/env bash

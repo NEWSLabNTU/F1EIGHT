@@ -181,9 +181,9 @@ def test_stop_error_when_the_car_never_stops():
 
 
 def test_off_the_path_is_invalid():
-    ok = metrics(lateral=0.2)
-    assert ok.path_dev_max == pytest.approx(0.2, abs=0.01) and not ok.gate_failures
-    bad = metrics(lateral=0.35)
+    ok = metrics(lateral=0.4)
+    assert ok.path_dev_max == pytest.approx(0.4, abs=0.01) and not ok.gate_failures
+    bad = metrics(lateral=0.55)
     assert any('off the path' in f for f in bad.gate_failures)
     s = rg.score_route(bad, bad)
     assert s.invalid and s.total == 0.0
@@ -348,7 +348,7 @@ def test_laps_mrm_not_engaged_unfinished():
 
 
 def test_checker_rejects_off_the_path():
-    v = check(msgs=msgs_for(lateral=0.4))
+    v = check(msgs=msgs_for(lateral=0.6))
     assert any('off the path' in r for r in v.reasons)
     assert check(msgs=msgs_for(lateral=0.1)).ok
 

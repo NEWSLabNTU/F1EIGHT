@@ -8,9 +8,8 @@ driving +x along the U-turn's first leg, at v_ref, an open path, one lap; the
 path publisher's end ramp brings the car to rest on the last waypoint, as on the
 U-turn. It stands on the SAME field as lab2_uturn: the same start-box frame
 (origin at the start box, x along the first leg), the same boards, read from
-lab2_uturn/course.yaml when this runs. So the U-turn's tape and boards, and its
-aligned survey (lab2_config.course_for re-solves it for this route), serve
-unchanged. course.yaml carries `field: lab2_uturn` to say so.
+lab2_uturn/course.yaml when this runs. So the U-turn's tape and boards, and an
+aligned survey of its start box (an alignment has no route), serve unchanged.
 
 Writes path.csv, course.yaml (generated header), lanelet2_map.osm,
 ar_tag.param.yaml and map_projector_info.yaml into
@@ -194,11 +193,11 @@ def course_yaml(lay: Layout) -> str:
         f'# ramp (decel {uturn.DECEL} m/s^2) brings the car to rest on the last waypoint,',
         f'# ({ex:.2f}, {ey:.2f}), {math.hypot(nearest.x - ex, nearest.y - ey):.2f} m short of board {nearest.id}.',
         '#',
-        f'# Field: {FIELD}\'s, unchanged (`field: {FIELD}` below): its START-BOX frame (origin',
-        '# at the start box, rear axle; x along the first leg; y to the car\'s left), its',
-        '# start box and its boards, copied from its course.yaml when this was generated.',
-        '# Its tape and boards serve as they stand, and its aligned survey is re-solved for',
-        '# this route (lab2_config.course_for: surveys/<latest>.' + lay.name + '/).',
+        f'# Field: {FIELD}\'s, unchanged: its START-BOX frame (origin at the start box, rear',
+        '# axle; x along the first leg; y to the car\'s left), its start box and its boards,',
+        '# copied from its course.yaml when this was generated. Its tape and boards serve as',
+        '# they stand, and so does an aligned survey of that start box (alignments have no',
+        '# route; a run combines the survey with this path: surveys/<latest>.' + lay.name + '/).',
         '#',
         '# Boards (from the start box):',
     ]
@@ -206,7 +205,6 @@ def course_yaml(lay: Layout) -> str:
     h += [f'# Coverage (marker_sim): {_coverage_line(lay)}.']
     h += [f'# Note: {w}.' for w in lay.warnings]
     body = [
-        f'field: {FIELD}',
         'path: path.csv',
         'closed: false',
         'laps: 1',

@@ -176,7 +176,7 @@ def test_reference_tracker_completes_the_lab2_uturn():
     # R 1.1 m: the default lookahead at 0.8 m/s (1.08 m) is about the radius, so the
     # car cuts the turn entry: 0.097 m without noise, 0.089-0.116 m over 10 noise
     # seeds (R 1.5 m gave 0.066-0.077). The lookahead is the teams' knob, so the
-    # default stays; the grade's validity limit is PATH_DEV_MAX 0.30 m.
+    # default stays; the grade's validity limit is PATH_DEV_MAX 0.50 m.
     assert r.cross_track_max < 0.15
     assert math.hypot(r.x[-1] - x[-1], r.y[-1] - y[-1]) < 0.15
 

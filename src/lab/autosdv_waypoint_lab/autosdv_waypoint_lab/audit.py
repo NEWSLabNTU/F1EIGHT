@@ -42,8 +42,8 @@ JSON = 'audit.json'
 
 # Localization against the bench's true pose (a bench bag only; `just lab2
 # integration-test` fails outside these). The scale is the grade's: the path
-# validity line is 0.30 m, so a pose that is itself 0.2 m off at the 95th
-# percentile leaves no margin for tracking. A single fix is noisier than the
+# validity line is route_grade.PATH_DEV_MAX (0.50 m), so a pose that is itself 0.2 m
+# off at the 95th percentile still leaves room for tracking. A single fix is noisier than the
 # EKF that averages it: the localizer declares 0.05 m^2 per axis (sigma 0.22 m),
 # whose 2-D p95 is 0.22 x 2.45 = 0.54 m, hence 0.50 m for the fixes. The
 # rate is the preflight's warn line; the gap stays well inside

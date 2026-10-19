@@ -9,11 +9,11 @@
 # ramp (decel 0.3 m/s^2) brings the car to rest on the last waypoint,
 # (3.00, 0.00), 1.50 m short of board 24.
 #
-# Field: lab2_uturn's, unchanged (`field: lab2_uturn` below): its START-BOX frame (origin
-# at the start box, rear axle; x along the first leg; y to the car's left), its
-# start box and its boards, copied from its course.yaml when this was generated.
-# Its tape and boards serve as they stand, and its aligned survey is re-solved for
-# this route (lab2_config.course_for: surveys/<latest>.lab2_straight_3m/).
+# Field: lab2_uturn's, unchanged: its START-BOX frame (origin at the start box, rear
+# axle; x along the first leg; y to the car's left), its start box and its boards,
+# copied from its course.yaml when this was generated. Its tape and boards serve as
+# they stand, and so does an aligned survey of that start box (alignments have no
+# route; a run combines the survey with this path: surveys/<latest>.lab2_straight_3m/).
 #
 # Boards (from the start box):
 #   id 24  (  4.50,  0.00)  facing -x       in view at s = 0.0-3.0 m
@@ -22,7 +22,6 @@
 #   id 27  ( -2.00, -2.50)  facing +15 deg  in view at s = not in view m
 # Coverage (marker_sim): start box sees >= 2; a board in view on 100%, two or more on 87%; longest gap 0.00 m.
 # Note: two or more boards in view on 87% of the path, not all: one board alone on s = 2.70-3.00 m.
-field: lab2_uturn
 path: path.csv
 closed: false
 laps: 1

@@ -30,8 +30,10 @@ Over SSH (SSH_CONNECTION or SSH_TTY) and not inside tmux, the command re-runs it
 new tmux session (lab2-run, or lab2-run-2, ...), and says how to reattach if the
 connection drops; without tmux, a warning. The windows: $DISPLAY if it answers, else :1
 (the car's desktop, seen over RDP) if it answers, else headless; one line says which. The
-stack never gets a DISPLAY (the ZED: scripts/camera_display.sh); audit.png
-opens on the display chosen, and its path is always printed.
+stack never gets a DISPLAY (the ZED: scripts/camera_display.sh). With a display, the
+live view (RViz: the route, the trail the localizer has put the car on, the marker fixes;
+live_view:=false keeps it closed) opens there during the run, and audit.png at the end;
+the PNG's path is always printed.
 
 In order, with short status lines on the terminal and everything else in log
 files under BAG_DIR/run_logs/<bag name>/ (stack.log, record.log, preflight.log,
@@ -709,6 +711,10 @@ class Run:
             car = [a for a in o.config_args if a.startswith('car:=')][-1:]
             stack = ['just', 'lab2', 'vehicle', '--log-dir', str(self.logdir / 'play_log')] \
                 + cfg_file + car + stack_args
+        # the live view (route, trail, fixes in RViz) on the display audit.png opens on;
+        # live_view:=false on the command line keeps it closed
+        if self.viewer and not any(a.startswith('live_view:=') for a in stack):
+            stack += ['live_view:=true', f'viewer_display:={self.viewer}']
         self.stack_cmd = stack
         self.record_cmd = ['ros2', 'run', 'autosdv_waypoint_lab', 'lab2_record'] + record_args \
             + (['--bench'] if o.bench else [])

@@ -11,22 +11,24 @@ sys.path.insert(0, str(HERE))
 import survey_align as sa  # noqa: E402
 
 
-def test_a_route_is_required():
-    with pytest.raises(sa.Usage, match='which route'):
-        sa.parse(['surveys/x'])
+def test_no_route_is_needed_and_an_old_one_is_ignored(capsys):
+    a = sa.parse(['surveys/x'])
+    assert (a.survey_dir, a.route) == ('surveys/x', None)
+    assert sa.parse(['surveys/x', '--route', 'lab2_uturn']).survey_dir == 'surveys/x'
+    assert 'ignored' in capsys.readouterr().err
 
 
 def test_the_nominal_car_by_default_and_key_value_spellings():
-    a = sa.parse(['surveys/x', '--route', 'lab2_uturn'])
-    assert (a.survey_dir, a.route, a.vehicle_id) == ('surveys/x', 'lab2_uturn', 'sim')
-    a = sa.parse(['route:=/r', 'vehicle_id:=car_c', '--force'])
-    assert (a.survey_dir, a.route, a.vehicle_id, a.force) == ('surveys/latest', '/r', 'car_c', True)
-    assert sa.parse(['--route', 'r', '--vehicle-id', 'car_b']).vehicle_id == 'car_b'
+    a = sa.parse(['surveys/x'])
+    assert (a.survey_dir, a.vehicle_id) == ('surveys/x', 'sim')
+    a = sa.parse(['vehicle_id:=car_c', '--force'])
+    assert (a.survey_dir, a.vehicle_id, a.force) == ('surveys/latest', 'car_c', True)
+    assert sa.parse(['--vehicle-id', 'car_b']).vehicle_id == 'car_b'
 
 
 def test_the_bench_needs_its_truth():
     with pytest.raises(sa.Usage, match='--truth'):
-        sa.parse(['--route', 'r', '--bench'])
+        sa.parse(['--bench'])
 
 
 def test_nothing_of_lab_2_is_read():
@@ -48,7 +50,14 @@ def test_the_command_lists_its_commands():
     assert r.returncode == 2 and 'unknown command' in r.stderr
 
 
-def test_a_scan_takes_no_route():
+def test_a_scan_does_not_align():
+    r = subprocess.run(['bash', str(HERE / 'aruco_map.sh'), 'scan', '24', '--align'],
+                       capture_output=True, text=True)
+    assert r.returncode == 2 and 'survey ORIGIN_ID --align' in r.stderr
+    # --route NAME, from before alignments lost their route, means --align, with a note
     r = subprocess.run(['bash', str(HERE / 'aruco_map.sh'), 'scan', '24', '--route', 'x'],
                        capture_output=True, text=True)
-    assert r.returncode == 2 and 'survey ORIGIN_ID --route x' in r.stderr
+    assert r.returncode == 2 and 'not needed' in r.stderr and 'survey ORIGIN_ID --align' in r.stderr
+    r = subprocess.run(['bash', str(HERE / 'aruco_map.sh'), 'survey', '24', '--force'],
+                       capture_output=True, text=True)
+    assert r.returncode == 2 and 'need --align' in r.stderr

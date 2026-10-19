@@ -1,4 +1,4 @@
-"""Stage 2 of the Lab 2 survey: put a surveyed board map into the START-BOX frame. No ROS.
+"""Stage 2 of the survey: put a surveyed board map into the START-BOX frame. No ROS.
 
 Stage 1 (`just aruco-map scan ID`) measures where the boards stand relative to one
 another, in a frame anchored on one board: origin on the floor below it, x the
@@ -7,7 +7,7 @@ that leans does not tilt that frame; a board that is turned or misplaced does
 turn and shift it). The taped route does not care about that board. Stage 2
 (`just aruco-map align`) runs the localization stack on the stage-1 map, the
 TA drives the car STRAIGHT from the taped start box along the taped first leg,
-and this module turns the localized poses of that drive into the route's frame:
+and this module turns the localized poses of that drive into the start-box frame:
 
     origin  the car's start pose (base_link, the rear axle centre), averaged
             over the REST_WINDOW before it started to move;
@@ -37,13 +37,18 @@ MIN_DISTANCE, wanders more than MAX_LATERAL off its own line, the car was not
 at rest for MIN_REST before it moved, or the car pointed more than
 MAX_START_YAW_DIFF away from where it then drove.
 
-Writes, into the survey directory, the ALIGNED course: course.yaml (the route's
-path, start_pose (0, 0, 0), laps, v_ref from the route template; the measured
-boards in the start-box frame; an `alignment` block), path.csv (the template's,
-byte for byte, so check-bags' route hash matches), the lanelet2 map and
-ar_tag.param.yaml (autosdv_aruco_localization.marker_map),
-map_projector_info.yaml, and align_report.txt. The stage-1 result is kept in
-<survey>/stage1/.
+No route takes part: the drive measures the start box, and every route taped from
+that box (start_pose (0, 0, 0), first leg along +x) runs on the result.
+
+Writes, into the survey directory, the ALIGNED map: course.yaml (start_pose
+(0, 0, 0), the measured boards in the start-box frame, an `alignment` block; no
+path), the lanelet2 map and ar_tag.param.yaml
+(autosdv_aruco_localization.marker_map), map_projector_info.yaml, and
+align_report.txt. The stage-1 result is kept in <survey>/stage1/.
+
+A run adds its route afterwards: write_route_course() combines an aligned survey
+with a route template (the route's path, byte for byte, so check-bags' route hash
+matches; its laps, v_ref, start_pose) into a course directory of its own.
 """
 
 from dataclasses import dataclass, field
@@ -540,31 +545,33 @@ def prepare_stage1(survey_dir: str) -> str:
 ROUTE_KEYS = ('path', 'closed', 'laps', 'v_ref', 'start_pose', 'marker_height', 'uturn')
 
 
-def write_aligned(survey_dir: str, a: Alignment, route_dir: str, report: str,
+def write_aligned(survey_dir: str, a: Alignment, report: str,
                   min_distance: float = MIN_DISTANCE, max_lateral: float = MAX_LATERAL) -> List[str]:
-    """The aligned course in survey_dir (see the module docstring). Returns the files."""
+    """The aligned map in survey_dir (see the module docstring). Returns the files."""
     survey_dir = os.path.abspath(survey_dir)
     s1 = os.path.join(survey_dir, STAGE1_DIR)
     with open(os.path.join(s1, 'course.yaml')) as f:
         stage1 = yaml.safe_load(f) or {}
-    with open(os.path.join(route_dir, 'course.yaml')) as f:
-        route = yaml.safe_load(f) or {}
-    path_name = str(route.get('path', 'path.csv'))
-    sp = route.get('start_pose') or {}
-    if any(abs(float(sp.get(k, 0.0))) > 1e-9 for k in ('x', 'y', 'yaw')):
-        raise ValueError(f'route {route_dir}: start_pose is not (0, 0, 0); the aligned frame '
-                         'puts the start box at the origin (regenerate it: just lab2 make-uturn)')
+    # an alignment written before alignments lost their route copied the route's path in;
+    # it is not this map's, so it goes with the old course.yaml
+    try:
+        with open(os.path.join(survey_dir, 'course.yaml')) as f:
+            old = yaml.safe_load(f) or {}
+    except (OSError, yaml.YAMLError):
+        old = {}
+    old_path = (os.path.join(survey_dir, str(old.get('path', 'path.csv')))
+                if isinstance(old.get('alignment'), dict) and (old.get('alignment') or {}).get('route')
+                else None)
     stamp = datetime.datetime.now().astimezone().isoformat(timespec='seconds')
-    course = {k: route[k] for k in ROUTE_KEYS if k in route}
+    course = {'start_pose': {'x': 0.0, 'y': 0.0, 'yaw': 0.0}}
     course['marker_size'] = stage1.get('marker_size')
     course['dictionary'] = stage1.get('dictionary')
-    if 'marker_height' in stage1 and 'marker_height' not in course:
+    if 'marker_height' in stage1:
         course['marker_height'] = stage1['marker_height']
     if 'survey' in stage1:
         course['survey'] = stage1['survey']
     course['alignment'] = {
         'date': stamp,
-        'route': os.path.basename(os.path.normpath(route_dir)),
         'frame': 'origin at the start box (base_link at rest), x along the drive, z the stage-1 floor normal',
         'stage1_start': {'x': round(a.start_x, 4), 'y': round(a.start_y, 4),
                          'heading': round(a.heading, 5)},
@@ -579,21 +586,19 @@ def write_aligned(survey_dir: str, a: Alignment, route_dir: str, report: str,
     }
     course['markers'] = transform_markers(stage1.get('markers') or [], a)
     header = (f'# ALIGNED {stamp} by `just aruco-map align` (autosdv_marker_survey/align.py).\n'
-              f'# Route {course["alignment"]["route"]}: path, start_pose, laps and v_ref are the\n'
-              '# route template\'s (path.csv is its copy, byte for byte); the markers are the\n'
-              f'# stage-1 survey ({STAGE1_DIR}/course.yaml) in the START-BOX frame: origin at the\n'
-              '# car\'s start pose, x along the straight drive, y to its left, z up.\n'
+              f'# The markers are the stage-1 survey ({STAGE1_DIR}/course.yaml) in the START-BOX\n'
+              '# frame: origin at the car\'s start pose, x along the straight drive, y to its\n'
+              '# left, z up. No route: a run adds its own (write_route_course).\n'
               f'# {REPORT_FILE} says how well the drive fixed it. Re-surveying (`just aruco-map scan`)\n'
-              '# into this directory drops the alignment; run survey-align again after it.\n')
+              '# into this directory drops the alignment; align again after it.\n')
     written = []
     p = os.path.join(survey_dir, 'course.yaml')
     with open(p, 'w') as f:
         f.write(header)
         yaml.safe_dump(course, f, sort_keys=False, default_flow_style=None)
     written.append(p)
-    p = os.path.join(survey_dir, path_name)
-    shutil.copyfile(os.path.join(route_dir, path_name), p)
-    written.append(p)
+    if old_path and os.path.isfile(old_path):
+        os.remove(old_path)
     from autosdv_aruco_localization.marker_map import PROJECTOR_INFO, write_map_files
     written += write_map_files(survey_dir, projector=False)
     p = os.path.join(survey_dir, 'map_projector_info.yaml')
@@ -607,7 +612,64 @@ def write_aligned(survey_dir: str, a: Alignment, route_dir: str, report: str,
     return written
 
 
-def report_text(a: Alignment, survey_dir: str = '', route: str = '',
+MAP_FILES = ('lanelet2_map.osm', 'ar_tag.param.yaml', 'map_projector_info.yaml')
+
+
+def write_route_course(survey_dir: str, route_dir: str, out_dir: str) -> List[str]:
+    """A course to run: the aligned survey's boards and map with the route's path.
+
+    out_dir/course.yaml holds the route template's ROUTE_KEYS (path, laps, v_ref,
+    start_pose, ...), the survey's markers, marker_size, dictionary and survey block,
+    and the survey's `alignment` block with `route` and `survey_dir` added (bag_meta
+    names the route from it); out_dir/<path> is the template's path, byte for byte, and
+    the map files are the survey's. Raises ValueError when the survey is not aligned or
+    the route does not start at the start box."""
+    survey_dir = os.path.abspath(survey_dir)
+    with open(os.path.join(survey_dir, 'course.yaml')) as f:
+        survey = yaml.safe_load(f) or {}
+    if not isinstance(survey.get('alignment'), dict):
+        raise ValueError(f'{survey_dir} is not aligned: `just aruco-map align {survey_dir}` first')
+    with open(os.path.join(route_dir, 'course.yaml')) as f:
+        route = yaml.safe_load(f) or {}
+    sp = route.get('start_pose') or {}
+    if any(abs(float(sp.get(k, 0.0))) > 1e-9 for k in ('x', 'y', 'yaw')):
+        raise ValueError(f'route {route_dir}: start_pose is not (0, 0, 0); an aligned survey puts '
+                         'the start box at the origin, x along the first leg')
+    path_name = str(route.get('path', 'path.csv'))
+    course = {k: route[k] for k in ROUTE_KEYS if k in route}
+    for k in ('marker_size', 'dictionary', 'survey'):
+        if k in survey:
+            course[k] = survey[k]
+    if 'marker_height' in survey and 'marker_height' not in course:
+        course['marker_height'] = survey['marker_height']
+    al = dict(survey['alignment'])
+    al.pop('route', None)
+    course['alignment'] = {'route': os.path.basename(os.path.normpath(route_dir)),
+                           'survey_dir': survey_dir, **al}
+    course['markers'] = survey.get('markers') or []
+    os.makedirs(out_dir, exist_ok=True)
+    written = []
+    p = os.path.join(out_dir, 'course.yaml')
+    with open(p, 'w') as f:
+        f.write(f'# GENERATED for a run: the aligned survey {survey_dir} (its boards, map and\n'
+                f'# alignment) with route {course["alignment"]["route"]} (its path, laps, v_ref and\n'
+                '# start pose; the path is the template\'s, byte for byte). Rebuilt by every run;\n'
+                '# do not edit.\n')
+        yaml.safe_dump(course, f, sort_keys=False, default_flow_style=None)
+    written.append(p)
+    p = os.path.join(out_dir, path_name)
+    shutil.copyfile(os.path.join(route_dir, path_name), p)
+    written.append(p)
+    for name in MAP_FILES:
+        src = os.path.join(survey_dir, name)
+        if not os.path.isfile(src):
+            raise ValueError(f'{survey_dir} has no {name}: align it again')
+        shutil.copyfile(src, os.path.join(out_dir, name))
+        written.append(os.path.join(out_dir, name))
+    return written
+
+
+def report_text(a: Alignment, survey_dir: str = '',
                 markers: Optional[List[dict]] = None, stage1_markers: Optional[List[dict]] = None) -> str:
     def cm(v):
         return 'n/a' if math.isnan(v) else f'{100 * v:.1f} cm'
@@ -618,7 +680,6 @@ def report_text(a: Alignment, survey_dir: str = '', route: str = '',
     verdict = ('ALIGNED' if a.ok and not a.forced else 'ALIGNED (FORCED)' if a.ok else 'REFUSED')
     lines = [
         f'survey-align {verdict}' + (f'  {survey_dir}' if survey_dir else ''),
-        f'  route            {route}' if route else None,
         '',
         'the frame (in stage-1 coordinates)',
         f'  start pose       ({a.start_x:.3f}, {a.start_y:.3f}) m, car heading '
@@ -666,7 +727,7 @@ def report_text(a: Alignment, survey_dir: str = '', route: str = '',
     return '\n'.join(ln for ln in lines if ln is not None) + '\n'
 
 
-def solve_dir(survey_dir: str, route_dir: str, samples: Sequence[Sample], force: bool = False,
+def solve_dir(survey_dir: str, samples: Sequence[Sample], force: bool = False,
               min_distance: float = MIN_DISTANCE, max_lateral: float = MAX_LATERAL,
               log=print, pnp: Optional[Sequence[PnpSample]] = None) -> Tuple[Alignment, List[str]]:
     """Align, print the report, and write the aligned course if it passed."""
@@ -674,12 +735,11 @@ def solve_dir(survey_dir: str, route_dir: str, samples: Sequence[Sample], force:
     with open(os.path.join(survey_dir, STAGE1_DIR, 'course.yaml')) as f:
         stage1 = yaml.safe_load(f) or {}
     markers = transform_markers(stage1.get('markers') or [], a) if not math.isnan(a.heading) else None
-    route = os.path.basename(os.path.normpath(route_dir))
-    text = report_text(a, survey_dir, route, markers, stage1.get('markers'))
+    text = report_text(a, survey_dir, markers, stage1.get('markers'))
     log(text)
     written: List[str] = []
     if a.ok:
-        written = write_aligned(survey_dir, a, route_dir, text, min_distance, max_lateral)
+        written = write_aligned(survey_dir, a, text, min_distance, max_lateral)
         for w in written:
             log(f'wrote {w}')
     else:
@@ -716,13 +776,13 @@ def route_template(route: str) -> str:
 
 
 def solve_main(argv=None) -> int:
-    """marker_survey_align_solve SURVEY_DIR --route ROUTE [--force]: align again from the
+    """marker_survey_align_solve SURVEY_DIR [--force]: align again from the
     recorded drive (SURVEY_DIR/align_poses.csv, and the multi-board poses in
     SURVEY_DIR/align_pnp.csv when it has them, as survey-align used them), without the car."""
     import argparse
     ap = argparse.ArgumentParser(description=solve_main.__doc__)
     ap.add_argument('survey_dir')
-    ap.add_argument('--route', required=True, help='a route directory or name (lab2_uturn)')
+    ap.add_argument('--route', default=None, help=argparse.SUPPRESS)   # gone: alignments have no route
     ap.add_argument('--poses', default=None, help=f'default SURVEY_DIR/{POSES_FILE}')
     ap.add_argument('--pnp', default=None, help=f'default SURVEY_DIR/{PNP_FILE} (if it exists)')
     ap.add_argument('--no-pnp', action='store_true', help='the EKF poses alone')
@@ -734,6 +794,8 @@ def solve_main(argv=None) -> int:
     prepare_stage1(d)
     samples = read_samples(args.poses or os.path.join(d, POSES_FILE))
     pnp = None if args.no_pnp else (read_pnp(args.pnp or os.path.join(d, PNP_FILE)) or None)
-    a, _ = solve_dir(d, route_template(args.route), samples, args.force, args.min_distance,
-                     args.max_lateral, pnp=pnp)
+    if args.route:
+        print(f'note: --route {args.route} is ignored: an alignment is the start box\'s, and a run '
+              'adds its route (just lab2 run route:=NAME)')
+    a, _ = solve_dir(d, samples, args.force, args.min_distance, args.max_lateral, pnp=pnp)
     return 0 if a.ok else 1

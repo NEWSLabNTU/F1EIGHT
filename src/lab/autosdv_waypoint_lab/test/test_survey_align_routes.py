@@ -1,7 +1,8 @@
-"""A survey aligned to a Lab 2 route is that route to Lab 2: same route hash, same class.
+"""An aligned survey combined with a Lab 2 route is that route to Lab 2: same route hash,
+same class, the route named in the bag's metadata.
 
 The alignment itself is autosdv_marker_survey's (its test/test_align.py); this
-checks what Lab 2 relies on when `just lab2 run` reads surveys/latest.
+checks what Lab 2 relies on when `just lab2 run` combines surveys/latest with a route.
 """
 import math
 import os
@@ -31,7 +32,7 @@ def _drive(x0, y0, yaw0, rest=2.0, distance=3.0, speed=0.3, rate=50.0):
     return out
 
 
-def test_an_aligned_survey_keeps_the_route_hash(tmp_path):
+def test_the_run_course_keeps_the_route_hash(tmp_path):
     from autosdv_marker_survey import align as al
     from autosdv_marker_survey.simulate import stage1_map
     from autosdv_waypoint_lab import bag_meta as bm
@@ -47,12 +48,14 @@ def test_an_aligned_survey_keeps_the_route_hash(tmp_path):
          'dictionary': 'DICT_5X5_1000', 'survey': {'origin_marker': 24}, 'markers': stage1}))
     al.prepare_stage1(str(s))
     T = np.linalg.inv(T_w_s1)
-    a, written = al.solve_dir(str(s), al.route_template(ROUTE),
-                              _drive(T[0, 3], T[1, 3], math.atan2(T[1, 0], T[0, 0])),
+    a, written = al.solve_dir(str(s), _drive(T[0, 3], T[1, 3], math.atan2(T[1, 0], T[0, 0])),
                               log=lambda *x: None)
     assert a.ok and written
-    assert bm.course_hashes(str(s))['route_hash'] == bm.course_hashes(ROUTE)['route_hash']
-    assert bm.classify_route(str(s)) == 'uturn'
-    c = load_course(str(s))
+    run = tmp_path / 'run'
+    al.write_route_course(str(s), al.route_template(ROUTE), str(run))
+    assert bm.course_hashes(str(run))['route_hash'] == bm.course_hashes(ROUTE)['route_hash']
+    assert bm.classify_route(str(run)) == 'uturn'
+    assert bm.course_route_name(str(run)) == 'lab2_uturn'
+    c = load_course(str(run))
     assert (c.start_pose.x, c.start_pose.y, c.start_pose.yaw) == (0.0, 0.0, 0.0)
     assert len(c.markers) == len(truth) and not c.closed and c.laps == 1

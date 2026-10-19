@@ -67,7 +67,12 @@ RAMP_FRAC = 0.98            # commanded speed at/above this fraction: still crui
 STOPPED_SPEED = 0.02        # m/s, "at rest"
 SETTLE = (0.5, 3.0)         # s after coming to rest: the window the stop pose is the median of
 LAPS_REQUIRED = 1
-PATH_DEV_MAX = 0.30         # m, validity: localized distance from the path, worst sample
+# Validity: the localized distance from the path, worst sample. 0.50 m since 2026-10-20:
+# on car C's U-turn the EKF's own error in the turn exit was 0.2-0.4 m against the board
+# fixes and the eye (lab2_uturn_3/4: 0.50 m and 0.357 m with the car on the tape for
+# most of it), so 0.30 m failed cars that drove the route. It stays well inside
+# localization_monitor's 0.8 m disengage, so a car that lost its pose still fails.
+PATH_DEV_MAX = 0.50         # m
 # Validity: the localized pose may not jump. Over every JUMP_WINDOW s from engage to rest,
 # the pose's displacement and the distance the wheel-speed report integrates to must
 # agree within LOC_JUMP_MAX. The path deviation sees a jump ACROSS the path; this one
@@ -86,11 +91,15 @@ FULL_AT = 1.5               # full points up to this multiple of the reference v
 ZERO_AT = 4.0               # zero points from this multiple
 FLOORS = {'speed_rmse': 0.02, 'speed_rmse_straight': 0.02, 'speed_rmse_turn': 0.02,
           'overshoot': 0.02, 'stop_error': 0.05}      # reference floors
-ABSOLUTE = {                # (full up to, zero from), when there is no reference bag
-    'speed_rmse': (0.04, 0.15),
-    'speed_rmse_straight': (0.04, 0.15),
-    'speed_rmse_turn': (0.04, 0.15),
-    'overshoot': (0.04, 0.20),
+# (full up to, zero from), when there is no reference bag. The speed lines since 2026-10-20:
+# the reference model on car C (lab2_uturn_3..5) runs a speed RMSE of 0.14-0.19 m/s and a
+# start overshoot of 0.27-0.44 m/s on the real car (ESC dead band, hall-sensor speed), so
+# 0.04 -> 0.15 (and 0.04 -> 0.20) gave every practical run zero speed points.
+ABSOLUTE = {
+    'speed_rmse': (0.10, 0.30),
+    'speed_rmse_straight': (0.10, 0.30),
+    'speed_rmse_turn': (0.10, 0.30),
+    'overshoot': (0.15, 0.50),
     'stop_error': (0.10, 0.60),
 }
 
