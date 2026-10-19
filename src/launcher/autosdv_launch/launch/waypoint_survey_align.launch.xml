@@ -1,7 +1,7 @@
 <?xml version="1.0" encoding="UTF-8"?>
 <!--
   Lab 2 survey, stage 2: the localization stack on the STAGE-1 board map, for
-  `just lab2 survey-align`, which seeds the EKF from the boards it sees,
+  `just aruco-map align`, which seeds the EKF from the boards it sees,
   records the localized poses while the TA drives the car straight along the
   taped first leg, and writes the map into the start-box frame.
 

@@ -10,7 +10,7 @@ Builds, from the graded route lab2_uturn (its boards placed where its table says
                --yaw-err deg and leaning --lean deg back; start_pose = where the
                car really stands, --start (dx, dy, dyaw deg) off the taped box.
                The bench plant starts there; mock_aruco_camera renders these boards.
-  OUT/survey   what stage 1 (`just lab2 survey 24`) makes of it: every board in
+  OUT/survey   what stage 1 (`just aruco-map scan 24`) makes of it: every board in
                the misplaced origin board's frame (autosdv_marker_survey.simulate.
                stage1_map, the survey's own frame code), as a new survey writes it.
 
