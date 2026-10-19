@@ -12,12 +12,13 @@ import numpy as np
 
 from autosdv_marker_survey import output
 from autosdv_marker_survey.survey import (
+    MAX_NFEV,
     Detection, Keyframe, Survey, SurveySettings, course_frame, floor_from_base_poses, inv_T,
     marker_pose_in_camera, to_course)
 
 
 def finish(survey: Survey, origin_id: int, dictionary: str, course_dir: Optional[str],
-           log=print, max_nfev: int = 300, floor_offset: float = 0.0) -> dict:
+           log=print, max_nfev: int = MAX_NFEV, floor_offset: float = 0.0) -> dict:
     if origin_id not in survey.markers:
         seen = sorted(survey.markers)
         raise ValueError(f'origin marker {origin_id} was never seen (seen: {seen})')
@@ -32,6 +33,10 @@ def finish(survey: Survey, origin_id: int, dictionary: str, course_dir: Optional
         log(f'solving: {len(survey.keyframes)} keyframes, {len(survey.markers)} markers ...')
         markers, poses, stats, info = survey.solve(max_nfev=max_nfev)
         log(f'solved: reprojection RMS {info["reproj_rms_px"]:.2f} px ({info["status"]})')
+        if not info.get('converged', True):
+            log(f'WARNING: the solver stopped at its cap of {max_nfev} evaluations before it '
+                f'converged: re-solve with a higher cap (marker_survey_solve DIR/survey_data.npz '
+                f'--course DIR --max-nfev {4 * max_nfev}).')
     base = [T @ survey.T_cam_base for T in poses]
     p, n = floor_from_base_poses(base)
     # the floor lies floor_offset below base_link (a car on a stand: the wheels are in the air)
@@ -131,7 +136,8 @@ def resolve_main(argv=None) -> int:
     ap.add_argument('--odom-drift', type=float, help='tracking drift, sd per metre (default 0.01)')
     ap.add_argument('--floor-offset', type=float, default=0.0,
                     help='metres the floor lies below base_link (car on a stand), default 0')
-    ap.add_argument('--max-nfev', type=int, default=300, help='solver iteration cap')
+    ap.add_argument('--max-nfev', type=int, default=MAX_NFEV,
+                    help=f'solver evaluation cap (default {MAX_NFEV})')
     ap.add_argument('--marker-size', type=float,
                     help='[m] the black square\'s edge, replacing the size the scan was '
                          'recorded with (a scan taken with the wrong marker_size:=)')
