@@ -82,6 +82,26 @@ def test_dump_round_trip_solves_the_same(result, tmp_path):
         assert a[k] == pytest.approx(b[k], abs=0.01)
 
 
+def test_a_scan_recorded_at_the_wrong_marker_size_re_solves_at_the_right_one(result, tmp_path):
+    """marker_size:= wrong at the scan (0.38 m boards recorded as 0.30): the map comes out
+    distorted, and re-solving the dump with the measured size recovers it."""
+    _, sv, res = result
+    p = tmp_path / 'survey_data.npz'
+    save_dump(str(p), sv, 'DICT_5X5_1000', 24)
+    d = dict(np.load(str(p), allow_pickle=False))
+    d['marker_size'] = np.array(0.30)
+    np.savez(str(p), **d)
+    truth = {m.id: (m.x, m.y) for m in res['markers']}
+
+    def worst(marker_size):
+        sv2, dic, origin = load_dump(str(p), marker_size=marker_size)
+        out = finish(sv2, origin, dic, None, log=lambda *a: None)
+        return max(math.hypot(m.x - truth[m.id][0], m.y - truth[m.id][1]) for m in out['markers'])
+
+    assert worst(None) > 0.2          # the recorded (wrong) size
+    assert worst(0.38) < 0.01         # re-solved at the measured size
+
+
 def test_writes_a_marker_map_the_localization_can_load(result, tmp_path):
     from autosdv_aruco_localization.marker_map import load_marker_map, make_osm, parse_osm_landmarks
     truth, sv, _ = result

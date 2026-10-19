@@ -90,10 +90,13 @@ def save_dump(path: str, survey: Survey, dictionary: str, origin_id: int) -> Non
         marker_size=survey.s.marker_size, dictionary=dictionary, origin_id=origin_id)
 
 
-def load_dump(path: str, settings: Optional[SurveySettings] = None):
+def load_dump(path: str, settings: Optional[SurveySettings] = None,
+              marker_size: Optional[float] = None):
+    """The survey a dump holds; marker_size replaces the size it was recorded with."""
     d = np.load(path, allow_pickle=False)
-    s = settings or SurveySettings(marker_size=float(d['marker_size']))
-    s.marker_size = float(d['marker_size'])
+    size = float(d['marker_size']) if marker_size is None else float(marker_size)
+    s = settings or SurveySettings(marker_size=size)
+    s.marker_size = size
     sv = Survey(s, d['K'])
     if bool(d['has_base']):
         sv.T_cam_base = d['T_cam_base']
@@ -129,11 +132,16 @@ def resolve_main(argv=None) -> int:
     ap.add_argument('--floor-offset', type=float, default=0.0,
                     help='metres the floor lies below base_link (car on a stand), default 0')
     ap.add_argument('--max-nfev', type=int, default=300, help='solver iteration cap')
+    ap.add_argument('--marker-size', type=float,
+                    help='[m] the black square\'s edge, replacing the size the scan was '
+                         'recorded with (a scan taken with the wrong marker_size:=)')
     args = ap.parse_args(argv)
     settings = SurveySettings(marker_size=0.0)
     if args.odom_drift is not None:
         settings.odom_drift = args.odom_drift
-    sv, dictionary, origin = load_dump(args.dump, settings)
+    if args.marker_size is not None and not args.marker_size > 0.0:
+        ap.error('--marker-size must be positive')
+    sv, dictionary, origin = load_dump(args.dump, settings, args.marker_size)
     finish(sv, args.origin if args.origin is not None else origin, dictionary, args.course,
            max_nfev=args.max_nfev, floor_offset=args.floor_offset)
     return 0

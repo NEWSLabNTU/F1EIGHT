@@ -8,9 +8,9 @@ drives the car. Lab 2 uses it through its own recipes (`just lab2 survey`,
 
 | command | what it does |
 | --- | --- |
-| `just aruco-map survey ORIGIN_ID [DIR] [key:=value ...]` | scan: drive past every board, Ctrl-C solves the map, in the origin board's frame |
-| `just aruco-map survey ORIGIN_ID [DIR] --route NAME` | the same, then align it to a route's start box (below) |
-| `just aruco-map scan ORIGIN_ID [DIR] [key:=value ...]` | the scan alone (`DIR ORIGIN_ID` also works, Lab 2's old order) |
+| `just aruco-map survey ORIGIN_ID [DIR] marker_size:=M [key:=value ...]` | scan: drive past every board, Ctrl-C solves the map, in the origin board's frame |
+| `just aruco-map survey ORIGIN_ID [DIR] marker_size:=M --route NAME` | the same, then align it to a route's start box (below) |
+| `just aruco-map scan ORIGIN_ID [DIR] marker_size:=M [key:=value ...]` | the scan alone (`DIR ORIGIN_ID` also works, Lab 2's old order) |
 | `just aruco-map align [DIR] --route NAME [--vehicle-id car_X] [--force]` | optional: put a survey into a route's start-box frame |
 | `just aruco-map solve [DIR] [--origin ID] [--floor-offset M]` | solve the scan again from `DIR/survey_data.npz`, no car |
 | `just aruco-map save` | solve and write the running scan now, without stopping it |
@@ -29,7 +29,7 @@ All on the command line, as `key:=value`:
 | --- | --- | --- |
 | `vehicle_id` | `sim` | the car's instance, `individual_params/config/<id>`: the camera mount (URDF) and the IMU calibration. `sim` is the nominal car. Nothing drives, so the default is never unsafe, only less exact than the car's own |
 | `dictionary` | `DICT_5X5_1000` | the printed boards' family (`ARUCO_MIP_36h12` needs OpenCV 4.7 or newer: not on JetPack 6) |
-| `marker_size` | `0.38` | metres, the edge of the **black square**, not of the board. Measure it: a wrong size scales every distance |
+| `marker_size` | **required** for a scan | metres, the edge of the **black square**, not of the board. Measure it: a wrong size scales every distance by the same factor, so there is no default. A 7×7-cell marker with one cell of white margin on a W board: W × 7/9 (0.60 m board: 0.467). A scan taken at the wrong size: `just aruco-map solve DIR marker_size:=X` re-solves it |
 | `floor_offset` | `0` | metres the floor lies below `base_link`, for a car on a stand |
 
 Any other `key:=value` goes to the launch file the command runs
@@ -81,7 +81,7 @@ with the route's `path.csv` and an `alignment` block, plus `align_report.txt`,
 ## Surveying
 
 ```bash
-just aruco-map survey 24                       # origin: board 24; surveys/<date>_<time>
+just aruco-map survey 24 marker_size:=0.467    # origin: board 24; surveys/<date>_<time>
 just aruco-map survey 24 courses/my_hall vehicle_id:=car_c marker_size:=0.25
 ```
 
@@ -128,7 +128,7 @@ leg along +x. `align` puts the survey into that frame:
 ```bash
 just aruco-map align --route lab2_uturn                 # surveys/latest
 just aruco-map align surveys/<dir> --route path/to/route --vehicle-id car_c
-just aruco-map survey 24 --route lab2_uturn             # scan, then align, guided
+just aruco-map survey 24 marker_size:=0.467 --route lab2_uturn   # scan, then align, guided
 ```
 
 `--route` is a directory, or a NAME found as `config/courses/NAME` in an
@@ -151,7 +151,7 @@ Lab 2: `just lab2 survey-align` is this with the lab's route and car, and
 # a rendered recording of a known hall, its truth, and the survey of it
 ros2 run autosdv_marker_survey marker_survey_synthetic_bag tmp/synth \
     --course src/lab/autosdv_waypoint_lab/config/courses/hall_demo --origin 10
-just aruco-map survey 10 tmp/synth/map launch_camera:=false use_sim_time:=true &
+just aruco-map survey 10 tmp/synth/map marker_size:=0.38 launch_camera:=false use_sim_time:=true &
 ros2 bag play tmp/synth/bag --clock
 kill -INT %1
 ros2 run autosdv_marker_survey marker_survey_compare tmp/synth/map tmp/synth/truth.yaml

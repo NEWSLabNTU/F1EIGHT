@@ -16,7 +16,7 @@ for its graded route (`just lab2 survey-align`; the field procedure is in
 `docs/guides/lab2-waypoint-stack.md`, "On the field").
 
 ```bash
-just aruco-map survey 24 courses/my_hall     # origin: marker 24 (one of the lab boards)
+just aruco-map survey 24 courses/my_hall marker_size:=0.467   # origin: marker 24; the black square's edge, measured
 #   ...drive slowly past every marker; the log names each new one...
 #   Ctrl-C, or in another terminal: just aruco-map save
 just aruco-map check courses/my_hall         # drive by hand, watch the localization
@@ -148,7 +148,7 @@ measurements with `marker_survey_compare COURSE_DIR truth.yaml`.
 ```bash
 ros2 run autosdv_marker_survey marker_survey_synthetic_bag tmp/synth \
     --course src/lab/autosdv_waypoint_lab/config/courses/hall_demo --origin 10
-just aruco-map survey 10 tmp/synth/course launch_camera:=false use_sim_time:=true &
+just aruco-map survey 10 tmp/synth/course marker_size:=0.38 launch_camera:=false use_sim_time:=true &
 ros2 bag play tmp/synth/bag --clock
 kill -INT %1          # Ctrl-C: the survey solves (or `just aruco-map save`)
 ros2 run autosdv_marker_survey marker_survey_compare tmp/synth/course tmp/synth/truth.yaml
