@@ -10,14 +10,23 @@ packages Autoware resolves for vehicle_model:=teamN_vehicle:
                                 autosdv_vehicle_description, installed BY REFERENCE at
                                 build time (the car's geometry is the car's, not a team's)
     teamN_vehicle_interface     a renamed copy of autosdv_vehicle_interface: the actuator,
-                                its speed controller and safety shell, velocity_report,
-                                the gear, mode and steering nodes. The team's to change.
-    teamN_vehicle_launch        launch/vehicle_interface.launch.xml, renamed, and
-                                config/speed_controller.param.yaml, the team's tuning
+                                its safety shell, velocity_report, the gear, mode and
+                                steering nodes; plus speed_pid.py, the Lab 2 student stub
+                                (autosdv_waypoint_lab/stub/speed_pid_part1.py, byte for byte),
+                                which is the model's speed controller. The team's to change.
+    teamN_vehicle_launch        launch/vehicle_interface.launch.xml, renamed, its controller
+                                class defaulting to teamN_vehicle_interface.speed_pid:SpeedPID,
+                                and config/<vehicle_id>/speed_controller.param.yaml, the
+                                team's tuning per car (the SpeedPID parameters under
+                                speed_controller_params): sim seeded from
+                                config/speed_pid_part1.yaml (the simulated car's, with its
+                                feed-forward), car_* from config/speed_pid_car.yaml
 
 The source is the autosdv_vehicle_launch commit this repository PINS (the submodule entry
-in HEAD), read with `git archive`, so a template never carries an uncommitted edit of the
-reference; --from-worktree takes the submodule's working tree instead (testing only).
+in HEAD), read with `git archive`, and the stub and seeds as HEAD has them, so a template
+never carries an uncommitted edit; --from-worktree takes the working trees instead (testing
+only). Nothing TA-only is read: the reference SpeedPID (autosdv_waypoint_lab/reference/) is
+not among the sources.
 
 What is NOT copied, on purpose (docs/design/lab2-team-vehicle-models.md):
 
@@ -45,11 +54,19 @@ from typing import Dict, Iterable, Optional, Tuple
 HERE = Path(__file__).resolve().parent
 sys.path.insert(0, str(HERE))
 import lab2_env  # noqa: E402
+import lab2_ws  # noqa: E402
 
 REPO = HERE.parents[2]
 REF_SUBMODULE = 'src/vehicle/autosdv_vehicle_launch'
 REF = 'autosdv_vehicle'
 REF_PACKAGES = (f'{REF}_interface', f'{REF}_launch')   # copied; the description is generated
+LAB = 'src/lab/autosdv_waypoint_lab'
+STUB = f'{LAB}/autosdv_waypoint_lab/stub/speed_pid_part1.py'      # the student SpeedPID
+SIM_SEED = f'{LAB}/config/speed_pid_part1.yaml'                    # the simulated car's
+CAR_SEED = f'{LAB}/config/speed_pid_car.yaml'                      # a real car's
+INSTANCES = 'src/param/autoware_individual_params/individual_params/config'
+SIM_ID = 'sim'
+NOT_A_VEHICLE = ('default',)
 # what the copy leaves behind: the reference's tests of its own golden files are kept
 # (they test the copy), the repository furniture is not
 SKIP = re.compile(r'(^|/)(__pycache__|\.pytest_cache)(/|$)|\.pyc$')
@@ -57,7 +74,8 @@ TEXT_SUFFIXES = {'.py', '.xml', '.yaml', '.yml', '.cfg', '.txt', '.md', '.json',
 
 TUNING_LET = re.compile(
     r'(<let name="car_tuning_file"\s+value=")[^"]*(autosdv_vehicle/speed_controller\.param\.yaml)("/>)')
-TEAM_TUNING = '$(find-pkg-share {model}_launch)/config/speed_controller.param.yaml'
+TEAM_TUNING = '$(find-pkg-share {model}_launch)/config/$(var vehicle_id)/speed_controller.param.yaml'
+CLASS_ARG = re.compile(r'(<arg name="speed_controller_class"\s+default=")[^"]*(")')
 TUNING_COMMENT = re.compile(r"<!-- the car's tuning of the default speed controller.*?-->", re.S)
 
 
@@ -67,10 +85,10 @@ class NewTeamError(Exception):
 
 def model_name(team) -> str:
     """3 -> team3_vehicle; refuses anything but a positive integer."""
-    s = str(team).strip()
-    if not re.fullmatch(r'[1-9][0-9]{0,2}', s):
-        raise NewTeamError(f'team {team!r}: a team number, 1 to 999')
-    return f'team{int(s)}_vehicle'
+    try:
+        return lab2_ws.model_name(team)
+    except ValueError as e:
+        raise NewTeamError(str(e)) from None
 
 
 def default_dest(env=os.environ) -> Path:
@@ -87,15 +105,26 @@ def rename_text(text: str, model: str) -> str:
 
 
 def retarget_tuning(launch_xml: str, model: str) -> str:
-    """The launch file's car_tuning_file -> the team's config/speed_controller.param.yaml."""
+    """The launch file's car_tuning_file -> the team's config/<vehicle_id>/ tuning."""
     new, n = TUNING_LET.subn(lambda m: f'<let name="car_tuning_file"\n       value="'
                              + TEAM_TUNING.format(model=model) + '"/>', launch_xml)
     if n != 1:
         raise NewTeamError('the reference vehicle_interface.launch.xml has no car_tuning_file '
                            'let to retarget; update new_team.py for it')
     return TUNING_COMMENT.sub(
-        "<!-- this model's speed controller tuning (config/speed_controller.param.yaml\n"
-        "       of this package), loaded after the car's PWM points -->", new, count=1)
+        "<!-- this model's speed controller tuning for this car (config/<vehicle_id>/\n"
+        "       speed_controller.param.yaml of this package), loaded after the car's PWM points -->",
+        new, count=1)
+
+
+def retarget_class(launch_xml: str, model: str) -> str:
+    """The launch file's speed_controller_class default -> the model's own SpeedPID."""
+    new, n = CLASS_ARG.subn(lambda m: m.group(1) + f'{model}_interface.speed_pid:SpeedPID'
+                            + m.group(2), launch_xml)
+    if n != 1:
+        raise NewTeamError('the reference vehicle_interface.launch.xml has no '
+                           'speed_controller_class argument; update new_team.py for it')
+    return new
 
 
 def check_launch(launch_xml: str, model: str) -> None:
@@ -186,24 +215,56 @@ ament_package()
     }
 
 
-def tuning_file(model: str) -> str:
-    return f'''# {model}'s speed controller tuning: YOURS. The vehicle interface loads it after the
-# car's individual_params actuator.param.yaml (the car's PWM points, which are not
-# yours to change), so these values win over both actuator.yaml and the car's file.
-#
-# Seeded with actuator.yaml's own defaults, which every car runs. One file serves
-# all three cars, so keep car-specific numbers out of it: the cars' neutral and ESC
-# thresholds differ (A 380, B 390, C 385), and a PWM written here would be the same
-# number on each. esc_deadzone_compensation needs the car's measured
-# forward_hold_pwm, which car A does not have yet: turned on here, the actuator
-# refuses to start on car A, and the gate fails it.
+def tuning_file(model: str, vehicle_id: str, seed: str, seed_name: str) -> str:
+    """config/<vehicle_id>/speed_controller.param.yaml: the seed's SpeedPID mapping, nested
+    under speed_controller_params (the actuator merges speed_controller_params.<key> into the
+    controller's parameters), comments kept."""
+    lines = seed.splitlines()
+    if lines and lines[0].startswith('# A copy of the Lab 2 handout'):   # our provenance note
+        lines = lines[lines.index('#') + 1:] if '#' in lines else lines
+    body = ''.join(('      ' + ln if ln.strip() else '') + '\n' for ln in lines)
+    return f'''# {model}'s speed controller tuning on {vehicle_id}: YOURS. The vehicle interface loads
+# it after the car's individual_params actuator.param.yaml (the car's PWM points, which are
+# not yours to change), so these values win over both actuator.yaml and the car's file.
+# One file per vehicle_id: sim is the RC simulator's car (Part 1), car_a/b/c the real cars.
+# Seeded from autosdv_waypoint_lab's {seed_name}.
 /**:
   ros__parameters:
-    kp_speed: 12.0
-    ki_speed: 10.0
-    kd_speed: 0.001
-    esc_deadzone_compensation: false
-'''
+    speed_controller_params:
+{body}'''
+
+
+def vehicle_ids(repo: Path = REPO, worktree: bool = False):
+    """The individual_params instances a model needs a tuning file for (sim and car_*)."""
+    if worktree:
+        names = [p.name for p in (repo / INSTANCES).iterdir() if p.is_dir()]
+    else:
+        sub = 'src/param/autoware_individual_params'
+        out = subprocess.run(['git', '-C', str(repo), 'ls-tree', 'HEAD', sub],
+                             capture_output=True, text=True)
+        parts = out.stdout.split()
+        if out.returncode != 0 or len(parts) < 3:
+            raise NewTeamError(f'{sub} is not a submodule pinned in HEAD')
+        ls = subprocess.run(['git', '-C', str(repo / sub), 'ls-tree', '--name-only', parts[2],
+                             'individual_params/config/'], capture_output=True, text=True)
+        if ls.returncode != 0:
+            raise NewTeamError(f'cannot list {sub} at {parts[2][:7]} (`just checkout`?)')
+        names = [Path(n).name for n in ls.stdout.split()]
+    return sorted(n for n in names if n not in NOT_A_VEHICLE)
+
+
+def read_lab_files(repo: Path = REPO, worktree: bool = False) -> Dict[str, bytes]:
+    """The stub and the two seeds, as HEAD has them (or the working tree)."""
+    out = {}
+    for rel in (STUB, SIM_SEED, CAR_SEED):
+        if worktree:
+            out[rel] = (repo / rel).read_bytes()
+            continue
+        r = subprocess.run(['git', '-C', str(repo), 'show', f'HEAD:{rel}'], capture_output=True)
+        if r.returncode != 0:
+            raise NewTeamError(f'{rel} is not in HEAD: {r.stderr.decode(errors="replace").strip()}')
+        out[rel] = r.stdout
+    return out
 
 
 def readme(model: str, n: int, source: str) -> str:
@@ -218,9 +279,16 @@ Generated by `just lab2 new-team {n}` from the reference model, autosdv_vehicle
 
 ## What is yours
 
-Everything in `{model}_interface` and `{model}_launch`: the actuator node, its speed
-controller and safety shell, velocity_report, the gear, control-mode and steering
-nodes, the launch file and `{model}_launch/config/speed_controller.param.yaml`.
+Everything in `{model}_interface` and `{model}_launch`: the actuator node, its safety
+shell, velocity_report, the gear, control-mode and steering nodes, and the launch file.
+
+The speed controller is `{model}_interface/{model}_interface/speed_pid.py`, the Lab 2
+SpeedPID stub: Part 1 is to complete it. Until then it holds the motor in neutral, so the
+model fails the gate's "drives" check. Its parameters are per vehicle, in
+`{model}_launch/config/<vehicle_id>/speed_controller.param.yaml` under
+`speed_controller_params:`. `sim` is the RC simulator's car (Part 1), and `car_a`, `car_b`
+and `car_c` are the real cars (Part 2). Put each car's calibration (ff_deadband, ff_gain)
+in its own file.
 
 The contract with the rest of the stack is Autoware's vehicle interface:
 
@@ -255,7 +323,8 @@ on a car.
 '''
 
 
-def generate(n, dest: Path, files: Dict[str, bytes], source: str) -> Path:
+def generate(n, dest: Path, files: Dict[str, bytes], source: str,
+             lab: Optional[Dict[str, bytes]] = None, ids=('sim', 'car_a', 'car_b', 'car_c')) -> Path:
     model = model_name(n)
     root = Path(dest) / f'{model}_launch'
     if root.exists():
@@ -271,7 +340,7 @@ def generate(n, dest: Path, files: Dict[str, bytes], source: str) -> Path:
                 continue
             text = rename_text(text, model)
             if rel.endswith('launch/vehicle_interface.launch.xml'):
-                text = retarget_tuning(text, model)
+                text = retarget_class(retarget_tuning(text, model), model)
                 check_launch(text, model)
             out[new_rel] = text.encode()
         else:
@@ -287,7 +356,12 @@ def generate(n, dest: Path, files: Dict[str, bytes], source: str) -> Path:
     out[launch_cmake] = cm.encode()
     for rel, text in description_files(model).items():
         out[rel] = text.encode()
-    out[f'{model}_launch/config/speed_controller.param.yaml'] = tuning_file(model).encode()
+    lab = read_lab_files() if lab is None else lab
+    out[f'{model}_interface/{model}_interface/speed_pid.py'] = lab[STUB]   # byte for byte
+    for vid in ids:
+        seed = SIM_SEED if vid == SIM_ID else CAR_SEED
+        out[f'{model}_launch/config/{vid}/speed_controller.param.yaml'] = tuning_file(
+            model, vid, lab[seed].decode(), Path(seed).name).encode()
     out['README.md'] = readme(model, int(n), source).encode()
     tmp = root.with_name(root.name + '.tmp')
     shutil.rmtree(tmp, ignore_errors=True)
@@ -311,7 +385,9 @@ def main(argv: Optional[Iterable[str]] = None) -> int:
     try:
         dest = Path(os.path.expanduser(args.dest)) if args.dest else default_dest()
         files, source = read_reference(worktree=args.from_worktree)
-        root = generate(args.team, dest, files, source)
+        root = generate(args.team, dest, files, source,
+                        read_lab_files(worktree=args.from_worktree),
+                        vehicle_ids(worktree=args.from_worktree))
     except NewTeamError as e:
         print(f'new-team: {e}', file=sys.stderr)
         return 2

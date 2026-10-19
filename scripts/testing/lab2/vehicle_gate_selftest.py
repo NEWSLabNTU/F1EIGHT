@@ -3,8 +3,9 @@
 
     python3 scripts/testing/lab2/vehicle_gate_selftest.py [--cars car_a] [--keep]
 
-Generates team models with `new_team.py` into tmp/lab2_gate_selftest/ws/src, breaks each
-the way a team plausibly would, builds the workspace over this repository's install, runs
+Generates team models with `new_team.py` into tmp/lab2_gate_selftest/ws/src, gives each the
+reference AckermannSpeedPID (a fresh template's SpeedPID is the student stub, which does not
+drive, so every stop check would be "not tested"), breaks each the way a team plausibly would, builds the workspace over this repository's install, runs
 the safety gate (vehicle_gate.py) on them, and checks each fails the check it should:
 
     team901_vehicle  wrong neutral   its tuning file sets init_pwm: 375, five counts off car A's
@@ -43,9 +44,19 @@ BROKEN = {
 }
 
 
+WORKING = 'speed_controller:AckermannSpeedPID'
+
+
 def break_model(root: Path, model: str, params: dict, patch) -> None:
-    tuning = root / f'{model}_launch/config/speed_controller.param.yaml'
-    tuning.write_text(tuning.read_text() + ''.join(f'    {k}: {v}\n' for k, v in params.items()))
+    launch = root / f'{model}_launch/launch/vehicle_interface.launch.xml'
+    text = launch.read_text()
+    old = f'default="{model}_interface.speed_pid:SpeedPID"'
+    if text.count(old) != 1:
+        raise SystemExit(f'selftest: {launch} has no {old}; update break_model')
+    launch.write_text(text.replace(old, f'default="{model}_interface.{WORKING}"'))
+    for tuning in (root / f'{model}_launch/config').glob('*/speed_controller.param.yaml'):
+        tuning.write_text(tuning.read_text()
+                          + ''.join(f'    {k}: {v}\n' for k, v in params.items()))
     if patch:
         name, old, new = patch
         f = root / f'{model}_interface/{model}_interface/{name}'
@@ -59,13 +70,17 @@ def main(argv=None):
     ap = argparse.ArgumentParser(description=__doc__.split('\n\n')[0])
     ap.add_argument('--cars', default='car_a', help='the cars the gate runs (default car_a)')
     ap.add_argument('--keep', action='store_true', help='keep the generated workspace')
+    ap.add_argument('--from-worktree', action='store_true',
+                    help='generate from the working trees, not HEAD (testing uncommitted edits)')
     args = ap.parse_args(argv)
     shutil.rmtree(WORK, ignore_errors=True)
     src = WORK / 'ws/src'
     src.mkdir(parents=True)
-    files, source = nt.read_reference()
+    files, source = nt.read_reference(worktree=args.from_worktree)
+    lab = nt.read_lab_files(worktree=args.from_worktree)
+    ids = nt.vehicle_ids(worktree=args.from_worktree)
     for n, (what, _, params, patch) in BROKEN.items():
-        root = nt.generate(n, src, files, source)
+        root = nt.generate(n, src, files, source, lab, ids)
         break_model(root, nt.model_name(n), params, patch)
         print(f'{nt.model_name(n)}: {what}', flush=True)
     ws = WORK / 'ws'
