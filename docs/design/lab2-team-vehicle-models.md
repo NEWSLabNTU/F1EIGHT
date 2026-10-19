@@ -4,9 +4,13 @@ Status: implemented for Part 2 on branch `feat/lab2-vehicle-models`, 2026-10-20 
 "Implementation" section at the end); car runs pending. Decided with the TA: the team
 selection merges into `vehicle_model:=`, the template is a copy of
 `autosdv_vehicle_launch`, a team has full control of its vehicle interface, and the
-car-specific files stay keyed to the physical car. Part 1 uses the same model, under
-`vehicle_id:=sim` (the course's decision, 2026-10-20): the template's speed controller is the
-Part 1 SpeedPID stub, so Part 1 is completing it in the team's own model.
+car-specific files stay keyed to the physical car. Each team has two models of the same
+shape, each its own submission (the course's decisions, 2026-10-20): `teamN_sim_vehicle` for
+Part 1 (the RC simulator, `vehicle_id:=sim`) and `teamN_vehicle` for Part 2 (the cars). The
+template's speed controller is the Part 1 SpeedPID stub: Part 1 completes it in the sim
+model, and the team ports it into the car model. The TA owns the path tracker and its
+parameters, the lookahead included. Passing the gate before a car run is a rule the TA
+checks, not something the tools enforce.
 
 ## What Lab 2 becomes
 
@@ -134,10 +138,11 @@ own cars, and only then is the template cut from it:
   A fresh template therefore fails the gate's "drives" check until SpeedPID is written.
 - Tuning is per vehicle_id inside the model, `config/<vehicle_id>/speed_controller.param.yaml`,
   the SpeedPID keys nested under `speed_controller_params` (the actuator merges
-  `speed_controller_params.<key>` into the controller's parameters): `sim` seeded from
-  `speed_pid_part1.yaml` (with its feed-forward), `car_*` from `speed_pid_car.yaml` (the
-  handout's car file, copied into autosdv_waypoint_lab/config). A car's calibration
-  (`ff_deadband`, `ff_gain`) goes in that car's file.
+  `speed_controller_params.<key>` into the controller's parameters). The sim model has
+  `config/sim/` only, seeded from `speed_pid_part1.yaml` (with its feed-forward); the car
+  model `config/car_*/` only, from `speed_pid_car.yaml` (the handout's car file, copied
+  into autosdv_waypoint_lab/config). A car's calibration (`ff_deadband`, `ff_gain`) goes in
+  that car's file.
 
 ## Implementation
 
@@ -149,7 +154,7 @@ own cars, and only then is the template cut from it:
 | selection | `lab2_config.vehicle_model_for`: `vehicle_model`, else `team<team>_vehicle`, else the reference; `team:=N` is a number everywhere, team 0 the reference; `team_dir:=` and `submission:=` refused on the command line |
 | the gate, safety half | `vehicle_gate.py` + `lab2_vehicle_gate.launch.xml` + the probe `autosdv_waypoint_lab/vehicle_gate.py`: the model on `hardware:=sim`, `rc_sim_plant` given each car's ESC points (`pwm_param_files`); neutral, drives, stop, watchdog, MRM, emergency, no reverse arming, read back from `/rc_sim/pwm` |
 | the gate, route half | `bench_gate.py`, unchanged checks, `vehicle_model:=` passed to the bench |
-| gate before car | a full pass writes `~/lab2/gate/<model>.json` with a digest of the model's source; `just lab2 run` on a car refuses a team model without a matching pass |
+| gate before car | a rule the TA checks; nothing enforces it (the course's decision: the gate runs on a workstation, the car is another machine) |
 | broken copies | `just lab2 gate-selftest`: templates given AckermannSpeedPID, then broken with a wrong neutral, no watchdog, a reverse-arming brake; each fails its own check |
 | bags | `vehicle_model`, `vehicle_model_commit`, `vehicle_model_dirty` in the metadata; the audit header shows `model <name>@<commit>` |
 

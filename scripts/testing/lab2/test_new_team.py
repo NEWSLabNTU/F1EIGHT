@@ -41,13 +41,28 @@ LAB = {nt.STUB: STUB_BYTES,
 IDS = ('car_a', 'sim')
 
 
-def gen(n, dest, files=FILES):
-    return nt.generate(n, dest, files, 'test', LAB, IDS)
+def gen(n, dest, files=FILES, kind='car'):
+    return nt.generate(n, dest, files, 'test', LAB, IDS, kind)
 
 
 @pytest.mark.parametrize('team,model', [(3, 'team3_vehicle'), ('12', 'team12_vehicle')])
 def test_model_name(team, model):
     assert nt.model_name(team) == model
+    assert nt.sim_model_name(team) == model.replace('_vehicle', '_sim_vehicle')
+    import lab2_ws
+    assert lab2_ws.team_of(model) == lab2_ws.team_of(nt.sim_model_name(team)) == int(team)
+
+
+def test_main_writes_both_models_or_one(tmp_path, monkeypatch, capsys):
+    monkeypatch.setattr(nt, 'read_lab_files', lambda worktree=False: LAB)
+    monkeypatch.setattr(nt, 'read_reference', lambda worktree=False: (FILES, 'test'))
+    monkeypatch.setattr(nt, 'vehicle_ids', lambda worktree=False: list(IDS))
+    assert nt.main(['4', '--dest', str(tmp_path)]) == 0
+    assert {p.name for p in tmp_path.iterdir()} == {'team4_sim_vehicle_launch', 'team4_vehicle_launch'}
+    assert nt.main(['5', '--sim', '--dest', str(tmp_path)]) == 0
+    assert not (tmp_path / 'team5_vehicle_launch').exists()
+    assert nt.main(['4', '--car', '--dest', str(tmp_path)]) == 2      # never overwrites
+    assert 'exists' in capsys.readouterr().err
 
 
 @pytest.mark.parametrize('bad', ['0', '-1', 'a', '3a', '1000', ''])
@@ -78,16 +93,33 @@ def test_generate_renames_packages_and_keeps_the_car_file(tmp_path):
     assert (root / 'team3_vehicle_interface/test/golden.bin').read_bytes() == b'\x00\xff'
     assert 'config' in (root / 'team3_vehicle_launch/CMakeLists.txt').read_text()
     import yaml
-    for vid, kp in (('sim', 12.0), ('car_a', 20.0)):
-        f = root / f'team3_vehicle_launch/config/{vid}/speed_controller.param.yaml'
-        p = yaml.safe_load(f.read_text())['/**']['ros__parameters']['speed_controller_params']
-        assert p['kp'] == kp
-    assert 'ff_gain' in (root / 'team3_vehicle_launch/config/sim/speed_controller.param.yaml').read_text()
-    assert 'Keep equal' not in (root / 'team3_vehicle_launch/config/car_a/speed_controller.param.yaml').read_text()
+    # the car model: the car files only, from the car seed
+    assert [p.name for p in (root / 'team3_vehicle_launch/config').iterdir()] == ['car_a']
+    f = root / 'team3_vehicle_launch/config/car_a/speed_controller.param.yaml'
+    assert yaml.safe_load(f.read_text())['/**']['ros__parameters']['speed_controller_params'] == \
+        {'kp': 20.0}
+    assert 'Keep equal' not in f.read_text()
     desc = (root / 'team3_vehicle_description/CMakeLists.txt').read_text()
     assert 'find_package(autosdv_vehicle_description REQUIRED)' in desc
     assert not (root / 'team3_vehicle_description/config').exists()   # by reference, no copy
     assert (root / 'README.md').is_file()
+
+
+def test_the_sim_model_has_the_sim_tuning_only(tmp_path):
+    import yaml
+    root = gen(3, tmp_path, kind='sim')
+    assert root.name == 'team3_sim_vehicle_launch'
+    assert [p.name for p in (root / 'team3_sim_vehicle_launch/config').iterdir()] == ['sim']
+    f = root / 'team3_sim_vehicle_launch/config/sim/speed_controller.param.yaml'
+    assert yaml.safe_load(f.read_text())['/**']['ros__parameters']['speed_controller_params'] == \
+        {'kp': 12.0, 'ff_gain': 0.1433}
+    launch = (root / 'team3_sim_vehicle_launch/launch/vehicle_interface.launch.xml').read_text()
+    assert 'default="team3_sim_vehicle_interface.speed_pid:SpeedPID"' in launch
+    assert (root / 'team3_sim_vehicle_interface/team3_sim_vehicle_interface/speed_pid.py').read_bytes() \
+        == STUB_BYTES
+    # both side by side in one workspace
+    gen(3, tmp_path)
+    assert (tmp_path / 'team3_vehicle_launch').is_dir()
 
 
 def test_generate_never_overwrites(tmp_path):
@@ -108,8 +140,8 @@ def test_the_pinned_reference_generates(tmp_path):
     files, source = nt.read_reference()
     root = nt.generate(5, tmp_path, files, source, nt.read_lab_files(worktree=True),
                        nt.vehicle_ids())
-    assert {'sim', 'car_a', 'car_b', 'car_c'} <= {p.name for p in
-                                                 (root / 'team5_vehicle_launch/config').iterdir()}
+    assert {'car_a', 'car_b', 'car_c'} == {p.name for p in
+                                          (root / 'team5_vehicle_launch/config').iterdir()}
     assert (root / 'team5_vehicle_launch/launch/vehicle_interface.launch.xml').is_file()
     for p in root.rglob('*'):
         if p.is_file() and p.suffix in ('.py', '.xml', '.cfg'):

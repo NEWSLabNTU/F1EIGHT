@@ -146,11 +146,10 @@ stack VEHICLE_ID *ARGS:
 
 #   just lab2 gate                              the reference model (or the config's team / vehicle_model)
 #   just lab2 gate team:=3                      team3_vehicle (vehicle_model:= names any model)
-#   just lab2 gate team:=3 --cars car_a         the safety half on one car (not recorded)
-#   just lab2 gate --only hall_demo ...         another course instead of lab2_uturn (not recorded)
+#   just lab2 gate team:=3 --cars car_a         the safety half on one car
+#   just lab2 gate --only hall_demo ...         another course instead of lab2_uturn
 # Safety (RC simulator, every car's ESC: neutral, stop, watchdog, MRM, emergency, no reverse
-# arming), then the graded route on the vehicle bench. A full pass is recorded in
-# ~/lab2/gate/<model>.json; `just lab2 run` on a car refuses a team model without one.
+# arming), then the graded route on the vehicle bench. Pass it before a car run (the TA checks).
 # Gate before car time: the vehicle model's safety on every car, then the route; PASS/FAIL
 [positional-arguments]
 gate *ARGS:
@@ -162,11 +161,13 @@ gate *ARGS:
     lab2_config gate "$@" || exit 2
     exec python3 scripts/testing/lab2/bench_gate.py "${LAB2_ARGS[@]}"
 
-#   just lab2 new-team 3                 ~/lab2/ws/src/team3_vehicle_launch ($LAB2_HOME/ws/src)
+#   just lab2 new-team 3                 ~/lab2/ws/src/team3_sim_vehicle_launch (Part 1) and
+#                                        team3_vehicle_launch (Part 2) ($LAB2_HOME/ws/src)
+#   just lab2 new-team 3 --sim | --car   only one of them
 #   just lab2 new-team 3 --dest DIR      somewhere else (then build it there)
 # From the autosdv_vehicle_launch this repository pins; never overwrites. The README it writes
 # says what is the team's and what is not (the car's PWM file, the vehicle geometry).
-# Generate team N's vehicle model (teamN_vehicle) from the reference model
+# Generate team N's vehicle models (teamN_sim_vehicle, teamN_vehicle) from the reference model
 [positional-arguments]
 new-team N *ARGS:
     #!/usr/bin/env bash
@@ -277,7 +278,6 @@ health *ARGS:
 # without asking, then the gate verdict (as `just lab2 gate`). Afterwards: the grading table (value,
 # the car's reference, marks, validity, total) and audit.png (opened on $DISPLAY or :1 when one
 # answers; the path always printed). Over SSH it re-runs itself inside tmux (`tmux attach -t lab2-run`).
-# On a car a team model must have passed `just lab2 gate` here with its current source.
 # TA:
 #   just lab2 run                               vehicle_model / team, car from the config
 #   just lab2 run team:=3 --bench | --car       force the bench or the car
