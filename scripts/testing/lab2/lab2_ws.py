@@ -1,9 +1,10 @@
 """The teams' vehicle models: their names and their workspace, for every Lab 2 tool.
 
-    model_name(team)        3 -> 'team3_vehicle': the team's car model, Part 2 (ValueError for
+    SIM_MODEL               'lab2_sim_vehicle': Part 1's model, the RC simulator's car. ONE
+                            package, the same name for every student (`just lab2 new-sim`)
+    model_name(team)        3 -> 'team3_vehicle': a team's car model, Part 2 (ValueError for
                             anything but 1 .. 999)
-    sim_model_name(team)    3 -> 'team3_sim_vehicle': the team's simulator model, Part 1
-    team_of(model)          'team3_vehicle' or 'team3_sim_vehicle' -> 3, None for another name
+    team_of(model)          'team3_vehicle' -> 3, None for another name
     ws_dir(env)             ~/lab2/ws, or $LAB2_HOME/ws: where `just lab2 new-team` writes and
                             `just lab2 build-teams` builds
     ws_install(env)         its install/ (lab2_ws.sh sources install/local_setup.bash from it)
@@ -20,6 +21,7 @@ from typing import Mapping, Optional
 from lab2_env import lab2_home
 
 REFERENCE_MODEL = 'autosdv_vehicle'
+SIM_MODEL = 'lab2_sim_vehicle'
 
 
 def model_name(team) -> str:
@@ -29,12 +31,8 @@ def model_name(team) -> str:
     return f'team{int(s)}_vehicle'
 
 
-def sim_model_name(team) -> str:
-    return model_name(team).replace('_vehicle', '_sim_vehicle')
-
-
 def team_of(model: str) -> Optional[int]:
-    m = re.fullmatch(r'team([1-9][0-9]{0,2})(?:_sim)?_vehicle', str(model))
+    m = re.fullmatch(r'team([1-9][0-9]{0,2})_vehicle', str(model))
     return int(m.group(1)) if m else None
 
 

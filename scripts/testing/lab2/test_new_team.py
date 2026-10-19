@@ -48,21 +48,22 @@ def gen(n, dest, files=FILES, kind='car'):
 @pytest.mark.parametrize('team,model', [(3, 'team3_vehicle'), ('12', 'team12_vehicle')])
 def test_model_name(team, model):
     assert nt.model_name(team) == model
-    assert nt.sim_model_name(team) == model.replace('_vehicle', '_sim_vehicle')
     import lab2_ws
-    assert lab2_ws.team_of(model) == lab2_ws.team_of(nt.sim_model_name(team)) == int(team)
+    assert lab2_ws.team_of(model) == int(team) and lab2_ws.team_of(lab2_ws.SIM_MODEL) is None
 
 
-def test_main_writes_both_models_or_one(tmp_path, monkeypatch, capsys):
+def test_main_writes_a_team_car_model_or_the_sim_model(tmp_path, monkeypatch, capsys):
     monkeypatch.setattr(nt, 'read_lab_files', lambda worktree=False: LAB)
     monkeypatch.setattr(nt, 'read_reference', lambda worktree=False: (FILES, 'test'))
     monkeypatch.setattr(nt, 'vehicle_ids', lambda worktree=False: list(IDS))
     assert nt.main(['4', '--dest', str(tmp_path)]) == 0
-    assert {p.name for p in tmp_path.iterdir()} == {'team4_sim_vehicle_launch', 'team4_vehicle_launch'}
-    assert nt.main(['5', '--sim', '--dest', str(tmp_path)]) == 0
-    assert not (tmp_path / 'team5_vehicle_launch').exists()
-    assert nt.main(['4', '--car', '--dest', str(tmp_path)]) == 2      # never overwrites
+    assert nt.main(['--sim', '--dest', str(tmp_path)]) == 0
+    assert {p.name for p in tmp_path.iterdir()} == {'team4_vehicle_launch', 'lab2_sim_vehicle_launch'}
+    assert nt.main(['4', '--dest', str(tmp_path)]) == 2               # never overwrites
     assert 'exists' in capsys.readouterr().err
+    for both_or_neither in (['4', '--sim'], []):
+        with pytest.raises(SystemExit):
+            nt.main(both_or_neither + ['--dest', str(tmp_path)])
 
 
 @pytest.mark.parametrize('bad', ['0', '-1', 'a', '3a', '1000', ''])
@@ -105,17 +106,17 @@ def test_generate_renames_packages_and_keeps_the_car_file(tmp_path):
     assert (root / 'README.md').is_file()
 
 
-def test_the_sim_model_has_the_sim_tuning_only(tmp_path):
+def test_the_sim_model_is_one_package_with_the_sim_tuning_only(tmp_path):
     import yaml
     root = gen(3, tmp_path, kind='sim')
-    assert root.name == 'team3_sim_vehicle_launch'
-    assert [p.name for p in (root / 'team3_sim_vehicle_launch/config').iterdir()] == ['sim']
-    f = root / 'team3_sim_vehicle_launch/config/sim/speed_controller.param.yaml'
+    assert root.name == 'lab2_sim_vehicle_launch'                     # no team in its name
+    assert [p.name for p in (root / 'lab2_sim_vehicle_launch/config').iterdir()] == ['sim']
+    f = root / 'lab2_sim_vehicle_launch/config/sim/speed_controller.param.yaml'
     assert yaml.safe_load(f.read_text())['/**']['ros__parameters']['speed_controller_params'] == \
         {'kp': 12.0, 'ff_gain': 0.1433}
-    launch = (root / 'team3_sim_vehicle_launch/launch/vehicle_interface.launch.xml').read_text()
-    assert 'default="team3_sim_vehicle_interface.speed_pid:SpeedPID"' in launch
-    assert (root / 'team3_sim_vehicle_interface/team3_sim_vehicle_interface/speed_pid.py').read_bytes() \
+    launch = (root / 'lab2_sim_vehicle_launch/launch/vehicle_interface.launch.xml').read_text()
+    assert 'default="lab2_sim_vehicle_interface.speed_pid:SpeedPID"' in launch
+    assert (root / 'lab2_sim_vehicle_interface/lab2_sim_vehicle_interface/speed_pid.py').read_bytes() \
         == STUB_BYTES
     # both side by side in one workspace
     gen(3, tmp_path)
