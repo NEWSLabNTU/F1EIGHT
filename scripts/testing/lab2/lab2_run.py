@@ -700,7 +700,7 @@ class Run:
                 stack.append(f'camera:={camera}')
         else:
             # `just lab2 vehicle` plans again from the same file: a car:= given here goes
-            # with it, or the car_profile:= planned above would disagree with the file's car
+            # with it, or the vehicle_id:= planned above would disagree with the file's car
             car = [a for a in o.config_args if a.startswith('car:=')][-1:]
             stack = ['just', 'lab2', 'vehicle', '--log-dir', str(self.logdir / 'play_log')] \
                 + cfg_file + car + stack_args

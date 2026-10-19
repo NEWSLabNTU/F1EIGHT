@@ -29,13 +29,14 @@ default:
 # are lazy -- they publish only while subscribed, so rates read as zero until
 # RViz (or anything) subscribes.
 
-# Perception island: live LiDAR + camera detection, no map, no localization
-exhibition model="centerpoint":
+# Perception island: live LiDAR + camera detection, no map, no localization (VEHICLE_ID: car_a|car_b|car_c)
+exhibition VEHICLE_ID model="centerpoint":
     #!/usr/bin/env bash
     cd "{{ repo }}" && source scripts/env.sh && \
     play_launch launch \
         --web-addr 0.0.0.0:8081 \
         autosdv_launch autosdv.launch.yaml \
+        vehicle_id:={{ VEHICLE_ID }} \
         use_mapless_mode:=true \
         launch_planning:=false \
         launch_control:=false \

@@ -10,14 +10,15 @@ steering angle, so the ratio has to be measured by driving circles
 (docs/known-config-defects.md section 8):
 
     lab2_steer_cal hold  OFFSET        drive with the servo held at init_steer + OFFSET
-    lab2_steer_cal fit   --car-profile car_b OFFSET:RADIUS ...   fit ratio and lock
+    lab2_steer_cal fit   --vehicle-id car_b OFFSET:RADIUS ...    fit ratio and lock
 
 ``hold`` reads init_steer, min_steer, max_steer, tire_angle_to_steer_ratio,
 max_steer_angle and the wheel geometry from the RUNNING actuator
-(/autosdv/actuator_node), so it matches whatever car profile drives the servo,
+(/autosdv/actuator_node), so it matches whatever car's PWM drives the servo,
 and publishes the tire angle that makes the actuator write exactly that offset:
 the offset is the experiment's independent variable.  ``fit`` is offline: it
-takes the measured circle radii and the car's profile (params/cars/<car>).
+takes the measured circle radii and the car's actuator file
+(individual_params/config/<vehicle_id>/autosdv_vehicle/actuator.param.yaml).
 """
 import argparse
 import math
@@ -35,7 +36,7 @@ GEOMETRY_PARAMS = ('max_steer_angle', 'wheel_base', 'wheel_tread')
 
 @dataclass
 class Servo:
-    """The steering numbers the actuator runs: one car profile (+ vehicle_info)."""
+    """The steering numbers the actuator runs: one car's actuator file (+ vehicle_info)."""
     init_steer: int
     min_steer: int
     max_steer: int
@@ -47,7 +48,7 @@ class Servo:
 
     @classmethod
     def from_params(cls, p: Mapping[str, Any], source: str = '') -> 'Servo':
-        """Build from actuator parameter names; ``p`` may be a car_profile.load() dict
+        """Build from actuator parameter names; ``p`` may be a car_profile.load(vehicle_id) dict
         or what the running node answered.  Missing servo keys raise ValueError."""
         missing = [k for k in SERVO_PARAMS if p.get(k) is None]
         if missing:
@@ -148,7 +149,7 @@ class SteerFit:
     margin_ok: bool
     n: int
     servo: Servo
-    car: str = ''                # the car profile name, for the "where it goes" lines
+    car: str = ''                # the vehicle_id, for the "where it goes" lines
 
     def lines(self) -> List[str]:
         out = [
@@ -321,22 +322,22 @@ def _hold(args) -> int:
 def _fit(args) -> int:
     from autosdv_vehicle_interface import car_profile
     try:
-        p = dict(car_profile.load(args.car_profile))
+        p = dict(car_profile.load(args.vehicle_id))
         p.update(wheel_base=args.wheel_base, wheel_tread=args.wheel_tread)
-        servo = Servo.from_params(p, f'params/cars/{args.car_profile}.param.yaml')
+        servo = Servo.from_params(p, f'individual_params/config/{args.vehicle_id}/autosdv_vehicle/actuator.param.yaml')
     except ValueError as e:
         print(f'cannot fit: {e}', file=sys.stderr)
         return 2
     pairs = [(o, radius_at_axle(abs(r), args.measured, servo.wheel_tread) * math.copysign(1, r))
              for o, r in args.pairs]
     try:
-        result = fit(pairs, servo, args.car_profile)
+        result = fit(pairs, servo, args.vehicle_id)
     except ValueError as e:
         print(f'cannot fit: {e}', file=sys.stderr)
         return 2
     print('\n'.join(result.lines()))
     print(f'\ntire_angle_to_steer_ratio: {result.ratio:.1f}   '
-          f'# params/cars/{args.car_profile}.param.yaml (autosdv_vehicle_interface)')
+          f'# individual_params/config/{args.vehicle_id}/autosdv_vehicle/actuator.param.yaml')
     print(f'max_steer_angle: {result.max_angle:.3f}            # vehicle_info.param.yaml')
     return 0 if result.margin_ok else 1
 

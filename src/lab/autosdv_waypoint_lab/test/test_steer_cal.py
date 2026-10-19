@@ -4,7 +4,7 @@ import pytest
 
 from autosdv_waypoint_lab import steer_cal as sc
 
-CAR_A = sc.Servo(489, 439, 539, -1000.0)
+SIM = sc.Servo(489, 439, 539, -1000.0)   # sim, the nominal car: actuator.yaml's servo
 CAR_B = sc.Servo(400, 355, 445, -132.0)
 
 
@@ -37,7 +37,7 @@ def test_the_gate_is_the_graded_uturn_radius():
 
 def test_the_stand_in_ratio_passes():
     # -143 gives 0.350 rad of lock: a 0.87 m minimum radius, inside 0.9 m at R 1.1 m
-    assert sc.fit(_circles(-143.0), CAR_A).margin_ok          # car A: +-50 counts
+    assert sc.fit(_circles(-143.0), SIM).margin_ok          # sim: +-50 counts
 
 
 def test_fit_sees_a_centre_error():
@@ -46,7 +46,7 @@ def test_fit_sees_a_centre_error():
 
 def test_the_shipped_ratio_cannot_hold_the_tight_circle():
     # the servo window would be reached at 0.05 rad: the tightest circle needs far more
-    r = sc.fit(_circles(-1000.0, offsets=(-50, -25, 25, 50)), CAR_A)
+    r = sc.fit(_circles(-1000.0, offsets=(-50, -25, 25, 50)), SIM)
     assert r.max_angle == pytest.approx(0.05)
     assert not r.margin_ok
     assert any('FAIL' in line for line in r.lines())
@@ -95,7 +95,7 @@ def _actuator_pwm(servo, delta):
     return max(servo.min_steer, min(servo.max_steer, pwm))
 
 
-@pytest.mark.parametrize('servo', [CAR_A, CAR_B, sc.Servo(400, 355, 445, 143.0)])
+@pytest.mark.parametrize('servo', [SIM, CAR_B, sc.Servo(400, 355, 445, 143.0)])
 @pytest.mark.parametrize('offset', [-50, -45, -25, -10, 10, 25, 45, 50])
 def test_hold_makes_the_actuator_write_that_offset_or_refuses(servo, offset):
     delta, why = sc.hold_check(servo, offset)
@@ -113,10 +113,10 @@ def test_hold_refuses_offsets_outside_car_b_window():
     assert sc.hold_check(CAR_B, -45)[0] is not None
 
 
-def test_hold_on_car_b_is_not_car_a():
+def test_hold_on_car_b_is_not_sim():
     # the old hard-coded -1000 commanded ~7.6x too small an angle on car B
     d_b, _ = sc.hold_check(CAR_B, -25)
-    d_a, _ = sc.hold_check(CAR_A, -25)
+    d_a, _ = sc.hold_check(SIM, -25)
     assert abs(d_b) / abs(d_a) == pytest.approx(1000 / 132, rel=0.1)
 
 
@@ -140,12 +140,12 @@ def test_servo_half_range_is_the_nearer_limit():
 
 def test_cli_fit_exit_codes(capsys):
     ok = ['-45:+0.9', '-25:+1.7', '-10:+4.2', '10:-4.2', '25:-1.7', '45:-0.9']
-    assert sc.main(['fit', '--car-profile', 'car_b', *ok]) in (0, 1)
+    assert sc.main(['fit', '--vehicle-id', 'car_b', *ok]) in (0, 1)
     out = capsys.readouterr().out
-    assert 'tire_angle_to_steer_ratio' in out and 'params/cars/car_b.param.yaml' in out
+    assert 'tire_angle_to_steer_ratio' in out and 'individual_params/config/car_b/autosdv_vehicle/actuator.param.yaml' in out
     assert 'init_steer 400' in out
-    assert sc.main(['fit', '--car-profile', 'car_b', '10:3', '20:2']) == 2
-    assert sc.main(['fit', '--car-profile', 'car_b', '-50:+0.9', '-25:+1.7', '25:-1.7']) == 2
+    assert sc.main(['fit', '--vehicle-id', 'car_b', '10:3', '20:2']) == 2
+    assert sc.main(['fit', '--vehicle-id', 'car_b', '-50:+0.9', '-25:+1.7', '25:-1.7']) == 2
 
 
 def test_cli_fit_needs_a_car():

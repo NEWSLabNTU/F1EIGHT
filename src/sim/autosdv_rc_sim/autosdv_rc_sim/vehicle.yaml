@@ -45,14 +45,18 @@ vehicle:
   min_pwm:            {value: 360,    source: config, from: "autosdv_vehicle_interface/params/actuator.yaml:min_pwm", note: "the ESC's full-brake / full-reverse endpoint (actuator.yaml: 'drives backward at max speed')"}
   max_pwm:            {value: 470,    source: config, from: "autosdv_vehicle_interface/params/actuator.yaml:max_pwm", note: "full forward"}
   brake_pwm:          {value: 340,    source: config, from: "autosdv_vehicle_interface/params/actuator.yaml:brake_pwm", note: "below min_pwm: full brake"}
-  esc_deadband:       {value: 5,      source: guess,      note: "counts either side of init_pwm"}
+  # The ESC state machine (docs/design/esc-pwm-model.md): the cars' model, the sim instance's numbers
+  forward_start_pwm:  {value: 376,    source: config, from: "individual_params/config/sim/autosdv_vehicle/actuator.param.yaml:forward_start_pwm", note: "forward from rest; also disarms reverse"}
+  forward_hold_pwm:   {value: 375,    source: config, from: "individual_params/config/sim/autosdv_vehicle/actuator.param.yaml:forward_hold_pwm", note: "moving forward continues above this; duty = (pwm - hold) / (max_pwm - hold)"}
+  reverse_stop_pwm:   {value: 365,    source: config, from: "individual_params/config/sim/autosdv_vehicle/actuator.param.yaml:reverse_stop_pwm", note: "below this brakes (level (stop - pwm) / (stop - min_pwm)); armed, reverses"}
+  reverse_start_pwm:  {value: 355,    source: config, from: "individual_params/config/sim/autosdv_vehicle/actuator.param.yaml:reverse_start_pwm", note: "armed, reverse starts from rest at or below this"}
+  reverse_arm_pwm:    {value: 335,    source: config, from: "individual_params/config/sim/autosdv_vehicle/actuator.param.yaml:reverse_arm_pwm", note: "a pull to this or lower, then any return above it, arms reverse"}
   throttle_ramp:      {value: 10.0,   source: guess,      note: "largest rise of |duty| per second ('punch')"}
   drag_brake:         {value: 0.0,    source: guess,      note: "dynamic-braking fraction at neutral"}
   brake_torque_max:   {value: 0.40,   source: guess,      note: "rear axle at full brake [N m]: with the road load, the rear tyre force stays 10 % under the nominal rear grip at mu 0.8 at 1, 6 and 11 m/s (test_drivetrain.py)"}
   esc_current_limit:  {value: 120.0,  source: guess,      note: "motoring current limit [A]; typical 1/10 sensorless ESC. The motor would draw 185 A at stall"}
   esc_regen_current_limit: {value: 2.5, source: guess,    note: "regeneration limit [A]: forward duty below the back-EMF brakes the car, as a synchronous-rectifying ESC does, lightly, as a hobby ESC with a light drag brake does (unmeasured). 0.115 N m at the rear axle, about 0.3 of brake_torque_max: regen plus road load decelerates 1.6-2.0 m/s^2 at 3-11 m/s on every variant, so slowing harder needs the ESC brake (3.0-3.5 m/s^2). Was 8.65 A (= the brake), which made the brake band redundant above 1 m/s. Refit from car data"}
   reverse_scale:      {value: 0.5,    source: guess}
-  rearm_time:         {value: 0.1,    source: guess,      note: "neutral at standstill before reverse is armed [s]"}
   # --- steering servo
   init_steer:         {value: 489,    source: config, from: "autosdv_vehicle_interface/params/actuator.yaml:init_steer"}
   min_steer:          {value: 439,    source: config, from: "autosdv_vehicle_interface/params/actuator.yaml:min_steer"}
@@ -86,4 +90,4 @@ variants:
   high_mu: {mu: 1.0}
   low_batt: {battery_voltage: 10.8}
   kv_low: {motor_kv: 2850.0}
-  deadband_wide: {esc_deadband: 7}
+  deadband_wide: {forward_start_pwm: 378, forward_hold_pwm: 377, reverse_stop_pwm: 363}

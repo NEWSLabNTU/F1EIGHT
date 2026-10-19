@@ -125,7 +125,7 @@ def test_motor_braking_under_a_forward_command_does_not_lock_the_rear_wheels(var
     plant = rolling(p, 11.0)
     kappas = []
     for _ in range(int(round(2.5 / p.physics_dt))):
-        plant.step(p.physics_dt, p.init_pwm + p.esc_deadband + 1, STRAIGHT)
+        plant.step(p.physics_dt, p.forward_start_pwm, STRAIGHT)
         if plant.state.vx > 1.0:
             kappas.append(plant.kappa_rear)
     assert plant.esc_out.duty > 0.0 and plant.drivetrain.current < 0.0     # it is regenerating
@@ -150,7 +150,7 @@ def test_uncapped_motor_braking_would_lock_the_rear_wheels():
     plant = rolling(p, 11.0)
     kappas = []
     for _ in range(1000):
-        plant.step(p.physics_dt, p.init_pwm + p.esc_deadband + 1, STRAIGHT)
+        plant.step(p.physics_dt, p.forward_start_pwm, STRAIGHT)
         kappas.append(plant.kappa_rear)
     assert min(kappas) < -0.9
 

@@ -193,16 +193,20 @@ Direct keyboard control of motor and steering PWM values.
 
 **Usage:**
 ```bash
-# Run from AutoSDV root directory
-./scripts/control/keyboard_pwm_control.py
+# Run from AutoSDV root directory; the car is required (its stop PWM differs)
+./scripts/control/keyboard_pwm_control.py --vehicle-id car_c
 
-# Or with custom step sizes
-./scripts/control/keyboard_pwm_control.py 5 5  # motor_step steering_step
+# Custom step sizes, or try a value before writing it into the profile
+./scripts/control/keyboard_pwm_control.py --vehicle-id car_c --motor-step 2 --stop 385
 ```
+
+Stop, brake, the motor and steering clamps and the steering centre come from
+the car's profile (`individual_params/config/<vehicle_id>/autosdv_vehicle/
+actuator.param.yaml` over `actuator.yaml`); `--help` lists the overrides.
 
 **Keyboard Controls:**
 - `w/s`: Increase/Decrease motor PWM
-- `x`: Emergency stop (motor PWM = 370)
+- `q`: Emergency stop (motor PWM = the car's `init_pwm`)
 - `a/d`: Left/Right steering
 - `c`: Center steering
 - `q`: Quit

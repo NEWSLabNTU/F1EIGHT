@@ -48,14 +48,17 @@ class VehicleParams:
     min_pwm: int
     max_pwm: int
     brake_pwm: int
-    esc_deadband: int
+    forward_start_pwm: int
+    forward_hold_pwm: int
+    reverse_stop_pwm: int
+    reverse_start_pwm: int
+    reverse_arm_pwm: int
     throttle_ramp: float
     drag_brake: float
     brake_torque_max: float
     esc_current_limit: float
     esc_regen_current_limit: float
     reverse_scale: float
-    rearm_time: float
     init_steer: int
     min_steer: int
     max_steer: int
@@ -176,8 +179,13 @@ def validate(p: VehicleParams) -> None:
         raise ValueError(f'lf ({p.lf}) must lie inside the wheelbase ({p.wheel_base})')
     if p.pacejka_c < 1.0 or not 0.0 <= p.pacejka_e < 1.0:
         raise ValueError('need pacejka_c >= 1 (the peak is reached) and 0 <= pacejka_e < 1')
-    if not p.min_pwm < p.init_pwm - p.esc_deadband < p.init_pwm + p.esc_deadband < p.max_pwm:
-        raise ValueError('the PWM range must extend beyond the ESC deadband on both sides')
+    if not (p.reverse_arm_pwm < p.reverse_start_pwm < p.reverse_stop_pwm <= p.init_pwm
+            <= p.forward_hold_pwm < p.forward_start_pwm < p.max_pwm):
+        raise ValueError('the ESC thresholds must order as reverse_arm < reverse_start < '
+                         'reverse_stop <= init <= forward_hold < forward_start < max_pwm')
+    if not p.reverse_arm_pwm < p.min_pwm < p.reverse_stop_pwm:
+        raise ValueError('min_pwm must lie between reverse_arm_pwm and reverse_stop_pwm: '
+                         'the full brake, which never arms reverse')
     for name in ('mass', 'yaw_inertia', 'wheel_radius', 'wheel_axle_inertia', 'mu', 'motor_kv',
                  'motor_resistance', 'gear_ratio', 'battery_voltage', 'pwm_freq', 'physics_dt',
                  'esc_current_limit', 'esc_regen_current_limit',

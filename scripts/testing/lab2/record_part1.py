@@ -1,14 +1,14 @@
 #!/usr/bin/env python3
 """`just coach record-part1`: the Part 1 speed-step bag from one terminal.
 
-    just coach record-part1 car_profile:=car_b                 rosbags/lab2cal_<time>, the default steps
-    just coach record-part1 car_profile:=car_b --name steps1   rosbags/lab2cal_steps1
-    just coach record-part1 car_profile:=car_b --steps 0,0.4,0.7,0 --hold 2.5 --max-distance 3
+    just coach record-part1 vehicle_id:=car_b                 rosbags/lab2cal_<time>, the default steps
+    just coach record-part1 vehicle_id:=car_b --name steps1   rosbags/lab2cal_steps1
+    just coach record-part1 vehicle_id:=car_b --steps 0,0.4,0.7,0 --hold 2.5 --max-distance 3
     just coach record-part1 --bench --yes           the same flow on the vehicle bench (no car)
 
-car_profile:= is required on the car (the actuator refuses to start without
-one, and the fit measures deadband and gain from that car's init_pwm); the
-bench defaults to car_a.
+vehicle_id:= is required on the car (the stack refuses to start without one,
+and the fit measures deadband and gain from that car's init_pwm); the bench
+defaults to sim, the simulated nominal car.
 
 In order, with short status lines here and the rest in BAG/run_logs/:
 
@@ -58,12 +58,12 @@ PARAMS_FILE = 'actuator_params.yaml'   # motor_fit.ACTUATOR_PARAMS_FILE, written
 PARAMS_TIMEOUT = 40.0     # s for record-cal to save it (its own wait is 30 s)
 
 
-def launch_car_profile(launch_args):
-    """The value of the last car_profile:= among the launch arguments, or None."""
+def launch_vehicle_id(launch_args):
+    """The value of the last vehicle_id:= among the launch arguments, or None."""
     found = None
     for w in launch_args:
         key, _, value = w.partition(':=')
-        if key == 'car_profile':
+        if key == 'vehicle_id':
             found = value
     return found
 
@@ -85,15 +85,15 @@ def parse_args(argv):
     if opts.yes and not opts.bench:
         ap.error('--yes is for --bench only: on the car, a person engages')
     opts.launch_args = rest
-    car = launch_car_profile(rest)
+    car = launch_vehicle_id(rest)
     if car is None and not opts.bench:
-        ap.error('car_profile:= is required on the car, e.g. `just coach record-part1 car_profile:=car_b`: '
+        ap.error('vehicle_id:= is required on the car, e.g. `just coach record-part1 vehicle_id:=car_b`: '
                  'the fit measures the deadband and gain from that car\'s init_pwm')
     if car is not None:
         from autosdv_vehicle_interface import car_profile
         if car not in car_profile.names():
-            ap.error(f'car_profile:={car}: one of {", ".join(car_profile.names())}')
-    opts.car_profile = car or 'car_a'      # coach_pursuit_bench.launch.xml's default
+            ap.error(f'vehicle_id:={car}: one of {", ".join(car_profile.names())}')
+    opts.vehicle_id = car or 'sim'      # coach_pursuit_bench.launch.xml's default
     try:
         opts.speeds = [float(x) for x in opts.steps.split(',') if x.strip()]
     except ValueError:
@@ -220,7 +220,7 @@ def main(argv=None) -> int:
         say(f'1. stack: {" ".join(stack.cmd)}   (log {stack.log.relative_to(REPO)})')
         stack.start()
         rclpy, mon = make_monitor()
-        say(f'   car profile {opts.car_profile}; waiting for /autosdv/actuator_node ...')
+        say(f'   vehicle_id {opts.vehicle_id}; waiting for /autosdv/actuator_node ...')
         t0 = time.monotonic()
         while ACTUATOR not in mon.get_node_names_and_namespaces():
             spin(0.5)
@@ -303,7 +303,7 @@ def main(argv=None) -> int:
         say(f'bag: {bag.relative_to(REPO)}')
         return 0
     say('6. fitting the motor and exporting the CSV ...')
-    fit = subprocess.run(just + ['fit-motor', str(bag), '--car-profile', opts.car_profile,
+    fit = subprocess.run(just + ['fit-motor', str(bag), '--vehicle-id', opts.vehicle_id,
                                  '-o', str(bag / 'motor_plant.yaml')], cwd=REPO,
                          stdout=subprocess.PIPE, stderr=subprocess.STDOUT, text=True)
     (logs / 'fit.log').write_text(fit.stdout)

@@ -1,7 +1,7 @@
 #!/usr/bin/env python3
 """`just lab2 survey-align [SURVEY_DIR]`: stage 2 of the Lab 2 survey.
 
-    just lab2 survey-align                     surveys/latest, route from the settings
+    just lab2 survey-align                     surveys/latest, route and car from the settings (--vehicle-id car_b: another car)
     just lab2 survey-align surveys/2026-10-16_10-02-11 [--route lab2_uturn]
     just lab2 survey-align --force             write even if a check refuses (with a warning)
     just lab2 survey-align --bench --truth DIR the vehicle bench: no car (below)
@@ -90,13 +90,21 @@ def parse(argv):
     ap.add_argument('--speed', type=float, default=0.3, help='--bench: m/s')
     ap.add_argument('--bench-timeout', type=float, default=90.0)
     ap.add_argument('--config', default=None)
-    ap.add_argument('--car-profile', default=None,
-                    help='car_a, car_b or car_c: the car\'s PWM profile (required on the car; --bench: car_a)')
+    ap.add_argument('--vehicle-id', default=None,
+                    help='car_a, car_b or car_c: the car\'s instance, individual_params/config/<id> '
+                         '(default: the settings\' car; --bench: sim, the nominal car)')
     a = ap.parse_args(argv)
-    if a.car_profile is None:
-        if not a.bench:
-            ap.error('--car-profile is required on the car (car_a, car_b or car_c)')
-        a.car_profile = 'car_a'
+    if a.vehicle_id is None and not a.bench:
+        try:
+            car = lc.Config({}, a.config).get('car')
+            a.vehicle_id = lc.vehicle_id_of(car) if car else None
+        except lc.ConfigError as e:
+            ap.error(str(e))
+        if a.vehicle_id is None:
+            ap.error('no car: pass --vehicle-id car_a|car_b|car_c, or set `car` '
+                     '(`just lab2 init car:=A|B|C`)')
+    if a.vehicle_id is None:
+        a.vehicle_id = 'sim'
     if a.bench and not a.truth:
         raise Usage('--bench needs --truth DIR: the course the mock camera renders')
     if a.truth and not a.bench:
@@ -403,7 +411,7 @@ def main(argv=None) -> int:
     cmd = ['play_launch', 'launch', '--log-dir', str(logdir / 'play_log'),
            '--web-addr', env.get('LAB2_WEB_ADDR', '0.0.0.0:8081'),
            'autosdv_launch', 'waypoint_survey_align.launch.xml', f'course_dir:={stage1}',
-           f'car_profile:={a.car_profile}']
+           f'vehicle_id:={a.vehicle_id}']
     if a.bench:
         cmd += ['bench:=true', f'truth_dir:={truth}', f'distance:={a.distance}', f'speed:={a.speed}']
     say(f'survey-align: {survey}')

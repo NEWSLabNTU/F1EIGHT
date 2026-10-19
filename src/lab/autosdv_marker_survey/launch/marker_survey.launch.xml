@@ -37,7 +37,8 @@
        description="the X display the viewer opens on; `just lab2 survey` passes it, because the launch itself runs without DISPLAY (the ZED cannot have one)"/>
   <arg name="vehicle_model" default="autosdv_vehicle"/>
   <arg name="sensor_model" default="autosdv_sensor_kit"/>
-  <arg name="vehicle_id" default="$(env VEHICLE_ID default)"/>
+  <arg name="vehicle_id"
+       description="REQUIRED: which car, car_a, car_b or car_c: individual_params/config/VEHICLE_ID (the ZED's mounting, from the sensor kit calibration)"/>
 
   <group if="$(var launch_camera)">
     <!-- base_link -> sensor kit -> zedxm_camera_link, from the vehicle URDF -->

@@ -18,7 +18,8 @@
 -->
 <launch>
   <arg name="course_dir" description="the surveyed course directory"/>
-  <arg name="sensor_suite" default="robin_zed"/>
+  <arg name="vehicle_id"
+       description="REQUIRED: which car, car_a, car_b or car_c: individual_params/config/VEHICLE_ID (calibration, autosdv_vehicle/actuator.param.yaml, autosdv.preset.yaml, whose sensor_suite the kit uses)"/>
   <arg name="rviz" default="false" description="open RViz on the check (`just lab2 loc-check` sets it when DISPLAY is set)"/>
   <arg name="viewer_display" default="$(env DISPLAY '')" description="the X display RViz opens on"/>
 
@@ -34,7 +35,7 @@
   <group scoped="true">
   <let name="rviz" value="false"/>
   <include file="$(find-pkg-share autosdv_launch)/launch/autosdv.launch.yaml">
-    <arg name="sensor_suite" value="$(var sensor_suite)"/>
+    <arg name="vehicle_id" value="$(var vehicle_id)"/>
     <arg name="camera_model" value="zedxm"/>
     <arg name="imu_source" value="zed"/>
     <arg name="use_gnss" value="false"/>
@@ -61,6 +62,7 @@
     <arg name="launch_vehicle_interface" value="true"/>
     <arg name="is_simulation" value="true"/>
     <arg name="launch_signal_manager" value="false"/>
+    <arg name="vehicle_id" value="$(var vehicle_id)"/>
   </include>
 
   <include file="$(find-pkg-share autosdv_waypoint_lab)/launch/waypoint_localization.launch.xml">

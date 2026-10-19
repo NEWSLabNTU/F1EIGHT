@@ -5,7 +5,7 @@
 #
 #   just coach sim scenario:=dropout
 #   just coach sim controller_class:=my_lab2.cruise_controller:CruiseController
-#   just coach vehicle lidar_model:=robin-w imu_yaw_sign:=-1.0
+#   just coach vehicle vehicle_id:=car_b lidar_model:=robin-w imu_yaw_sign:=-1.0
 #   just coach vehicle 'speed_controller_params:={kp: 15.0, ki: 5.0}'
 #
 # Each argument reaches play_launch as one word, so quote a value that
@@ -37,7 +37,7 @@ sim *ARGS:
     source scripts/env.sh
     exec "${cmd[@]}"
 
-# Part 2: pursuit stack on the vehicle (LiDAR detector, dead reckoning)
+# Part 2: pursuit stack on the vehicle (LiDAR detector, dead reckoning); vehicle_id:=car_X required
 [positional-arguments]
 vehicle *ARGS:
     #!/usr/bin/env bash
@@ -147,7 +147,7 @@ record-part1 *ARGS:
     exec python3 scripts/testing/lab2/record_part1.py "$@"
 
 # Saves the running actuator's parameters (init_pwm, brake_pwm, min/max_pwm,
-# car_profile) as BAG/actuator_params.yaml first, which fit-motor measures the
+# vehicle_id) as BAG/actuator_params.yaml first, which fit-motor measures the
 # deadband and gain from; refuses to record when /autosdv/actuator_node is not
 # up within RECORD_CAL_WAIT seconds (default 30).
 #
@@ -170,16 +170,16 @@ record-cal NAME="":
         if [ "$SECONDS" -ge "$deadline" ]; then
             rm -f "$params"
             echo "record-cal: $node is not up after ${wait_s} s: start the stack (just coach vehicle" \
-                 "launch_planner:=false car_profile:=car_X) first. Not recording: fit-motor needs" \
+                 "launch_planner:=false vehicle_id:=car_X) first. Not recording: fit-motor needs" \
                  "its init_pwm." >&2
             exit 1
         fi
         sleep 1
     done
-    for k in init_pwm brake_pwm min_pwm max_pwm car_profile; do
+    for k in init_pwm brake_pwm min_pwm max_pwm vehicle_id; do
         grep -q "^ *$k:" "$params" || { echo "record-cal: $node has no $k parameter ($params)" >&2; exit 1; }
     done
-    echo "actuator: $(grep -E '^ *(car_profile|init_pwm|brake_pwm|min_pwm|max_pwm):' "$params" | tr -s ' ' | tr '\n' ' ')"
+    echo "actuator: $(grep -E '^ *(vehicle_id|init_pwm|brake_pwm|min_pwm|max_pwm):' "$params" | tr -s ' ' | tr '\n' ' ')"
     (
         for _ in $(seq 300); do
             if [ -d "$out" ]; then mv "$params" "$out/actuator_params.yaml" && exit 0; fi
@@ -218,9 +218,9 @@ record-board LIDAR="robin-w" NAME="":
         /perception/coach/state /localization/kinematic_state /diagnostics /tf /tf_static
 
 # The neutral the fit measures from is the bag's actuator_params.yaml (record-cal);
-# an older bag needs --car-profile car_a|car_b|car_c, and --prior '{init_pwm: N}' wins.
+# an older bag needs --vehicle-id car_a|car_b|car_c, and --prior '{init_pwm: N}' wins.
 #   just coach fit-motor rosbags/lab2cal_steps1 -o tmp/motor_plant.yaml
-#   just coach fit-motor rosbags/lab2cal_old --car-profile car_b
+#   just coach fit-motor rosbags/lab2cal_old --vehicle-id car_b
 #
 # Fit the motor plant (MotorPlantParams) to a speed-step bag; -o FILE writes the YAML
 [positional-arguments]

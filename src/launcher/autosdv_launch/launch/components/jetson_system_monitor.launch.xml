@@ -1,0 +1,77 @@
+<?xml version="1.0"?>
+<!--
+  jetson_system_monitor.launch.xml ; fork of autoware_system_monitor's
+  system_monitor.launch.xml (Autoware 1.5.0) for an AGX Orin. The stock launch
+  starts all eight monitors unconditionally, and tier4_system_launch includes
+  it with no per-monitor switch, so a monitor that cannot work on Tegra can
+  only be left out by forking this file. Same container, same node names, same
+  plugins; re-fork when the Autoware version changes.
+
+  Left out by default, each because no parameter can make it pass here:
+
+    gpu_monitor      the installed binary is the unknown_gpu_monitor build
+                     (no NVML on Tegra; the CMake vendor choice is made at
+                     Autoware build time). Every item ("GPU Usage",
+                     "Temperature", "Frequency", "Memory Usage", "Thermal
+                     Throttling") is ERROR "No message was set".
+    voltage_monitor  with cmos_battery_label "" it greps /proc/driver/rtc for
+                     a batt_status line, which the Tegra RTC driver does not
+                     print, so "CMOS Battery Status" is "Battery Dead" whatever
+                     the cell; with a label it needs lm-sensors, not installed.
+    hdd_monitor      its SMART items ("HDD Temperature", "PowerOnHours",
+                     "TotalDataWritten", "RecoveredError") need the hdd_reader
+                     daemon (root) on /tmp/hdd_reader.sock; without it they are
+                     ERROR "connect error". Its usage and I/O-rate items do
+                     work, so launch_hdd_monitor:=true brings it back once
+                     hdd_reader runs.
+
+  Kept: cpu_monitor, mem_monitor, net_monitor (devices named in its param
+  file), ntp_monitor, process_monitor. cpu_monitor is the arm build, whose
+  "CPU Thermal Throttling" is not implemented and stays ERROR; the item cannot
+  be switched off, and the monitor's usage, temperature, frequency and load
+  checks are worth keeping. None of these items is linked into the diagnostic
+  graph, so none of them gates autonomous mode.
+-->
+<launch>
+  <arg name="cpu_monitor_config_file" default="$(find-pkg-share autosdv_launch)/config/system/system_monitor/cpu_monitor.param.yaml"/>
+  <arg name="hdd_monitor_config_file" default="$(find-pkg-share autosdv_launch)/config/system/system_monitor/hdd_monitor.param.yaml"/>
+  <arg name="mem_monitor_config_file" default="$(find-pkg-share autosdv_launch)/config/system/system_monitor/mem_monitor.param.yaml"/>
+  <arg name="net_monitor_config_file" default="$(find-pkg-share autosdv_launch)/config/system/system_monitor/net_monitor.param.yaml"/>
+  <arg name="ntp_monitor_config_file" default="$(find-pkg-share autosdv_launch)/config/system/system_monitor/ntp_monitor.param.yaml"/>
+  <arg name="process_monitor_config_file" default="$(find-pkg-share autosdv_launch)/config/system/system_monitor/process_monitor.param.yaml"/>
+  <arg name="gpu_monitor_config_file" default="$(find-pkg-share autosdv_launch)/config/system/system_monitor/gpu_monitor.param.yaml"/>
+  <arg name="voltage_monitor_config_file" default="$(find-pkg-share autosdv_launch)/config/system/system_monitor/voltage_monitor.param.yaml"/>
+
+  <arg name="launch_hdd_monitor" default="false" description="needs the hdd_reader daemon running as root"/>
+  <arg name="launch_gpu_monitor" default="false" description="the installed build has no Tegra support"/>
+  <arg name="launch_voltage_monitor" default="false" description="the Tegra RTC reports no batt_status"/>
+
+  <group>
+    <node_container pkg="rclcpp_components" exec="component_container_mt" name="system_monitor_container" namespace="system_monitor" output="screen">
+      <composable_node pkg="autoware_system_monitor" plugin="CPUMonitor" name="cpu_monitor">
+        <param from="$(var cpu_monitor_config_file)"/>
+      </composable_node>
+      <composable_node pkg="autoware_system_monitor" plugin="MemMonitor" name="mem_monitor">
+        <param from="$(var mem_monitor_config_file)"/>
+      </composable_node>
+      <composable_node pkg="autoware_system_monitor" plugin="NetMonitor" name="net_monitor">
+        <param from="$(var net_monitor_config_file)"/>
+      </composable_node>
+      <composable_node pkg="autoware_system_monitor" plugin="NTPMonitor" name="ntp_monitor">
+        <param from="$(var ntp_monitor_config_file)"/>
+      </composable_node>
+      <composable_node pkg="autoware_system_monitor" plugin="ProcessMonitor" name="process_monitor">
+        <param from="$(var process_monitor_config_file)"/>
+      </composable_node>
+      <composable_node pkg="autoware_system_monitor" plugin="HddMonitor" name="hdd_monitor" if="$(var launch_hdd_monitor)">
+        <param from="$(var hdd_monitor_config_file)"/>
+      </composable_node>
+      <composable_node pkg="autoware_system_monitor" plugin="GPUMonitor" name="gpu_monitor" if="$(var launch_gpu_monitor)">
+        <param from="$(var gpu_monitor_config_file)"/>
+      </composable_node>
+      <composable_node pkg="autoware_system_monitor" plugin="VoltageMonitor" name="voltage_monitor" if="$(var launch_voltage_monitor)">
+        <param from="$(var voltage_monitor_config_file)"/>
+      </composable_node>
+    </node_container>
+  </group>
+</launch>

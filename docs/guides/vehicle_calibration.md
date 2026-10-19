@@ -34,9 +34,9 @@ When transitioning from forward to reverse:
 
 | Tool | Purpose |
 |------|---------|
-| `motor_pwm_interactive.py --car-profile <car>` | Interactive PWM control |
-| `stop_motor.py --car-profile <car>` | Emergency stop (PWM = the car's neutral: 370 car A, 395 car B) |
-| `test_steering_pwm.py --car-profile <car>` | Steering calibration |
+| `motor_pwm_interactive.py --vehicle-id <car>` | Interactive PWM control |
+| `stop_motor.py --vehicle-id <car>` | Emergency stop (PWM = the car's neutral: 370 car A, 395 car B) |
+| `test_steering_pwm.py --vehicle-id <car>` | Steering calibration |
 | `scripts/control/gpio_speed.py` | Non-ROS GPIO speed measurement |
 | `scripts/control/gpio_read.py` | GPIO pin state monitor |
 

@@ -239,8 +239,8 @@ merged, so the patch series stays a readable list of what we changed and why.
 ./setup.sh --status     # Check installation status
 just build              # Build all packages
 just test               # Run tests
-just launch             # Launch system (web UI: http://localhost:8081)
-just launch "..."  # Launch with parameters
+just launch vehicle_id:=car_b   # Launch system on that car (web UI: http://localhost:8081)
+just launch "vehicle_id:=car_b ..."  # Launch with parameters (vehicle_id is required)
 just clean              # Remove build artifacts
 just checkout           # Update git submodules
 just setup-autoware-data  # Writable model tree at data/autoware_data (TensorRT needs it)
@@ -340,6 +340,7 @@ just sim grade DIR      # Lab 2 Part 1 grade: headless, deterministic (--view re
 just sim make-track     # size the graded straight from the speed profile
 just lab2 sim                             # Lab 2 Part 1: the one ~/lab2/*_lab_2_1 SpeedPID on 3 RC-sim cars, mark / 25
 just lab2 run team:=3                     # Lab 2 Part 2: ~/lab2/team3 on the car, or the vehicle bench + gate elsewhere
+just lab2 stack car_b                     # the Lab 2 stack (waypoints + ArUco) on car B, no lab settings; car_a sensor_suite:=vlp16_zed ...
 ```
 The RC simulator's vehicle model, grader and limits: `docs/guides/rc-sim.md`.
 Lab 2 Part 1 (the course, the 9 checks, the controller and its physics): `docs/guides/lab2-part1-sim.md`.
@@ -884,19 +885,29 @@ They drifted from it once; read them there when it matters.
 
 **Actuator Parameters**: `src/vehicle/autosdv_vehicle_launch/autosdv_vehicle_interface/params/actuator.yaml`
 
-**Per-car values** live in `autosdv_vehicle_interface/params/cars/<car>.param.yaml`
-(`car_a`, the Velodyne car, which is `actuator.yaml`'s values; `car_b`; `car_c`,
-a copy of B until measured). The launch argument `car_profile:=<car>` selects
-one; there is no environment variable and **no default**: without it the
-actuator refuses to start (before it opens the PCA9685), because the cars
-differ in their stop PWM (A 370, B 395) and the wrong one drives instead of
-stopping. It is not a parse-time required argument only because Autoware's own
-`vehicle.launch.xml` includes ours and would have to pass it. The profile loads last into the actuator and gear manager. It holds
-only what differs between cars: ESC neutral and brake points, servo centre and
-ends, a measured steering ratio. The RC simulator (`just sim rc`, Lab 2 Part 1)
-pins `car_a`, because its plant models `actuator.yaml`; the vehicle benches
-(dry runs, no motor) default to `car_a`. The lab2 `car:=A|B|C` config key is
-the team's car label for bags, not this profile.
+**Per-car values** live in Autoware's instance layer, `individual_params`
+(`src/param/autoware_individual_params`), under `config/<vehicle_id>/`:
+`autosdv_vehicle/actuator.param.yaml` (ESC neutral and brake points, servo
+centre and ends, a measured steering ratio), `autosdv_sensor_kit/` (calibration,
+IMU bias) and `autosdv.preset.yaml` (defaults for `sensor_model`,
+`vehicle_model`, `sensor_suite`, `use_gnss`). Instances: `car_a` (VLP16 + ZED,
+measured), `car_b` (Robin-W + ZED), `car_c` (a copy of B until measured), and
+`sim`, the simulated nominal car (`actuator.yaml`'s values restated, Robin-W +
+ZED preset; never a physical car). The launch argument `vehicle_id:=<car>` selects one, and it is
+**required** on every launch that runs on a car (`just launch vehicle_id:=car_b`,
+`just lab2 stack car_b`, `just control basic vehicle_id:=car_b`); there is no
+default and no environment variable (`$(env VEHICLE_ID default)` is gone),
+because the cars differ in their stop PWM (A 380, B 395) and the wrong one drives
+instead of stopping. The preset is included before the arguments it defaults, so
+the command line still wins (`vehicle_id:=car_a use_gnss:=true`). The actuator
+file loads last into the actuator and gear manager. The simulators (`just sim
+rc`, Lab 2 Part 1, the coach sim) pin `sim`, because their plant models
+`actuator.yaml`; the vehicle benches (dry runs, no motor) default to `sim`;
+the logging simulation defaults to `default` (it also carries
+`sample_sensor_kit`). The lab2 `car:=A|B|C` config key maps to
+`vehicle_id:=car_a|car_b|car_c` (never `sim`). Tools take `--vehicle-id`. A team adds its cars
+in its own `individual_params`, never in ours. Design:
+`docs/design/vehicle-variants-and-instances.md`.
 
 ## Documentation
 

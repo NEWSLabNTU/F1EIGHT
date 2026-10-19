@@ -13,10 +13,12 @@ The actuator's safety shell sits around your class and always wins:
   - if update() raises or returns something that is not a finite number, it
     puts the motor in neutral; after 3 faults it disables your class.
 
-The PWM scale and what the ESC does with it (the lab car's numbers):
+The PWM scale and what the ESC does with it (the simulated car's numbers; a lab
+car's neutral is 380 to 390, its still band about 5 counts either side, and
+params['init_pwm'] is always the car's own):
 
       min_pwm         init_pwm                                          max_pwm
-        360 .. brake .. 365 .. dead .. 370 .. dead .. 375 .. throttle ..... 470
+        360 .. brake .. 365 .. still .. 370 .. still .. 375 .. throttle ... 470
         full brake                    neutral                       full throttle
 
 Above neutral the ESC drives the motor. With a duty below what the motor's speed

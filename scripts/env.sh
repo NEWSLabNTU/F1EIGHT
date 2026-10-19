@@ -19,8 +19,8 @@
 # It sets no middleware of its own. Which RMW to run is the user's choice --
 # CycloneDDS, Zenoh, something else -- and it belongs in `.envrc`, not in a
 # helper every recipe sources. The one thing done here is to keep a choice the
-# user has already made: Autoware's setup.bash exports
-# RMW_IMPLEMENTATION=rmw_cyclonedds_cpp unconditionally, so an explicit
+# user has already made (in .envrc, which sets the default when the directory
+# is entered): some Autoware builds' setup.bash export an RMW, so an explicit
 # selection has to be restored after it runs or it is silently overwritten.
 
 _autosdv_env_repo="$(cd "$(dirname "${BASH_SOURCE[0]}")/.." && pwd)"

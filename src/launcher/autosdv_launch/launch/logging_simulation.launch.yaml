@@ -82,6 +82,15 @@ launch:
 #
 # Pair these with the bag: COSS bags with the AutoSDV vehicle (the defaults),
 # the Autoware sample rosbag with sample_vehicle + sample_sensor_kit.
+# The calibration set the replay's URDF reads (individual_params/config/<vehicle_id>/
+# <sensor_model>). `default`, not a car: it is the one instance that also carries
+# sample_sensor_kit for the Autoware sample bag. Name the car that recorded a bag
+# (vehicle_id:=car_b) to replay it with that car's calibration. launch_vehicle_interface:=true
+# needs a car: `default` has no autosdv_vehicle/actuator.param.yaml, so the interface refuses.
+- arg:
+    name: vehicle_id
+    default: "default"
+    description: "individual_params instance for the replayed bag's calibration: default, car_a, car_b, car_c"
 - arg:
     name: vehicle_model
     default: "autosdv_vehicle"
@@ -283,6 +292,9 @@ launch:
 - include:
     file: "$(find-pkg-share autosdv_launch)/launch/autosdv_autoware.launch.xml"
     arg:
+    -
+      name: vehicle_id
+      value: $(var vehicle_id)
     -
       name: vehicle_model
       value: $(var vehicle_model)

@@ -52,7 +52,7 @@ mode, so the default track brakes at what regeneration gives. Two runs per model
   (no reversing, clean resume, no spin).
 
 Eight model variants (mass, friction, battery voltage, motor constant, ESC
-deadband) replace the per-car models, so coefficients tuned to one exact
+thresholds) replace the per-car models, so coefficients tuned to one exact
 model lose marks. Each of the 16 checks per variant is worth the same; marks
 = 15 × passed / total over all 8 × 16 checks. The stop error is the distance
 from the stop line, at most 0.5 m on every variant.
