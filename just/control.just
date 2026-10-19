@@ -8,11 +8,13 @@ set working-directory := '..'
 default:
     @just --list control
 
-# Launch vehicle control test (basic_control.launch.xml)
-basic:
+# Launch vehicle control test (basic_control.launch.xml); name the car:
+#   just control basic car_profile:=car_b
+[positional-arguments]
+basic *ARGS:
     #!/usr/bin/env bash
     source scripts/env.sh && \
-    play_launch launch control_test basic_control.launch.xml
+    play_launch launch control_test basic_control.launch.xml "$@"
 
 # Run trajectory player with straight_10m.yaml (10m straight line)
 straight:
