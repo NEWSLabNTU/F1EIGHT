@@ -408,7 +408,7 @@ loc-check *ARGS:
         echo "error: no course directory '$dir': run \`just lab2 survey ORIGIN_ID\` first, or name one" >&2; exit 1
     fi
     dir=$(realpath "$dir")
-    # car (settings file or car:=) -> vehicle_id:=car_<car>; refuses without one
+    # car (settings file or car:=) -> vehicle_id:=car_<car>; without one, sim (nothing drives)
     source scripts/testing/lab2/lab2_config.sh
     lab2_config loc-check "$@" || exit 2
     # The ZED never gets a DISPLAY (camera_display.sh says why); viewers get it back.
@@ -469,7 +469,8 @@ survey *ARGS:
     case "$dir" in "$PWD"/surveys/*) target=${dir#"$PWD"/surveys/} ;; *) target=$dir ;; esac
     ln -sfn "$target" surveys/latest
     echo "survey -> $dir (surveys/latest)"
-    # car (settings file or car:=) -> vehicle_id:=car_<car>: the survey's URDF is that car's
+    # car (settings file or car:=) -> vehicle_id:=car_<car>: the survey's URDF is that car's;
+    # without one, sim, the nominal car (no car's calibration is measured yet)
     source scripts/testing/lab2/lab2_config.sh
     lab2_config survey "$@" || exit 2
     # The ZED never gets a DISPLAY (camera_display.sh says why); viewers get it back.

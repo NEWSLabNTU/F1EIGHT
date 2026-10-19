@@ -26,7 +26,10 @@ Recipes:
     vehicle     course_dir:= (below), team:=TEAM_DIR, unless given, and vehicle_id:=car_<car>
                 (on the car `car` is required; the bench takes sim, the simulated nominal
                 car, when it is not set, hardware:=sim passes vehicle_id:=sim)
-    loc-check   vehicle_id:=car_<car> (`car` required); every other argument passes through
+    loc-check   vehicle_id:=car_<car> when `car` is set, else vehicle_id:=sim, the nominal
+                car (nothing drives: the actuator is a dry run; the car only picks its
+                calibration and IMU bias, which no car has measured yet); every other
+                argument passes through
     survey      the same as loc-check (the survey's URDF is that car's calibration)
     gate        submission:=SUBMISSION, unless a controller is given
     sim         submission:=PART1_SUBMISSION when set (no default: without one the runner
@@ -564,7 +567,8 @@ def plan(recipe, argv, cwd=REPO, bench=False):
             use('vehicle_id', vid)
     elif recipe in ('loc-check', 'survey'):
         out = list(rest)
-        arg, vid = vehicle_id_for(c, rest, required=True)
+        # nothing here drives, so no car is not a refusal: the nominal car's calibration
+        arg, vid = vehicle_id_for(c, rest, required=False, fallback=SIM_VEHICLE_ID)
         if arg:
             out.append(arg)
         use('vehicle_id', vid)

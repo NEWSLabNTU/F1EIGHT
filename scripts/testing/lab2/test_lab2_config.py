@@ -254,8 +254,8 @@ def test_no_car_is_refused_on_the_car_not_on_the_bench(no_real_home):
     with pytest.raises(lc.ConfigError, match='no car set') as e:
         lc.plan('vehicle', ['team_dir:=/t'])
     assert 'just lab2 init car:=A|B|C' in str(e.value) and '\n' not in str(e.value)
-    with pytest.raises(lc.ConfigError, match='no car set'):
-        lc.plan('loc-check', [])
+    # nothing drives in loc-check or the survey: no car is the nominal car
+    assert lc.plan('loc-check', [])[0] == ['vehicle_id:=sim']
     # the bench keeps its launch default, sim; the hardware sim is passed sim
     # (waypoint_follow.launch.xml requires vehicle_id)
     args = lc.plan('vehicle', ['team_dir:=/t'], bench=True)[0]
@@ -266,8 +266,7 @@ def test_no_car_is_refused_on_the_car_not_on_the_bench(no_real_home):
     # the survey takes the car the same way loc-check does
     assert lc.plan('survey', ['car:=B', 'marker_size:=0.25'])[0] == \
         ['marker_size:=0.25', 'vehicle_id:=car_b']
-    with pytest.raises(lc.ConfigError, match='no car set'):
-        lc.plan('survey', [])
+    assert lc.plan('survey', ['marker_size:=0.25'])[0] == ['marker_size:=0.25', 'vehicle_id:=sim']
     # a car set on the bench is still that car's profile
     assert lc.plan('vehicle', ['team_dir:=/t', 'car:=B'], bench=True)[0][-1] == 'vehicle_id:=car_b'
     # an explicit vehicle_id:= alone names the car
