@@ -338,7 +338,8 @@ just bag download       # Download test rosbag (~2.8 GB)
 just sim rc             # RC car simulator: Autoware + the real vehicle interface (hardware:=sim) + plant
 just sim grade DIR      # Lab 2 Part 1 grade: headless, deterministic (--view replays it in RViz)
 just sim make-track     # size the graded straight from the speed profile
-just lab2 sim submission:=DIR [--final]   # Lab 2 Part 1: a student SpeedPID, live on the RC sim, graded
+just lab2 sim                             # Lab 2 Part 1: the one ~/lab2/*_lab_2_1 SpeedPID on 3 RC-sim cars, mark / 25
+just lab2 run team:=3                     # Lab 2 Part 2: ~/lab2/team3 on the car, or the vehicle bench + gate elsewhere
 ```
 The RC simulator's vehicle model, grader and limits: `docs/guides/rc-sim.md`.
 Lab 2 Part 1 (the course, the 16 checks, the controller and its physics): `docs/guides/lab2-part1-sim.md`.
