@@ -21,7 +21,8 @@ REPO = PKG.parents[2]
 DEFAULTS_YAML = PKG / 'config' / 'speed_pid_part1.yaml'
 DEFAULTS = yaml.safe_load(DEFAULTS_YAML.read_text())
 ACTUATOR = {'init_pwm': 370, 'min_pwm': 360, 'max_pwm': 470, 'brake_pwm': 340, 'rate': 100.0}
-HANDOUT = Path.home() / 'repos/ntu-sdv-course/2026/labs/Lab2/handout/lab2_speed'
+# the course repository's byte copy of the stub (every team model's speed_pid.py starts as it)
+COURSE_STUB = Path.home() / 'repos/ntu-sdv-course/2026/labs/Lab2/ta/reference/stub/speed_pid.py'
 # Modules the student's speed_pid.py may import (the Lab 2 handout's list)
 ALLOWED = {'math', 'cmath', 'dataclasses', 'typing', 'collections', 'enum', 'functools',
            'itertools', 'numbers', 'statistics', 'abc', '__future__', 'numpy'}
@@ -148,11 +149,9 @@ def test_defaults_file_passes_the_submission_check():
     assert warnings == [] and checked == DEFAULTS
 
 
-@pytest.mark.skipif(not HANDOUT.is_dir(), reason='course repository not checked out')
-def test_handout_matches_the_stub_and_the_defaults():
-    assert (HANDOUT / 'lab2_speed' / 'speed_pid.py').read_text() == \
-        Path(stub_module.__file__).read_text()
-    assert yaml.safe_load((HANDOUT / 'config' / 'speed_pid.yaml').read_text()) == DEFAULTS
+@pytest.mark.skipif(not COURSE_STUB.is_file(), reason='course repository not checked out')
+def test_the_course_copy_matches_the_stub():
+    assert COURSE_STUB.read_bytes() == Path(stub_module.__file__).read_bytes()
 
 
 def test_math_is_the_only_import_needed():
