@@ -6,9 +6,13 @@ selection merges into `vehicle_model:=`, the template is a copy of
 `autosdv_vehicle_launch`, a team has full control of its vehicle interface, and the
 car-specific files stay keyed to the physical car. Two models of the same shape (the
 course's decisions, 2026-10-20): `lab2_sim_vehicle` for Part 1 (the RC simulator,
-`vehicle_id:=sim`), ONE package with the same name for every student (`just lab2 new-sim`;
-the TA builds each submission in its own workspace), and `teamN_vehicle` for Part 2, each
-team's model for the cars (`just lab2 new-team N`). The template's speed controller is the
+`vehicle_id:=sim`), ONE package with the same name for every student (the TA builds each
+submission in its own workspace), and `teamN_vehicle` for Part 2, each team's model for the
+cars. The TA generates both from the pinned reference for the handout
+(`new_team.py --sim`, `new_team.py --template`, the latter with "N" literally in its names);
+students rename the template's `teamN` to their number by hand, put both under this
+repository's `src/lab2_vehicles/` (gitignored) and build them there with colcon, so the
+models resolve from AutoSDV's own install. The template's speed controller is the
 Part 1 SpeedPID stub: Part 1 completes it in the sim model, and the team ports it into its
 car model. The TA owns the path tracker and its
 parameters, the lookahead included. Passing the gate before a car run is a rule the TA
@@ -105,8 +109,8 @@ outside its package:
 
 ## Workflow
 
-- `just lab2 new-team 3` generates `team3_vehicle_launch/` (the three packages)
-  from `autosdv_vehicle_launch`, renamed.
+- The handout carries `teamN_vehicle_launch/` (the three packages, generated from
+  `autosdv_vehicle_launch`); a team renames `teamN` to its number.
 - Teams submit the repository; the TA puts every team under one overlay
   workspace, `~/lab2/ws/src/`, and builds it once. Distinct package and Python
   module names let all teams build side by side; a broken package fails only its
@@ -126,7 +130,7 @@ own cars, and only then is the template cut from it:
 2. the car C straight-line and U-turn runs on the reference model;
 3. the gate's safety checks above, passing on the reference model and failing on
    deliberately broken copies (wrong neutral, no watchdog, reverse arming);
-4. `new-team`, then one generated team package through gate, car and grade.
+4. the template, renamed, then one team package through gate, car and grade.
 
 ## Decided
 
@@ -151,8 +155,8 @@ own cars, and only then is the template cut from it:
 | piece | where |
 |---|---|
 | the vehicle interface by model | `waypoint_follow.launch.xml` includes `$(var vehicle_model)_launch/launch/vehicle_interface.launch.xml`; `speed_controller_class` defaults to `""`, the model's own |
-| the template | `scripts/testing/lab2/new_team.py` (`just lab2 new-team N`): the interface and launch packages renamed, the description generated to install autosdv_vehicle_description's config, URDF and meshes by reference (symlinks under `--symlink-install`), the stub as `speed_pid.py` and the launch's default class, the tuning retargeted to `teamN_vehicle_launch/config/<vehicle_id>/speed_controller.param.yaml` (one per individual_params instance), the car's `individual_params` actuator file kept and checked for. Team names and the workspace: `lab2_ws.py`, shared with Part 1 |
-| the workspace | `~/lab2/ws` (`$LAB2_HOME/ws`), `just lab2 build-teams`; the lab2 recipes source it (`lab2_ws.sh`) |
+| the template | `scripts/testing/lab2/new_team.py` (`--sim`, `--template`, or a team number; a TA tool for the handout): the interface and launch packages renamed, the description generated to install autosdv_vehicle_description's config, URDF and meshes by reference (symlinks under `--symlink-install`), the stub as `speed_pid.py` and the launch's default class, the tuning retargeted to `teamN_vehicle_launch/config/<vehicle_id>/speed_controller.param.yaml` (one per individual_params instance), the car's `individual_params` actuator file kept and checked for. Team names and the workspace: `lab2_ws.py`, shared with Part 1 |
+| where models live | a student's: `src/lab2_vehicles/` in this repository (gitignored), built with it; `~/lab2/ws` only for the TA's grading of submissions |
 | selection | `lab2_config.vehicle_model_for`: `vehicle_model`, else `team<team>_vehicle`, else the reference; `team:=N` is a number everywhere, team 0 the reference; `team_dir:=` and `submission:=` refused on the command line |
 | the gate, safety half | `vehicle_gate.py` + `lab2_vehicle_gate.launch.xml` + the probe `autosdv_waypoint_lab/vehicle_gate.py`: the model on `hardware:=sim`, `rc_sim_plant` given each car's ESC points (`pwm_param_files`); neutral, drives, stop, watchdog, MRM, emergency, no reverse arming, read back from `/rc_sim/pwm` |
 | the gate, route half | `bench_gate.py`, unchanged checks, `vehicle_model:=` passed to the bench |

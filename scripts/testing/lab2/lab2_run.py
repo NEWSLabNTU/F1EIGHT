@@ -13,7 +13,7 @@
     just lab2 run --bench --yes            engage without asking (tests; --bench only)
 
 The model: a team submits its Autoware vehicle model (docs/design/lab2-team-vehicle-models.md),
-built in ~/lab2/ws (`just lab2 new-team N`, `just lab2 build-teams`). team:=N runs
+under src/lab2_vehicles/ and built with this repository (colcon). team:=N runs
 teamN_vehicle and records team N; vehicle_model:=M runs M, its team number from a teamN_vehicle
 name, else team_number:=, else the settings' `team`, else 0 for the reference
 (autosdv_vehicle). Passing `just lab2 gate` before a car run is a rule of the lab, which the
@@ -251,9 +251,10 @@ def resolve_model(o: Options, settings,
         raise UsageError(f'which team number runs {model}? add team_number:=N')
     if not (installed or _installed)(model):
         n = __import__('re').fullmatch(r'team(\d+)_vehicle', model)
-        raise UsageError(f'vehicle model {model} is not built here: '
-                         + (f'`just lab2 new-team {n.group(1)}` (once), then ' if n else '')
-                         + '`just lab2 build-teams`')
+        raise UsageError(f'vehicle model {model} is not built here: put {model}_launch/ under '
+                         'src/lab2_vehicles/ and build it: colcon build --base-paths src '
+                         '--symlink-install --cmake-args -DCMAKE_BUILD_TYPE=Release '
+                         f'--packages-up-to {model}_launch')
     return [f'vehicle_model:={model}', f'team:={number}'], note, model
 
 

@@ -225,7 +225,7 @@ def test_no_team_runs_the_reference_as_team_0():
 
 
 def test_an_unbuilt_model_says_how_to_build_it():
-    with pytest.raises(lr.UsageError, match='new-team 3.*build-teams'):
+    with pytest.raises(lr.UsageError, match='src/lab2_vehicles.*packages-up-to team3_vehicle_launch'):
         lr.resolve_model(lr.parse_args(['team:=3']), Settings(), built())
 
 
