@@ -461,7 +461,7 @@ def vehicle_id_for(c: 'Config', rest, required: bool, fallback: Optional[str] = 
 # ---- the vehicle model ------------------------------------------------------------------
 
 def team_model(team) -> str:
-    """3 -> team3_vehicle (just lab2 new-team 3 generates it); 0 -> the reference, the TA's
+    """3 -> team3_vehicle (src/lab2_vehicles/team3_vehicle_launch); 0 -> the reference, the TA's
     runs (the integration test records as team 0)."""
     t = str(team).strip()
     if not t.isdigit():

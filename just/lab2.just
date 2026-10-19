@@ -11,9 +11,12 @@
 #                                  stack, preflight, record, engage (asks), stop, grading table,
 #                                  audit.png. On a workstation: the same on the vehicle bench,
 #                                  plus the gate verdict
-#   just lab2 new-sim              lab2_sim_vehicle (Part 1, everyone's) into ~/lab2/ws/src
-#   just lab2 new-team 3           team3_vehicle (Part 2) from the reference model, into ~/lab2/ws/src
-#   just lab2 build-teams          build ~/lab2/ws (every team's model)
+#
+# The vehicle models (the handout's lab2_sim_vehicle_launch/ and teamN_vehicle_launch/, the
+# latter renamed to the team's number) go under src/lab2_vehicles/ (gitignored) and are built
+# with the rest of this repository:
+#   colcon build --base-paths src --symlink-install --cmake-args -DCMAKE_BUILD_TYPE=Release \
+#       --packages-up-to team3_vehicle_launch lab2_sim_vehicle_launch
 #   just lab2 gate team:=3         the vehicle gate: safety on every car, then the route
 #
 # Everything below is for the TA, or the step-by-step equivalent.
@@ -96,8 +99,6 @@ init *ARGS:
 bench *ARGS:
     #!/usr/bin/env bash
     source scripts/env.sh
-    source scripts/testing/lab2/lab2_ws.sh
-    lab2_ws_source
     cmd=(play_launch launch --web-addr '{{ web_addr }}'
          autosdv_launch waypoint_follow_bench.launch.xml "$@")
     printf '\033[2m%s\033[0m\n' "${cmd[*]}"
@@ -111,8 +112,6 @@ vehicle *ARGS:
     #!/usr/bin/env bash
     unset DISPLAY                       # the ZED cannot have one: scripts/testing/lab2/camera_display.sh
     source scripts/env.sh
-    source scripts/testing/lab2/lab2_ws.sh
-    lab2_ws_source
     source scripts/testing/lab2/lab2_config.sh
     lab2_config vehicle "$@" || exit 2
     cmd=(play_launch launch --web-addr '{{ web_addr }}'
@@ -156,44 +155,9 @@ stack VEHICLE_ID *ARGS:
 gate *ARGS:
     #!/usr/bin/env bash
     source scripts/env.sh
-    source scripts/testing/lab2/lab2_ws.sh
-    lab2_ws_source
     source scripts/testing/lab2/lab2_config.sh
     lab2_config gate "$@" || exit 2
     exec python3 scripts/testing/lab2/bench_gate.py "${LAB2_ARGS[@]}"
-
-#   just lab2 new-team 3                 ~/lab2/ws/src/team3_vehicle_launch ($LAB2_HOME/ws/src)
-#   just lab2 new-team 3 --dest DIR      somewhere else (then build it there)
-# From the autosdv_vehicle_launch this repository pins; never overwrites. The README it writes
-# says what is the team's and what is not (the car's PWM file, the vehicle geometry).
-# Generate team N's car model (teamN_vehicle, Part 2) from the reference model
-[positional-arguments]
-new-team N *ARGS:
-    #!/usr/bin/env bash
-    exec python3 scripts/testing/lab2/new_team.py "$@"
-
-#   just lab2 new-sim                    ~/lab2/ws/src/lab2_sim_vehicle_launch ($LAB2_HOME/ws/src)
-# The same package, and name, for every student; never overwrites.
-# Generate Part 1's simulator model (lab2_sim_vehicle) from the reference model
-[positional-arguments]
-new-sim *ARGS:
-    #!/usr/bin/env bash
-    exec python3 scripts/testing/lab2/new_team.py --sim "$@"
-
-#   just lab2 build-teams                    every package under ~/lab2/ws/src
-#   just lab2 build-teams --packages-select team3_vehicle_interface
-# An overlay over this repository's install: one team's broken package fails its own build only.
-# Build the teams' workspace, ~/lab2/ws (every team's vehicle model)
-[positional-arguments]
-build-teams *ARGS:
-    #!/usr/bin/env bash
-    source scripts/env.sh
-    ws="${LAB2_HOME:-$HOME/lab2}/ws"
-    if [ ! -d "$ws/src" ]; then
-        echo "error: no $ws/src: \`just lab2 new-team N\` first, or put the teams' repositories there" >&2
-        exit 2
-    fi
-    cd "$ws" && exec colcon build --base-paths src --symlink-install --continue-on-error "$@"
 
 #   just lab2 gate-selftest                  three broken models (wrong neutral, no watchdog,
 #                                            reverse arming) on car_a; each must FAIL its check
@@ -224,8 +188,6 @@ gate-selftest *ARGS:
 sim *ARGS:
     #!/usr/bin/env bash
     source scripts/env.sh
-    source scripts/testing/lab2/lab2_ws.sh
-    lab2_ws_source
     source scripts/testing/lab2/lab2_config.sh
     lab2_config sim "$@" || exit 2
     exec python3 scripts/testing/lab2/part1_run.py "${LAB2_ARGS[@]}"
@@ -299,8 +261,6 @@ run *ARGS:
     #!/usr/bin/env bash
     # lab2_run.py keeps DISPLAY for audit.png and takes it away from the stack (the ZED)
     source scripts/env.sh
-    source scripts/testing/lab2/lab2_ws.sh
-    lab2_ws_source
     exec python3 scripts/testing/lab2/lab2_run.py "$@"
 
 #   just lab2 audit                          the latest bag, car/team/reference from the config
@@ -326,8 +286,6 @@ audit *ARGS:
 integration-test *ARGS:
     #!/usr/bin/env bash
     source scripts/env.sh
-    source scripts/testing/lab2/lab2_ws.sh
-    lab2_ws_source
     exec python3 scripts/testing/lab2/lab2_run.py --bench --yes --integration \
         car:=SIM bag_dir:=tmp/lab2_integration/bags "$@"
 

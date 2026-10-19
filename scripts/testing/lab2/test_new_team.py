@@ -52,18 +52,20 @@ def test_model_name(team, model):
     assert lab2_ws.team_of(model) == int(team) and lab2_ws.team_of(lab2_ws.SIM_MODEL) is None
 
 
-def test_main_writes_a_team_car_model_or_the_sim_model(tmp_path, monkeypatch, capsys):
+def test_main_writes_the_sim_model_the_template_or_a_team(tmp_path, monkeypatch, capsys):
     monkeypatch.setattr(nt, 'read_lab_files', lambda worktree=False: LAB)
     monkeypatch.setattr(nt, 'read_reference', lambda worktree=False: (FILES, 'test'))
     monkeypatch.setattr(nt, 'vehicle_ids', lambda worktree=False: list(IDS))
-    assert nt.main(['4', '--dest', str(tmp_path)]) == 0
     assert nt.main(['--sim', '--dest', str(tmp_path)]) == 0
-    assert {p.name for p in tmp_path.iterdir()} == {'team4_vehicle_launch', 'lab2_sim_vehicle_launch'}
-    assert nt.main(['4', '--dest', str(tmp_path)]) == 2               # never overwrites
+    assert nt.main(['--template', '--dest', str(tmp_path)]) == 0
+    assert nt.main(['4', '--dest', str(tmp_path)]) == 0
+    assert {p.name for p in tmp_path.iterdir()} == \
+        {'lab2_sim_vehicle_launch', 'teamN_vehicle_launch', 'team4_vehicle_launch'}
+    assert nt.main(['--template', '--dest', str(tmp_path)]) == 2      # never overwrites
     assert 'exists' in capsys.readouterr().err
-    for both_or_neither in (['4', '--sim'], []):
+    for wrong in (['4', '--sim'], ['--sim', '--template'], []):
         with pytest.raises(SystemExit):
-            nt.main(both_or_neither + ['--dest', str(tmp_path)])
+            nt.main(wrong + ['--dest', str(tmp_path)])
 
 
 @pytest.mark.parametrize('bad', ['0', '-1', 'a', '3a', '1000', ''])
@@ -154,3 +156,41 @@ def test_the_pinned_reference_generates(tmp_path):
 def test_nothing_ta_only_is_read():
     assert all('reference' not in rel for rel in (nt.STUB, nt.SIM_SEED, nt.CAR_SEED))
     assert all(not rel.startswith(nt.LAB) for rel in nt.read_reference()[0])
+
+
+# The manual rename the spec describes: every "teamN" in directory and file names, then in
+# file contents. RENAME is that recipe as shell, so this test proves the spec's steps work.
+RENAME = r"""
+set -e
+cd "$1"
+find . -depth -name '*teamN*' -execdir sh -c 'mv "$1" "$(echo "$1" | sed s/teamN/team3/g)"' _ {} \;
+grep -rl teamN . | xargs sed -i s/teamN/team3/g
+"""
+
+
+def test_the_template_renamed_by_hand_builds(tmp_path):
+    import shutil
+    import subprocess
+    files, source = nt.read_reference()
+    nt.generate(1, tmp_path / 'src', files, source, nt.read_lab_files(worktree=True),
+                nt.vehicle_ids(), 'template')
+    subprocess.run(['bash', '-c', RENAME, '_', str(tmp_path / 'src')], check=True)
+    left = subprocess.run(['grep', '-rl', 'teamN', str(tmp_path / 'src')], capture_output=True,
+                          text=True).stdout
+    assert left == ''
+    assert not [p for p in (tmp_path / 'src').rglob('*teamN*')]
+    root = tmp_path / 'src' / 'team3_vehicle_launch'
+    launch = (root / 'team3_vehicle_launch/launch/vehicle_interface.launch.xml').read_text()
+    assert 'default="team3_vehicle_interface.speed_pid:SpeedPID"' in launch
+    assert (root / 'team3_vehicle_interface/resource/team3_vehicle_interface').is_file()
+    if not shutil.which('colcon') or 'autosdv_vehicle_description' not in \
+            subprocess.run(['ros2', 'pkg', 'list'], capture_output=True, text=True).stdout:
+        pytest.skip('no colcon, or no AutoSDV install sourced: the build is not checked')
+    r = subprocess.run(['colcon', 'build', '--base-paths', 'src', '--symlink-install',
+                        '--event-handlers', 'console_direct-'], cwd=tmp_path,
+                       capture_output=True, text=True)
+    assert r.returncode == 0, r.stdout[-2000:] + r.stderr[-2000:]
+    share = tmp_path / 'install/team3_vehicle_launch/share/team3_vehicle_launch'
+    assert (share / 'launch/vehicle_interface.launch.xml').is_file()
+    assert (share / 'config/car_c/speed_controller.param.yaml').is_file()
+    assert (tmp_path / 'install/team3_vehicle_interface/lib/team3_vehicle_interface/actuator').is_file()
