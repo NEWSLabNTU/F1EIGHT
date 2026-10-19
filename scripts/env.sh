@@ -14,14 +14,16 @@
 # Order matters: Autoware first, workspace last, so the workspace's overlay
 # wins for packages it rebuilds.
 #
-# What this file deliberately does NOT do
-# ---------------------------------------
-# It sets no middleware of its own. Which RMW to run is the user's choice --
-# CycloneDDS, Zenoh, something else -- and it belongs in `.envrc`, not in a
-# helper every recipe sources. The one thing done here is to keep a choice the
-# user has already made: Autoware's setup.bash exports
-# RMW_IMPLEMENTATION=rmw_cyclonedds_cpp unconditionally, so an explicit
-# selection has to be restored after it runs or it is silently overwritten.
+# The middleware
+# --------------
+# A choice the user already made (RMW_IMPLEMENTATION set before sourcing) is
+# kept: some Autoware setup.bash builds export one, so it is restored after.
+# With no choice, the default is CycloneDDS on the repository's cyclonedds.xml,
+# which pins DDS to loopback. Nothing else would choose: the 1.5.0 Debian's
+# setup.bash exports no RMW at all, only ROS_LOCALHOST_ONLY=0, so a recipe run
+# from a shell without direnv used to get Humble's default Fast DDS on every
+# interface -- the cars' Wi-Fi included, all in domain 0. .envrc applies the
+# same default.
 
 _autosdv_env_repo="$(cd "$(dirname "${BASH_SOURCE[0]}")/.." && pwd)"
 
@@ -51,6 +53,11 @@ set -u
 
 if [ -n "${_autosdv_env_rmw}" ]; then
     export RMW_IMPLEMENTATION="${_autosdv_env_rmw}"
+else
+    export RMW_IMPLEMENTATION=rmw_cyclonedds_cpp
+fi
+if [ "${RMW_IMPLEMENTATION}" = rmw_cyclonedds_cpp ] && [ -z "${CYCLONEDDS_URI:-}" ]; then
+    export CYCLONEDDS_URI="file://${_autosdv_env_repo}/cyclonedds.xml"
 fi
 
 # After Autoware, so this wins: on amd64 the host's TensorRT is usually a
