@@ -900,7 +900,7 @@ ZED preset; never a physical car). The launch argument `vehicle_id:=<car>` selec
 **required** on every launch that runs on a car (`just launch vehicle_id:=car_b`,
 `just lab2 stack car_b`, `just control basic vehicle_id:=car_b`); there is no
 default and no environment variable (`$(env VEHICLE_ID default)` is gone),
-because the cars differ in their stop PWM (A 380, B 395) and the wrong one drives
+because the cars differ in their stop PWM (A 380, B 390) and the wrong one drives
 instead of stopping. The preset is included before the arguments it defaults, so
 the command line still wins (`vehicle_id:=car_a use_gnss:=true`). The actuator
 file loads last into the actuator and gear manager. The simulators (`just sim

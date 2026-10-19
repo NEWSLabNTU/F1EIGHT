@@ -11,9 +11,9 @@ own fleet already shows all three:
 
 | | sensors | chassis | measured on that copy |
 |---|---|---|---|
-| car A | VLP16 + ZED X Mini | AutoSDV RC | neutral 370, steer centre 489 |
-| car B | Robin-W + ZED X Mini | AutoSDV RC | neutral 395, steer centre 400, ratio -132 |
-| car C | Robin-W + ZED X Mini | AutoSDV RC | not measured yet |
+| car A | VLP16 + ZED X Mini | AutoSDV RC | stop 380 (was 370 before measuring), steer centre 489 |
+| car B | Robin-W + ZED X Mini | AutoSDV RC | stop 390 (starts forward at 395), steer centre 400, ratio -132 |
+| car C | Robin-W + ZED X Mini | AutoSDV RC | stop 385; steering not measured yet |
 
 Today a launch on a car takes three or four hand-typed arguments
 (`car_profile:=`, `sensor_suite:=` or `lidar_model:=`, `use_gnss:=`) that
