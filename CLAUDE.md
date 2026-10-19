@@ -342,7 +342,7 @@ just lab2 sim                             # Lab 2 Part 1: the one ~/lab2/*_lab_2
 just lab2 run team:=3                     # Lab 2 Part 2: ~/lab2/team3 on the car, or the vehicle bench + gate elsewhere
 ```
 The RC simulator's vehicle model, grader and limits: `docs/guides/rc-sim.md`.
-Lab 2 Part 1 (the course, the 16 checks, the controller and its physics): `docs/guides/lab2-part1-sim.md`.
+Lab 2 Part 1 (the course, the 9 checks, the controller and its physics): `docs/guides/lab2-part1-sim.md`.
 See `docs/guides/simulation_testing.md` for the full simulation guide
 (planning sim, rosbag replay, CARLA integration).
 
@@ -883,6 +883,20 @@ They drifted from it once; read them there when it matters.
 - Parameters: `params/velocity_report.yaml`
 
 **Actuator Parameters**: `src/vehicle/autosdv_vehicle_launch/autosdv_vehicle_interface/params/actuator.yaml`
+
+**Per-car values** live in `autosdv_vehicle_interface/params/cars/<car>.param.yaml`
+(`car_a`, the Velodyne car, which is `actuator.yaml`'s values; `car_b`; `car_c`,
+a copy of B until measured). The launch argument `car_profile:=<car>` selects
+one; there is no environment variable and **no default**: without it the
+actuator refuses to start (before it opens the PCA9685), because the cars
+differ in their stop PWM (A 370, B 395) and the wrong one drives instead of
+stopping. It is not a parse-time required argument only because Autoware's own
+`vehicle.launch.xml` includes ours and would have to pass it. The profile loads last into the actuator and gear manager. It holds
+only what differs between cars: ESC neutral and brake points, servo centre and
+ends, a measured steering ratio. The RC simulator (`just sim rc`, Lab 2 Part 1)
+pins `car_a`, because its plant models `actuator.yaml`; the vehicle benches
+(dry runs, no motor) default to `car_a`. The lab2 `car:=A|B|C` config key is
+the team's car label for bags, not this profile.
 
 ## Documentation
 

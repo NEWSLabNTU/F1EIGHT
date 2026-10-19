@@ -102,6 +102,69 @@ def test_init_writes_a_template_and_refuses_to_overwrite(tmp_path):
     assert f.read_text() == text
 
 
+def test_init_sets_only_the_given_keys_in_an_existing_file(tmp_path):
+    f = tmp_path / 'lab2.yaml'
+    original = ('# my notes, keep them\n'
+                'team: 3          # our team\n'
+                '# car: A                              # the letter\n'
+                'bag_dir: rosbags\n'
+                '\n'
+                '# trailing note\n')
+    f.write_text(original)
+    os.chmod(f, 0o640)
+    out = lc.init(['config:=' + str(f), 'car:=B'])
+    text = f.read_text()
+    assert 'car: B (was commented out)' in out and str(f) in out
+    assert text.splitlines()[2].startswith('car: B') and text.splitlines()[2].endswith('# the letter')
+    assert text.splitlines()[2].index('#') == original.splitlines()[2].index('# the')
+    # every other line exactly as it was
+    assert [ln for i, ln in enumerate(text.splitlines()) if i != 2] == \
+        [ln for i, ln in enumerate(original.splitlines()) if i != 2]
+    assert (f.stat().st_mode & 0o777) == 0o640
+    c = lc.Config(None, f)
+    assert c.get('car') == 'B' and str(c.get('team')) == '3'
+
+    out = lc.init(['config:=' + str(f), 'team:=5', 'team_dir:=~/lab2/team5'])
+    text = f.read_text()
+    assert 'team: 3 -> 5' in out and 'team_dir: ~/lab2/team5 (added at the end)' in out
+    assert 'team: 5          # our team' in text and text.endswith('team_dir: ~/lab2/team5\n')
+    assert '# my notes, keep them' in text and '# trailing note' in text
+    c = lc.Config(None, f)
+    assert str(c.get('team')) == '5' and c.get('car') == 'B'
+
+    before = f.read_text()
+    out = lc.init(['config:=' + str(f), 'car:=B'])
+    assert 'nothing to change' in out and 'car: B (unchanged)' in out
+    assert f.read_text() == before
+
+
+def test_init_quotes_a_value_yaml_would_misread(tmp_path):
+    f = tmp_path / 'lab2.yaml'
+    f.write_text('car: A\n')
+    lc.init(['config:=' + str(f), 'route:=yes'])
+    assert yaml.safe_load(f.read_text())['route'] == 'yes'
+
+
+def test_init_refuses_to_edit_a_broken_file(tmp_path):
+    f = tmp_path / 'lab2.yaml'
+    f.write_text('car: [A\n')
+    with pytest.raises(lc.ConfigError, match='not valid YAML'):
+        lc.init(['config:=' + str(f), 'car:=B'])
+    assert f.read_text() == 'car: [A\n'
+    f.write_text('colour: red\n')
+    with pytest.raises(lc.ConfigError, match='unknown key'):
+        lc.init(['config:=' + str(f), 'car:=B'])
+
+
+def test_init_on_a_template_it_wrote(tmp_path):
+    f = tmp_path / 'lab2.yaml'
+    lc.init(['config:=' + str(f)])
+    lc.init(['config:=' + str(f), 'car:=C'])
+    c = lc.Config(None, f)
+    assert c.get('car') == 'C' and c.get('team') is None
+    assert sum(ln.startswith('car:') for ln in f.read_text().splitlines()) == 1
+
+
 def test_latest_bag_is_the_most_recently_finished(tmp_path):
     now = time.time()
     bag(tmp_path, 'lab2_uturn_9', now - 100)

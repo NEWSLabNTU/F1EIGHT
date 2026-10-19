@@ -265,7 +265,7 @@ This topic is crucial for tuning PID parameters.
 **Temporary Manual Control**:
 Use the interactive PWM control script for direct hardware testing:
 ```bash
-python3 /home/jetson/AutoSDV/motor_pwm_interactive.py
+python3 src/vehicle/autosdv_vehicle_launch/scripts/motor_pwm_interactive.py --car-profile car_b   # car_a|car_b|car_c
 ```
 
 ## Troubleshooting
@@ -334,9 +334,9 @@ Should be 400 (center position)
 ### Emergency Stop
 **Immediate Stop**:
 ```bash
-python3 /home/jetson/AutoSDV/stop_motor.py
+python3 src/vehicle/autosdv_vehicle_launch/scripts/stop_motor.py --car-profile car_b   # car_a|car_b|car_c
 ```
-Sets motor PWM to 370 (stop position)
+Sets motor PWM to the car's neutral (`init_pwm` in `params/cars/<car>.param.yaml`: 370 on car A, 395 on car B) and centres the steering.
 
 **System Stop**:
 ```bash
@@ -400,7 +400,7 @@ Shows GPIO state changes and event counts for debugging wheel sensor.
 
 ### Interactive PWM Control
 ```bash
-python3 /home/jetson/AutoSDV/motor_pwm_interactive.py
+python3 src/vehicle/autosdv_vehicle_launch/scripts/motor_pwm_interactive.py --car-profile car_b   # car_a|car_b|car_c
 ```
 Direct PWM control for hardware testing and calibration.
 

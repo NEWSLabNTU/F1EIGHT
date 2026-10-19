@@ -25,6 +25,8 @@
   boards.
 -->
 <launch>
+  <arg name="car_profile"
+       description="REQUIRED: which car, car_a, car_b or car_c (autosdv_vehicle_interface/params/cars/CAR_PROFILE.param.yaml)"/>
   <arg name="course_dir" description="the stage-1 course directory (SURVEY/stage1)"/>
   <arg name="bench" default="false" description="true: the vehicle bench, no car"/>
   <arg name="sensor_suite" default="robin_zed"/>
@@ -98,6 +100,7 @@
     <node pkg="autosdv_coach_lab" exec="vehicle_bench_plant" name="vehicle_bench_plant" output="screen">
       <param from="$(find-pkg-share autosdv_vehicle_interface)/params/actuator.yaml"/>
       <param from="$(var actuator_param_overrides)"/>
+      <param from="$(find-pkg-share autosdv_vehicle_interface)/params/cars/$(var car_profile).param.yaml"/>
       <param from="$(var vehicle_info_param_file)"/>
       <param from="$(find-pkg-share autosdv_vehicle_interface)/params/velocity_report.yaml"/>
       <param from="$(var imu_corrector_param_file)"/>
@@ -112,6 +115,7 @@
     <node pkg="autosdv_waypoint_lab" exec="bench_straight_driver" name="bench_straight_driver" output="screen">
       <param from="$(find-pkg-share autosdv_vehicle_interface)/params/actuator.yaml"/>
       <param from="$(var actuator_param_overrides)"/>
+      <param from="$(find-pkg-share autosdv_vehicle_interface)/params/cars/$(var car_profile).param.yaml"/>
       <param name="distance" value="$(var distance)"/>
       <param name="speed" value="$(var speed)"/>
     </node>
