@@ -2,7 +2,9 @@
 
 Status: implemented in the vehicle interface (2026-10-19): thresholds in each
 car's profile, startup checks, the ESC state tracker and the reverse guard.
-The motor model and the simulator (item 3 below) are not changed yet. From
+The RC simulator's ESC follows it too (2026-10-19, item 3 below: `sim`
+instance thresholds 376/375/365/355/335); the motor model `motor_plant.py` is
+not changed yet. From
 keyboard_pwm_control measurements on cars A, B and C in 5-count steps.
 
 ## What the measurements show

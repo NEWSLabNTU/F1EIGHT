@@ -149,9 +149,13 @@ trust each number and what to measure next.
 - PWM counts in (`min_pwm` 360, `init_pwm` 370, `max_pwm` 470, `brake_pwm` 340
   from `actuator.yaml`); one count is about 1 % of the throttle span, and the
   quantization is kept.
-- Neutral deadband (about ±5 counts), throttle ramp (a rate limit on duty),
-  drag brake at neutral, brake below neutral, and reverse only after a stop and
-  a return to neutral.
+- The cars' ESC state machine (`docs/design/esc-pwm-model.md`), with the sim
+  instance's thresholds from `individual_params/config/sim`: forward from rest
+  at 376 and held above 375, a still band 365..375 around 370, brake below 365,
+  reverse only after a pull to 335 or lower and a return (which `brake_pwm` 340
+  and `min_pwm` 360 never reach). The state is the vehicle interface's own
+  tracker, `longitudinal.EscModel`. Throttle ramp (a rate limit on duty) and
+  drag brake at neutral.
 - Duty d ∈ [−1, 1] out; battery sag scales the applied voltage with the motor
   current (a series resistance).
 
