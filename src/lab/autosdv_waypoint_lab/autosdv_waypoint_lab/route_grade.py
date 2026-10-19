@@ -91,11 +91,15 @@ FULL_AT = 1.5               # full points up to this multiple of the reference v
 ZERO_AT = 4.0               # zero points from this multiple
 FLOORS = {'speed_rmse': 0.02, 'speed_rmse_straight': 0.02, 'speed_rmse_turn': 0.02,
           'overshoot': 0.02, 'stop_error': 0.05}      # reference floors
-ABSOLUTE = {                # (full up to, zero from), when there is no reference bag
-    'speed_rmse': (0.04, 0.15),
-    'speed_rmse_straight': (0.04, 0.15),
-    'speed_rmse_turn': (0.04, 0.15),
-    'overshoot': (0.04, 0.20),
+# (full up to, zero from), when there is no reference bag. The speed lines since 2026-10-20:
+# the reference model on car C (lab2_uturn_3..5) runs a speed RMSE of 0.14-0.19 m/s and a
+# start overshoot of 0.27-0.44 m/s on the real car (ESC dead band, hall-sensor speed), so
+# 0.04 -> 0.15 (and 0.04 -> 0.20) gave every practical run zero speed points.
+ABSOLUTE = {
+    'speed_rmse': (0.10, 0.30),
+    'speed_rmse_straight': (0.10, 0.30),
+    'speed_rmse_turn': (0.10, 0.30),
+    'overshoot': (0.15, 0.50),
     'stop_error': (0.10, 0.60),
 }
 

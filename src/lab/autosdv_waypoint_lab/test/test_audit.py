@@ -82,9 +82,10 @@ def test_check_bags_rejection_makes_it_invalid():
 
 
 def test_speed_violations_are_the_costly_samples():
-    m, sc, s, a = run(msgs_for(wobble=0.1))
+    m, sc, s, a = run(msgs_for(wobble=0.25))
     bad = au.speed_violations(m, sc, s, UTURN)
-    assert bad and all(abs(v - m.target) > 0.04 for _, v in bad)
+    full = min(rg.ABSOLUTE[k][0] for k in ('speed_rmse_straight', 'speed_rmse_turn'))
+    assert bad and all(abs(v - m.target) > full for _, v in bad)
     m, sc, s, a = run(msgs_for())
     assert len(au.speed_violations(m, sc, s, UTURN)) < 5      # the first samples of the window only
 
