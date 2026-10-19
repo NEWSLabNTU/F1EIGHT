@@ -430,7 +430,7 @@ launch ARGS="":
             ;;
     esac
     source scripts/env.sh && \
-    if [ -n "$DISPLAY" ]; then \
+    if [ -n "${DISPLAY:-}" ]; then \
         play_launch launch \
             --web-addr 0.0.0.0:8081 \
             autosdv_launch autosdv.launch.yaml {{ARGS}}; \
