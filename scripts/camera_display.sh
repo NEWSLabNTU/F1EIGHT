@@ -1,4 +1,5 @@
-# Source this, then call lab2_camera_display before a launch that opens the ZED.
+# Source this, then call camera_display before a launch that opens the ZED.
+# Used by `just aruco-map` (scripts/aruco_map/aruco_map.sh) and `just lab2`.
 #
 # The ZED must never see a DISPLAY. Argus builds its buffers through EGL on the
 # X server DISPLAY names and fails on any but the car's own desktop with a
@@ -6,14 +7,19 @@
 # (:1), an empty or a dead DISPLAY all stop the ZED at "CAMERA OPENING" with
 # "(Argus) Error BadParameter". With no DISPLAY it opens every time.
 #
+# A VirtualGL session (a TurboVNC desktop, or a vglrun shell) also puts
+# libvglfaker / libdlfaker in LD_PRELOAD, which intercepts the same GLX/EGL
+# calls; it is taken out of the launch's environment too.
+#
 # play_launch keeps a per-node <env>, but drops launch-prefix on a container, so
 # the camera cannot be given its own environment. Instead the whole launch runs
 # without DISPLAY, and the viewers get theirs back through a viewer_display
 # launch argument.
 #
-# After the call: DISPLAY is unset, VIEWER_DISPLAY holds a working X display for
-# viewers or is empty when there is none.
-lab2_camera_display() {
+# After the call: DISPLAY is unset, LD_PRELOAD holds no VirtualGL faker,
+# VIEWER_DISPLAY holds a working X display for viewers or is empty when there
+# is none.
+camera_display() {
     VIEWER_DISPLAY=
     if [ -n "${DISPLAY:-}" ]; then
         local ok=0
@@ -33,4 +39,20 @@ lab2_camera_display() {
         fi
     fi
     unset DISPLAY
+    if [ -n "${LD_PRELOAD:-}" ]; then
+        local keep=() lib
+        local IFS=': '
+        for lib in $LD_PRELOAD; do
+            case "$lib" in *vglfaker*|*dlfaker*|*gefaker*) ;; *) keep+=("$lib") ;; esac
+        done
+        if [ ${#keep[@]} -eq 0 ]; then
+            unset LD_PRELOAD
+        else
+            LD_PRELOAD=$(IFS=:; echo "${keep[*]}")
+            export LD_PRELOAD
+        fi
+    fi
 }
+
+# the name before it left scripts/testing/lab2/
+lab2_camera_display() { camera_display "$@"; }

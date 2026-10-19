@@ -1,40 +1,49 @@
 #!/usr/bin/env python3
-"""`just aruco-map align [SURVEY_DIR]`: stage 2 of the Lab 2 survey.
+"""`just aruco-map align [SURVEY_DIR] --route ROUTE`: put a survey into a route's frame.
 
-    just aruco-map align                     surveys/latest, route and car from the settings (--vehicle-id car_b: another car)
-    just aruco-map align surveys/2026-10-16_10-02-11 [--route lab2_uturn]
-    just aruco-map align --force             write even if a check refuses (with a warning)
-    just aruco-map align --bench --truth DIR the vehicle bench: no car (below)
+    just aruco-map align --route lab2_uturn                  surveys/latest, the nominal car (sim)
+    just aruco-map align surveys/2026-10-16_10-02-11 --route lab2_uturn --vehicle-id car_c
+    just aruco-map align --route ROUTE --force               write even if a check refuses (with a warning)
+    just aruco-map align --route ROUTE --bench --truth DIR   the vehicle bench: no car (below)
+    just lab2 survey-align [SURVEY_DIR]                      the same, route and car from Lab 2's settings
 
-Stage 1 (`just aruco-map scan ID`) measured where the boards stand relative to one
-another, in a frame anchored on one board. This puts that map into the ROUTE's
-frame, the one the taped route and path.csv use: origin at the start box, x
-along the first leg (autosdv_marker_survey/align.py has the maths).
+Optional. The survey (`just aruco-map survey ID`) measured where the boards stand
+relative to one another, in the ORIGIN BOARD's frame; that map is complete for
+localization. A route (a directory with course.yaml and path.csv, or a NAME found
+as config/courses/NAME in an installed package, e.g. Lab 2's lab2_uturn) has its
+own frame, the one the taped route and path.csv use: origin at the start box, x
+along the first leg. This puts the survey into that frame from one straight drive
+(autosdv_marker_survey/align.py has the maths).
+
+Settings come from the command line only: --route (required), --vehicle-id
+(default sim, the nominal car: nothing here drives, the car only picks its
+camera mount and IMU calibration).
 
   1. the stage-1 result is kept in SURVEY_DIR/stage1/ and the localization stack
-     starts on it (launch waypoint_survey_align.launch.xml: ZED, AR-tag localizer,
+     starts on it (launch aruco_survey_align.launch.xml: ZED, AR-tag localizer,
      EKF; the actuator as a dry run, no tracker -- nothing here can drive the
      car). Logs: SURVEY_DIR/align_logs/.
   2. the car stands in the taped start box, pointing along the first leg. The
      tool finds the boards in the camera image and seeds the EKF from them
      (start_pose_init cannot: nothing yet says where the start box is in the
      stage-1 frame), waits for the marker fixes to settle, and prints READY.
-  3. the TA drives the car STRAIGHT along the taped first leg, by transmitter or
+  3. you drive the car STRAIGHT along the taped first leg, by transmitter or
      by hand, 2 m or more (under 1 m is refused), stops, and presses Ctrl-C.
   4. the stack stops; the poses go to SURVEY_DIR/align_poses.csv; the aligned
      course (course.yaml, path.csv, the map, ar_tag.param.yaml) and
      align_report.txt are written into SURVEY_DIR. A refused alignment writes
-     only the report; `lab2_survey_align_solve SURVEY_DIR --force` aligns the
-     recorded drive again without the car.
+     only the report; `marker_survey_align_solve SURVEY_DIR --route ROUTE --force`
+     aligns the recorded drive again without the car.
 
-Afterwards `just aruco-map check` and `just lab2 run` use the aligned survey
-(surveys/latest) with the route's path.
+Afterwards `just aruco-map check` (and, for a Lab 2 route, `just lab2 run`) use
+the aligned survey with the route's path.
 
 --bench: the same on the vehicle bench. The bench plant starts at the start
 pose of --truth DIR (the field as it really is), mock_aruco_camera renders that
-course's boards, and bench_straight_driver stands in for the TA (it drives
+course's boards, and bench_straight_driver stands in for the driver (it drives
 --distance m at --speed m/s once this says READY, and refuses to run where the
-actuator publishes); the run ends by itself when the driver has stopped.
+actuator publishes); the run ends by itself when the driver has stopped. The
+bench is Lab 2's (autosdv_coach_lab's plant, autosdv_waypoint_lab's driver).
 
 Exit status: 0 aligned, 1 refused or failed, 2 usage.
 """
@@ -49,10 +58,9 @@ from typing import List, Optional
 
 HERE = Path(__file__).resolve().parent
 sys.path.insert(0, str(HERE))
-import lab2_config as lc  # noqa: E402
-from lab2_run import Child  # noqa: E402
+from child import REPO, Child  # noqa: E402
 
-REPO = lc.REPO
+SIM_VEHICLE_ID = 'sim'      # the nominal car: individual_params/config/sim
 SEED_FRAMES = 5             # frames with a board in view, for the EKF seed
 SEED_RANGE = 4.0            # m: boards farther than this are not used for the seed
 SEED_POSITION_STD = 0.3     # m
@@ -79,7 +87,9 @@ def parse(argv):
     ap = argparse.ArgumentParser(prog='just aruco-map align', description=__doc__,
                                  formatter_class=argparse.RawDescriptionHelpFormatter)
     ap.add_argument('survey_dir', nargs='?', default='surveys/latest')
-    ap.add_argument('--route', default=None, help='the route template (default: the settings\' route)')
+    ap.add_argument('--route', default=None,
+                    help='REQUIRED: the route, a directory (course.yaml + path.csv) or a NAME '
+                         '(config/courses/NAME of an installed package, e.g. lab2_uturn)')
     ap.add_argument('--force', action='store_true', help='write even if a check refuses')
     ap.add_argument('--min-distance', type=float, default=None)
     ap.add_argument('--max-lateral', type=float, default=None)
@@ -89,20 +99,25 @@ def parse(argv):
     ap.add_argument('--distance', type=float, default=3.0, help='--bench: metres to drive')
     ap.add_argument('--speed', type=float, default=0.3, help='--bench: m/s')
     ap.add_argument('--bench-timeout', type=float, default=90.0)
-    ap.add_argument('--config', default=None)
     ap.add_argument('--vehicle-id', default=None,
                     help='car_a, car_b or car_c: the car\'s instance, individual_params/config/<id> '
-                         '(default: the settings\' car, else sim, the nominal car)')
-    a = ap.parse_args(argv)
-    if a.vehicle_id is None and not a.bench:
-        try:
-            car = lc.Config({}, a.config).get('car')
-            a.vehicle_id = lc.vehicle_id_of(car) if car else None
-        except lc.ConfigError as e:
-            ap.error(str(e))
+                         '(default: sim, the nominal car; nothing here drives)')
+    # vehicle_id:=X, as the other aruco-map commands take it
+    rest = []
+    for x in argv:
+        if x.startswith('vehicle_id:='):
+            rest += ['--vehicle-id', x.split(':=', 1)[1]]
+        elif x.startswith('route:='):
+            rest += ['--route', x.split(':=', 1)[1]]
+        else:
+            rest.append(x)
+    a = ap.parse_args(rest)
+    if not a.route:
+        raise Usage('which route? --route NAME|DIR (e.g. --route lab2_uturn); '
+                    'Lab 2 users: `just lab2 survey-align` takes it from the settings')
     # nothing here drives (the actuator is a dry run): no car is the nominal car
     if a.vehicle_id is None:
-        a.vehicle_id = 'sim'
+        a.vehicle_id = SIM_VEHICLE_ID
     if a.bench and not a.truth:
         raise Usage('--bench needs --truth DIR: the course the mock camera renders')
     if a.truth and not a.bench:
@@ -113,10 +128,8 @@ def parse(argv):
 def resolve_route(a) -> str:
     from autosdv_marker_survey import align as al
     route = a.route
-    if route is None:
-        cli = {}
-        c = lc.Config(cli, a.config)
-        route = c.require('route')
+    if os.sep in route or route.startswith('.'):
+        route = str((Path.cwd() / route).resolve())
     return al.route_template(route)
 
 
@@ -139,14 +152,14 @@ def make_node(stage1_dir: str):
     from autosdv_marker_survey import align as al
     from autosdv_marker_survey.survey import (
         Detector, inv_T, make_T, marker_pose_in_camera, quat_to_matrix)
-    from autosdv_waypoint_lab.course import load_course
+    from autosdv_aruco_localization.marker_map import load_marker_map
 
     rclpy.init(args=[], signal_handler_options=SignalHandlerOptions.NO)
 
     class AlignNode(Node):
         def __init__(self):
             super().__init__('survey_align')
-            course = load_course(stage1_dir)
+            course = load_marker_map(stage1_dir)
             self.marker_size = course.marker_size
             self.T_map_marker = {}
             for m in course.markers:
@@ -369,14 +382,14 @@ def main(argv=None) -> int:
     if not survey.is_absolute():
         survey = REPO / survey
     if not survey.is_dir():
-        print(f'aruco-map align: no survey directory {survey}: run `just aruco-map scan ID` first',
+        print(f'aruco-map align: no survey directory {survey}: run `just aruco-map survey ID` first',
               file=sys.stderr)
         return 1
     survey = survey.resolve()
     try:
         route = resolve_route(a)
         stage1 = al.prepare_stage1(str(survey))
-    except (ValueError, lc.ConfigError) as e:
+    except ValueError as e:
         print(f'aruco-map align: {e}', file=sys.stderr)
         return 1
     truth = None
@@ -408,7 +421,7 @@ def main(argv=None) -> int:
     logdir = survey / 'align_logs' / time.strftime('%Y-%m-%d_%H-%M-%S')
     cmd = ['play_launch', 'launch', '--log-dir', str(logdir / 'play_log'),
            '--web-addr', env.get('LAB2_WEB_ADDR', '0.0.0.0:8081'),
-           'autosdv_launch', 'waypoint_survey_align.launch.xml', f'course_dir:={stage1}',
+           'autosdv_launch', 'aruco_survey_align.launch.xml', f'course_dir:={stage1}',
            f'vehicle_id:={a.vehicle_id}']
     if a.bench:
         cmd += ['bench:=true', f'truth_dir:={truth}', f'distance:={a.distance}', f'speed:={a.speed}']
@@ -513,7 +526,7 @@ def main(argv=None) -> int:
         kw['max_lateral'] = a.max_lateral
     res, _ = al.solve_dir(str(survey), route, samples, force=a.force, log=say, pnp=pnp, **kw)
     if res.ok:
-        say('next: `just aruco-map check` (drive the route by hand), then `just lab2 run`')
+        say(f'next: `just aruco-map check {survey}` (drive the route by hand)')
     return 0 if res.ok else 1
 
 
