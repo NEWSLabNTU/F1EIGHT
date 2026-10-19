@@ -56,7 +56,7 @@ def test_brake_authority_and_overshoot():
     p = load_vehicle()
     prof = make_profile(**SPEC)
     assert stop_overshoot(prof, p) < 1e-9                      # d 2.5: the full brake follows it
-    lo = p.init_pwm - p.esc_deadband
+    lo = p.reverse_stop_pwm
     mirrored = (lo - p.min_pwm) / (lo - (2 * p.init_pwm - p.max_pwm))   # 5/95 if 270 were full brake
     assert stop_overshoot(prof, p, level=mirrored) > 20.0
 

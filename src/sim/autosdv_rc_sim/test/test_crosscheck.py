@@ -10,7 +10,7 @@ from autosdv_rc_sim.plant import Plant
 
 def hold_pwm(p, v):
     """PWM whose steady speed is closest to v."""
-    lo = p.init_pwm + p.esc_deadband
+    lo = p.forward_hold_pwm
     return min(range(lo + 1, p.max_pwm + 1),
                key=lambda pwm: abs(top_speed(p, (pwm - lo) / (p.max_pwm - lo)) - v))
 

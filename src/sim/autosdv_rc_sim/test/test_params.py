@@ -13,6 +13,7 @@ PKG_DIRS = {
     'autosdv_vehicle_description': REPO / 'src/vehicle/autosdv_vehicle_launch/autosdv_vehicle_description',
     'autosdv_vehicle_interface': REPO / 'src/vehicle/autosdv_vehicle_launch/autosdv_vehicle_interface',
     'autosdv_rc_sim': REPO / 'src/sim/autosdv_rc_sim',
+    'individual_params': REPO / 'src/param/autoware_individual_params/individual_params',
 }
 
 
