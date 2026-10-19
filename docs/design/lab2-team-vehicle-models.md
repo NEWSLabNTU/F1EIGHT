@@ -4,11 +4,13 @@ Status: implemented for Part 2 on branch `feat/lab2-vehicle-models`, 2026-10-20 
 "Implementation" section at the end); car runs pending. Decided with the TA: the team
 selection merges into `vehicle_model:=`, the template is a copy of
 `autosdv_vehicle_launch`, a team has full control of its vehicle interface, and the
-car-specific files stay keyed to the physical car. Each team has two models of the same
-shape, each its own submission (the course's decisions, 2026-10-20): `teamN_sim_vehicle` for
-Part 1 (the RC simulator, `vehicle_id:=sim`) and `teamN_vehicle` for Part 2 (the cars). The
-template's speed controller is the Part 1 SpeedPID stub: Part 1 completes it in the sim
-model, and the team ports it into the car model. The TA owns the path tracker and its
+car-specific files stay keyed to the physical car. Two models of the same shape (the
+course's decisions, 2026-10-20): `lab2_sim_vehicle` for Part 1 (the RC simulator,
+`vehicle_id:=sim`), ONE package with the same name for every student (`just lab2 new-sim`;
+the TA builds each submission in its own workspace), and `teamN_vehicle` for Part 2, each
+team's model for the cars (`just lab2 new-team N`). The template's speed controller is the
+Part 1 SpeedPID stub: Part 1 completes it in the sim model, and the team ports it into its
+car model. The TA owns the path tracker and its
 parameters, the lookahead included. Passing the gate before a car run is a rule the TA
 checks, not something the tools enforce.
 

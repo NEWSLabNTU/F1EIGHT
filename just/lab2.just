@@ -11,7 +11,8 @@
 #                                  stack, preflight, record, engage (asks), stop, grading table,
 #                                  audit.png. On a workstation: the same on the vehicle bench,
 #                                  plus the gate verdict
-#   just lab2 new-team 3           team3_vehicle from the reference model, into ~/lab2/ws/src
+#   just lab2 new-sim              lab2_sim_vehicle (Part 1, everyone's) into ~/lab2/ws/src
+#   just lab2 new-team 3           team3_vehicle (Part 2) from the reference model, into ~/lab2/ws/src
 #   just lab2 build-teams          build ~/lab2/ws (every team's model)
 #   just lab2 gate team:=3         the vehicle gate: safety on every car, then the route
 #
@@ -161,17 +162,23 @@ gate *ARGS:
     lab2_config gate "$@" || exit 2
     exec python3 scripts/testing/lab2/bench_gate.py "${LAB2_ARGS[@]}"
 
-#   just lab2 new-team 3                 ~/lab2/ws/src/team3_sim_vehicle_launch (Part 1) and
-#                                        team3_vehicle_launch (Part 2) ($LAB2_HOME/ws/src)
-#   just lab2 new-team 3 --sim | --car   only one of them
+#   just lab2 new-team 3                 ~/lab2/ws/src/team3_vehicle_launch ($LAB2_HOME/ws/src)
 #   just lab2 new-team 3 --dest DIR      somewhere else (then build it there)
 # From the autosdv_vehicle_launch this repository pins; never overwrites. The README it writes
 # says what is the team's and what is not (the car's PWM file, the vehicle geometry).
-# Generate team N's vehicle models (teamN_sim_vehicle, teamN_vehicle) from the reference model
+# Generate team N's car model (teamN_vehicle, Part 2) from the reference model
 [positional-arguments]
 new-team N *ARGS:
     #!/usr/bin/env bash
     exec python3 scripts/testing/lab2/new_team.py "$@"
+
+#   just lab2 new-sim                    ~/lab2/ws/src/lab2_sim_vehicle_launch ($LAB2_HOME/ws/src)
+# The same package, and name, for every student; never overwrites.
+# Generate Part 1's simulator model (lab2_sim_vehicle) from the reference model
+[positional-arguments]
+new-sim *ARGS:
+    #!/usr/bin/env bash
+    exec python3 scripts/testing/lab2/new_team.py --sim "$@"
 
 #   just lab2 build-teams                    every package under ~/lab2/ws/src
 #   just lab2 build-teams --packages-select team3_vehicle_interface
