@@ -22,7 +22,8 @@ TA checks; this command does not enforce it.
 Car or bench (lab2_env.decide_mode): --bench / --car decide; otherwise a Jetson
 (/etc/nv_tegra_release) is a car and anything else a workstation. A car needs its letter
 (`car:` in ~/lab2/lab2.yaml, the TA's `just lab2 init car:=X`) and stops without it. A
-workstation runs the vehicle bench (car SIM unless `car:` is set), engages without asking,
+workstation runs the vehicle bench (unless `car:` is set: the one car whose
+file in the team model sets ff_gain, else the nominal car SIM; bench_car), engages without asking,
 ends a run that has not moved 0.5 m in 20 s, and prints the gate verdict of
 bench_gate.judge (`just lab2 gate`'s PASS/FAIL) at the end.
 
@@ -259,6 +260,27 @@ def resolve_model(o: Options, settings,
                          '--symlink-install --cmake-args -DCMAKE_BUILD_TYPE=Release '
                          f'--packages-up-to {model}_launch')
     return [f'vehicle_model:={model}', f'team:={number}'], note, model
+
+
+def bench_car(calibrated) -> Tuple[str, str]:
+    """(the car the bench drives, a note) when no car is configured. calibrated: the
+    letters whose car file in the team model sets ff_gain, or None for the reference.
+
+    One calibrated car: that car, so the gate runs the team's own car file (gains and
+    motor fit), as the car will. None or several: SIM, the nominal car, whose tuning is
+    the model's config/sim/ file; car:=X picks one."""
+    if calibrated is None:
+        return 'SIM', ''
+    if len(calibrated) == 1:
+        x = calibrated[0]
+        return x, (f'the bench drives car {x}, with config/car_{x.lower()}/'
+                   'speed_controller.param.yaml (the car file that holds your calibration)')
+    if not calibrated:
+        return 'SIM', ('no car file of this model sets ff_gain (the motor fit): the bench '
+                       'drives the nominal car with config/sim/speed_controller.param.yaml; '
+                       'calibrate your car first, or give car:=X')
+    return 'SIM', (f'several car files set ff_gain ({", ".join(calibrated)}): give car:=X to '
+                   'drive yours; the nominal car with config/sim/ instead')
 
 
 def _installed(model: str) -> bool:
@@ -1051,7 +1073,11 @@ def main(argv=None) -> int:
             print('lab2 run: not a car (no /etc/nv_tegra_release): the vehicle bench, a simulated '
                   'car, engaged without asking; then the gate verdict (--car forces the car)')
         if not c.get('car'):
-            extra.append('car:=SIM')
+            car, why = bench_car(lab2_ws.calibrated_cars(lab2_ws.model_source_root(model), model)
+                                 if lab2_ws.team_of(model) is not None else None)
+            extra.append(f'car:={car}')
+            if why:
+                print(f'lab2 run: {why}')
     o.config_args = tuple(o.config_args) + tuple(extra)
     viewer, why_display = le.pick_display(os.environ)
     print(f'lab2 run: {why_display}')

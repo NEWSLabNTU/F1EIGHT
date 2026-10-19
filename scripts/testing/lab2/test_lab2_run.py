@@ -329,3 +329,33 @@ def test_a_template_runs_its_own_speedpid_and_an_edited_one_is_refused(tmp_path,
     pid = root / 'team3_vehicle_interface/team3_vehicle_interface/speed_pid.py'
     pid.write_text('from team3_vehicle_interface.speed_controller import AckermannSpeedPID as SpeedPID\n')
     assert lab2_ws.controller_problems('team3_vehicle')
+
+
+# ---- the bench's car
+
+def _car_file(root, model, car, body):
+    f = root / f'{model}_launch' / 'config' / f'car_{car}' / 'speed_controller.param.yaml'
+    f.parent.mkdir(parents=True, exist_ok=True)
+    f.write_text('/**:\n  ros__parameters:\n    speed_controller_params:\n' + body)
+
+
+def test_bench_drives_the_calibrated_car(tmp_path):
+    import lab2_ws
+    model = 'team7_vehicle'
+    _car_file(tmp_path, model, 'a', '      kp: 20.0\n      ff_deadband: 5.3\n      ff_gain: 0.0306\n')
+    _car_file(tmp_path, model, 'b', '      kp: 20.0\n')
+    _car_file(tmp_path, model, 'c', '      kp: 20.0\n      ff_gain: 0.0\n')
+    cars = lab2_ws.calibrated_cars(tmp_path, model)
+    assert cars == ['A']
+    car, why = lr.bench_car(cars)
+    assert car == 'A' and 'config/car_a/' in why
+
+
+def test_bench_falls_back_to_the_nominal_car(tmp_path):
+    import lab2_ws
+    assert lab2_ws.calibrated_cars(None, 'team7_vehicle') == []
+    assert lr.bench_car(None) == ('SIM', '')                  # the reference model
+    car, why = lr.bench_car([])
+    assert car == 'SIM' and 'ff_gain' in why                  # no calibration yet: said so
+    car, why = lr.bench_car(['A', 'B'])
+    assert car == 'SIM' and 'car:=X' in why
