@@ -2,9 +2,9 @@
 # Used with autosdv_waypoint_lab.reference.speed_pid_part1:SpeedPID by --class runs,
 # part1_calibrate.py (the limits are 1.5 x this controller's worst case) and part1_tolerance.py.
 # The students' starting point is config/speed_pid_part1.yaml (detuned, = the handout's and the
-# stub's defaults): a correct implementation with those values passed 35/48 checks on --final
-# (18.2/25; hold_rmse_11/11b, reach_s and stop_error fail on every variant, hold_rmse_6 on
-# low_batt), measured 2026-10-18 with this reference's code.
+# stub's defaults): a correct implementation with those values passed 18/27 checks on --final
+# (16.67/25; hold_rmse_11, stop_lag and stop_error fail on every variant), measured 2026-10-19
+# on the simplified course with this reference's code.
 #
 # A plain mapping. The actuator receives it as the one-line launch argument
 # speed_controller_params:="{kp: ..., ki: ...}" and merges it over its own motor parameters

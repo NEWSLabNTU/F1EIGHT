@@ -8,7 +8,7 @@ waypoint path publisher, the TA's pure pursuit for steering, Autoware's command 
 the actuator's safety shell with **your** `SpeedPID` inside it. It is the car's own launch
 (`waypoint_follow.launch.xml`, `localization:=ground_truth hardware:=sim`): only the
 localization differs, which here is the simulator's true pose. The test harness around it
-(the plant, the scenario that engages and e-stops the car, the grader) is
+(the plant, the scenario that engages the car and aligns its start, the grader) is
 `lab2_part1_sim.launch.xml`'s own.
 
 Design: `docs/design/lab2-part1-sim-design.md`. The simulator itself: `docs/guides/rc-sim.md`.
@@ -16,8 +16,8 @@ Design: `docs/design/lab2-part1-sim-design.md`. The simulator itself: `docs/guid
 ## One command
 
 ```bash
-just lab2 sim submission:=~/lab2/B12345678_lab_2_1            # one run, nominal car, ~1.5 min
-just lab2 sim submission:=~/lab2/B12345678_lab_2_1 --final    # the graded set, ~5 min
+just lab2 sim submission:=~/lab2/B12345678_lab_2_1            # one run, nominal car, ~1 min
+just lab2 sim submission:=~/lab2/B12345678_lab_2_1 --final    # the graded set, ~2 min
 just lab2 sim submission:=DIR variant:=low_mu                  # one run on another car
 just lab2 sim submission:=DIR rviz:=false gui:=false           # no windows (SSH, batch)
 just lab2 sim                                                  # part1_submission from ~/lab2/lab2.yaml
@@ -50,82 +50,68 @@ One straight, `config/courses/lab2_part1/` in `autosdv_waypoint_lab`. Planner li
 
 | # | Segment | What it tests |
 |---|---|---|
-| 1 | accelerate 0 → 2 m/s, hold 3 s | launch from rest (no spin, no lurch), low-speed hold |
-| 2 | accelerate 2 → 6, hold 3 s | step response, hold |
-| 3 | accelerate 6 → 11, hold 3 s | full throttle, hold at 40 km/h |
-| 4 | brake 11 → 6, hold 8 s, **e-stop** at s = 113.2 m | active braking; emergency stop and resume |
-| 5 | accelerate 6 → 11, hold 3 s | the second climb |
-| 6 | brake 11 → 0 onto the stop line (s = 220.4 m), run-out 10 m | planned braking, stop error |
+| 1 | accelerate 0 → 4 m/s, hold 4 s | launch from rest (no spin, no lurch), low-speed hold |
+| 2 | accelerate 4 → 11 m/s, hold 4 s | the speed change: full throttle, hold at 40 km/h |
+| 3 | brake 11 → 0 onto the stop line (s = 108.4 m), run-out 10 m | planned braking, stop error |
 
-The e-stop is raised through the actuator's own emergency input and held until the car
-has been at rest for 1 s. Then the stack ramps the target back to 6 m/s at 2.5 m/s².
+About 17 s of driving (16.8 s nominal). There is no emergency stop on the course.
 `part1_profile.yaml` in the course directory is the contract the scenario and the grader
 both read; nothing in either hard-codes a position.
 
 ## What you see
 
-- **RViz**: the lane, the stop line, the e-stop trigger, the car and its path, and a
+- **RViz**: the lane, the stop line, the car and its path, and a
   marker wherever a check failed.
 - **Dashboard window**:
   - speed against time: the target, the measured speed (what your controller sees) and
     the true speed;
   - PWM against time, with neutral and the brake zone shaded;
   - distance to the stop line;
-  - each failed check's window in red, the e-stop in grey;
-  - the 16 checks live ("pending" until each window closes), then the marks.
+  - each failed check's window in red;
+  - the checks live ("pending" until each window closes), then the marks.
 
   It plots exactly what the grader graded, and saves itself to `dashboard.png` in the
   run's output directory when it closes.
 
 ## The checks
 
-Sixteen checks per run, computed live from the plant's **true** state, the target, the PWM
+Nine checks per run, computed live from the plant's **true** state, the target, the PWM
 and the shell's mode, each over a window that `part1_profile.yaml` defines.
 `autosdv_waypoint_lab/part1/metrics.py` is the definition. Its docstring gives every
 window; `LIMITS` has the numbers.
 
 | Check | Window | Meaning | Limit |
 |---|---|---|---|
-| `hold_rmse_2`, `hold_rmse_6`, `hold_rmse_11` | the first hold at each speed, from 1 s in | RMSE of true speed minus the hold speed | 0.05 / 0.05 / 0.13 m/s |
-| `overshoot` | the three steps up | peak above the hold speed, % of the step | 7.2 % |
+| `hold_rmse_4`, `hold_rmse_11` | the 4 m/s and the 11 m/s hold, from 1 s in | RMSE of true speed minus the hold speed | 0.05 / 0.15 m/s |
+| `overshoot` | the two steps up (0 → 4, 4 → 11) | peak above the hold speed, % of the step | 3.8 % |
 | `reach_s` | the same steps | time from entering the hold until within 10 % of the step | 0.2 s |
 | `launch_slip` | 1 s from the first motion | max rear-wheel slip (spin) [m/s] | 0.5, physical |
 | `launch_accel` | the same | max acceleration over 50 ms (a lurch) | 4.5 m/s² |
-| `stepdown_undershoot` | 11 → 6 braking and the hold until the e-stop | lowest speed below 6, % of the step | 2 % |
-| `stepdown_kappa` | the same, speed > 0.3 m/s | min rear slip ratio (wheel lock below −0.2) | −0.2, physical |
-| `stepdown_lag` | the 11 → 6 decel, up to the e-stop | max of true speed − target: a car that cannot slow down | 0.88 m/s |
-| `estop_reverse` | e-stop to the end of the resume | lowest true speed (reversing) | −0.05 m/s, physical |
-| `estop_resume_slip` | from the clear until 2 s after the ramp reaches 6 m/s | max rear slip | 0.5, physical |
-| `estop_resume_overshoot` | the same | peak above 6 m/s, % | 2.4 % |
+| `stop_lag` | the final brake, from its start to the stop line | max of true speed − target: a car that cannot slow down | 0.88 m/s |
 | `stop_error` | the final rest | distance from the stop line [m] | 0.5, fixed |
-| `stop_kappa` | final braking, speed > 0.3 m/s | min rear slip ratio | −0.2, physical |
-| `hold_rmse_11b` | the second 11 m/s hold | RMSE | 0.13 m/s |
+| `stop_kappa` | final braking, speed > 0.3 m/s | min rear slip ratio (wheel lock below −0.2) | −0.2, physical |
 
 **Limits.** The physical limits and the stop error are fixed. The others are
 *calibrated*: 1.5 × the reference controller's worst case over the graded variants,
 rounded up to 2 significant figures, and never below a floor (hold RMSE 0.05 m/s, reach
-0.2 s, undershoot 2 %, the step-change overshoots 2 %), so a reference that is nearly
-perfect does not set an unreachable limit. Calibrated 2026-10-18 with
+0.2 s, overshoot 2 %, stop lag 0.3 m/s), so a reference that is nearly
+perfect does not set an unreachable limit. Calibrated 2026-10-19 on this course with
 `scripts/testing/lab2/part1_calibrate.py --repeats 2` (6 live runs on nominal, low_batt and
-low_mu, all valid and passing, the repeats bit-identical; `stepdown_lag` from the same traces; `LIMITS_CALIBRATED = True` in `metrics.py`):
+low_mu, all valid and passing, the repeats bit-identical; `LIMITS_CALIBRATED = True` in `metrics.py`):
 
 | Check | Reference worst | Limit |
 |---|---|---|
-| `hold_rmse_2` | 0.023 m/s | 0.05 (floor) |
-| `hold_rmse_6` | 0.028 m/s | 0.05 (floor) |
-| `hold_rmse_11` | 0.085 m/s (low_batt) | 0.13 |
-| `hold_rmse_11b` | 0.084 m/s (low_batt) | 0.13 |
-| `overshoot` | 4.77 % (nominal) | 7.2 |
-| `reach_s` | 0.07 s | 0.2 (floor) |
-| `launch_accel` | 2.94 m/s² | 4.5 |
-| `stepdown_undershoot` | 0.55 % | 2 (floor) |
-| `estop_resume_overshoot` | 1.59 % (low_mu) | 2.4 |
-| `stepdown_lag` | 0.586 m/s (low_mu) | 0.88 (floor 0.3) |
+| `hold_rmse_4` | 0.027 m/s (low_mu) | 0.05 (floor) |
+| `hold_rmse_11` | 0.098 m/s (low_batt) | 0.15 |
+| `overshoot` | 2.49 % (nominal) | 3.8 |
+| `reach_s` | 0.00 s | 0.2 (floor) |
+| `launch_accel` | 2.94 m/s² (nominal) | 4.5 |
+| `stop_lag` | 0.581 m/s (low_mu) | 0.88 (floor 0.3) |
 
 Re-run the calibration after any change to the plant, the stack or the reference
 (the TA notes below). Each run prints the limit it was graded against.
 
-**Validity.** A run is invalid, and scores 0 of 16 with the reason printed, only if:
+**Validity.** A run is invalid, and scores 0 of 9 with the reason printed, only if:
 
 - the clock handshake was invalidated (`lockstep invalidated: ...`);
 - the controller faulted the shell (`controller fault: ...`);
@@ -133,16 +119,16 @@ Re-run the calibration after any change to the plant, the stack or the reference
   import or its `__init__` raised, so nothing of it ran;
 - an MRM was raised (`MRM: ...`);
 - the scenario aborted;
-- the e-stop was never raised;
+- an e-stop the profile asks for was never raised (the course has none);
 - the stack never engaged.
 
 A car that never moves, or stops early, is a **valid** run whose unreached checks fail.
 The grader says so in plain words: *"Your car did not move ... Is your speed_pid.py
 still the stub?"*
 
-**Marks.** An everyday run shows passed/16 on the nominal car. `--final` writes
-`final.json` with `marks = 25 × sum(passed) / sum(total)` over the three runs (48
-checks); an invalid run counts 0 of its 16.
+**Marks.** An everyday run shows passed/9 on the nominal car. `--final` writes
+`final.json` with `marks = 25 × sum(passed) / sum(total)` over the three runs (27
+checks); an invalid run counts 0 of its 9.
 
 ## Outputs
 
@@ -230,8 +216,7 @@ band, off here, stops the integral charging while the bench holds the wheels.
 - **The hall sensor is blind at very low speed.** The speed comes from 12 magnets on a
   rear wheel. From rest the first reading arrives only when the car is already at about
   0.4 m/s, and until then `measured_speed` is 0. A controller that pushes hard on that 0
-  spins the rear wheel at launch and at the e-stop resume (`launch_slip`,
-  `estop_resume_slip`). The sensor is on a driven wheel, so a spinning wheel also reads
+  spins the rear wheel at launch (`launch_slip`). The sensor is on a driven wheel, so a spinning wheel also reads
   as speed. Under throttle the wheel turns slightly faster than the car, and under brake
   slightly slower, so the reading jumps by 0.2 to 0.4 m/s at each throttle/brake
   switch. A braking threshold inside that band makes the controller chatter between
@@ -253,8 +238,8 @@ band, off here, stops the integral charging while the bench holds the wheels.
 | invalid: `the actuator is not running: ...` | the actuator died at start-up: `speed_pid.py` does not import, or `SpeedPID.__init__` raised; the traceback is in `play_log/` |
 | invalid: `lockstep invalidated: ...` | the simulation lost a participant (a node crashed or hung); run again, and report it if it repeats |
 | invalid: `MRM: ...` / `the stack did not engage` | a stack fault, not your controller; run again; report it with `run.json` |
-| the car stops about 9 m past the line | no braking mode: regeneration alone cannot follow 2.5 m/s² |
-| `estop_resume_slip` or `launch_slip` fails | too much push while the measured speed is still 0 (see the hall sensor above) |
+| the car stops about 9 m past the line, `stop_lag` fails | no braking mode: regeneration alone cannot follow 2.5 m/s² |
+| `launch_slip` fails | too much push while the measured speed is still 0 (see the hall sensor above) |
 
 ## TA notes
 
@@ -265,11 +250,10 @@ band, off here, stops the integral charging while the bench holds the wheels.
 - **Starting values vs tuned**: `config/speed_pid_part1.yaml` (= the stub's defaults = the
   handout's `config/speed_pid.yaml`; a test enforces it) is deliberately detuned: kp 12,
   ki 10, kd 0, integral_limit 5, error_limit 5, kp_brake 6, brake_enter 0.15. The
-  reference code with those values scored **35/48 on `--final` (18.2/25)**:
-  `hold_rmse_11`/`_11b` (the integral clamp cannot cover the feed-forward deficit),
-  `reach_s` and `stop_error` (brake gain too weak) fail on every variant, `hold_rmse_6`
-  on low_batt. Tuned: kp 10, ki 15, kd 0.3, integral_limit 30, error_limit 0.3,
-  kp_brake 20, brake_enter 0.4 (48/48).
+  reference code with those values scored **18/27 on `--final` (16.67/25)**, 2026-10-19:
+  `hold_rmse_11` (the integral clamp cannot cover the feed-forward deficit), `stop_lag` and
+  `stop_error` (brake gain too weak) fail on every variant. Tuned: kp 10, ki 15, kd 0.3,
+  integral_limit 30, error_limit 0.3, kp_brake 20, brake_enter 0.4 (27/27).
   `scripts/testing/lab2/part1_run.py --help` documents the rest: `--out`,
   `--no-rviz --no-gui`, `--timeout`, `--stall`.
 - **Reference and stub**: `autosdv_waypoint_lab/reference/speed_pid_part1.py` (removed
@@ -282,9 +266,10 @@ band, off here, stops the integral charging while the bench holds the wheels.
   [--repeats 3]`. It runs the reference live on the three graded variants and prints
   1.5 × worst per calibrated metric, as a `LIMITS` snippet for `part1/metrics.py`. Then
   set `LIMITS_CALIBRATED = True`. It refuses a reference that fails a fixed check.
-- **Load tolerance**: `python3 scripts/testing/lab2/part1_tolerance.py --class ... -n 3`
-  runs quiet against busy-loop-loaded hosts and compares the verdicts and spreads (the
-  design's acceptance test). Run it alone on the host (`flock tmp/bench.lock`).
+- **Load tolerance**: `python3 scripts/testing/lab2/part1_tolerance.py --class ... -n 3
+  --busy-mult 2 --interleave` runs quiet against busy-loop-loaded hosts and compares the
+  verdicts and spreads (the design's acceptance test; PASS on 2026-10-19, tightest
+  `stop_lag` 0.0138 of 0.0176 m/s). Run it alone on the host (`flock tmp/bench.lock`).
 - **Grading**: `just lab2 sim submission:=<dir> --final rviz:=false gui:=false` and
   read `final.json`.
 - **Course**: `just lab2 make-part1-course` regenerates `config/courses/lab2_part1/`
