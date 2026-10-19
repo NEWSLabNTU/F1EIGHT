@@ -117,11 +117,13 @@ record NAME="":
 # Start the stack without the pursuit planner first:
 #   just coach vehicle launch_planner:=false      (or: just coach sim launch_planner:=false)
 # then `just coach record-cal`, this recipe, and `just coach engage` to start.
-#   just coach speed-steps                         0,0.5,1.0,0.5,1.5,0 m/s, 4 s each
-#   just coach speed-steps 0,0.3,0.6,0,1.0,0 5 30  steps, hold [s], max distance [m]
+#   just coach speed-steps                         0,0.3,0.6,0 m/s, 4 s each: about 2 m
+#   just coach speed-steps 0,0.5,1.0,0.5,1.5,0 4 25  steps, hold [s], max distance [m]
+# The default fits a 2-3 m straight and still identifies deadband, gain and
+# time constant (checked with `lab2_fit_motor --synthesize`).
 #
 # Speed step test: scripted target speeds through the normal command path
-speed-steps STEPS="0,0.5,1.0,0.5,1.5,0" HOLD="4.0" MAX_DISTANCE="25.0":
+speed-steps STEPS="0,0.3,0.6,0" HOLD="4.0" MAX_DISTANCE="2.5":
     #!/usr/bin/env bash
     source scripts/env.sh
     steps="[$(python3 -c "print(', '.join(str(float(x)) for x in '{{ STEPS }}'.split(',') if x.strip()))")]"
@@ -130,6 +132,19 @@ speed-steps STEPS="0,0.5,1.0,0.5,1.5,0" HOLD="4.0" MAX_DISTANCE="25.0":
     max_distance=$(python3 -c "print(float('{{ MAX_DISTANCE }}'))")
     exec ros2 run autosdv_coach_lab speed_step_planner --ros-args \
         -p "steps:=$steps" -p "hold:=$hold" -p "max_distance:=$max_distance"
+
+#   just coach record-part1                       stack, planner, recording, engage, stop, fit
+#   just coach record-part1 --name steps1 --steps 0,0.4,0.7,0 --max-distance 3
+#   just coach record-part1 --bench --yes         the same on the vehicle bench
+# Writes rosbags/lab2cal_<name>/ with motor_plant.yaml and speed_step.csv inside.
+#
+# The Part 1 speed-step bag from one terminal (the four recipes above, in order)
+[positional-arguments]
+record-part1 *ARGS:
+    #!/usr/bin/env bash
+    source scripts/env.sh
+    unset DISPLAY                       # the ZED (its IMU) cannot have one: scripts/testing/lab2/camera_display.sh
+    exec python3 scripts/testing/lab2/record_part1.py "$@"
 
 # Record what the motor fit and the braking report read, to rosbags/lab2cal_<time>
 record-cal NAME="":

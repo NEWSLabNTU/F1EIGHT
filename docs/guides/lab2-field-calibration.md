@@ -112,14 +112,16 @@ the stack without the planner:
 ```bash
 just coach vehicle launch_planner:=false                     # terminal 1 (Robin-W, ZED IMU)
 just coach record-cal steps1                                  # terminal 2
-just coach speed-steps                                        # terminal 3: 0,0.5,1.0,0.5,1.5,0 m/s, 4 s each
+just coach speed-steps                                        # terminal 3: 0,0.3,0.6,0 m/s, 4 s each (about 2 m)
 just coach engage                                             # terminal 4: starts the schedule
 ```
 
 The schedule starts on engage and ends stopped. It also stops early with a
-braking ramp after `max_distance` metres (25 m by default), and disengaging
-aborts it. The arguments are steps, hold time and distance:
-`just coach speed-steps 0,0.3,0.6,0,1.0,0.7,0 4 30`. A schedule with
+braking ramp after `max_distance` metres (2.5 m by default, so give it about
+3 m of clear straight), and disengaging aborts it. The default is sized for a
+small floor and still identifies deadband, gain and time constant. With a
+longer straight, pass steps, hold time and distance:
+`just coach speed-steps 0,0.5,1.0,0.5,1.5,0 4 25`. A schedule with
 **several stops from different speeds** gives the brake more data (see below).
 
 It drives through the normal command path: a trajectory goes to Autoware's
