@@ -748,6 +748,42 @@ STEPS: list[Step] = [
         verify=["bash", "-c", "command -v vglrun >/dev/null"],
         profiles=_on(),                 # opt-in: only for headless boards driven over VNC
     ),
+    Step(
+        id="turbovnc-xstartup",
+        label="TurboVNC desktop session (vehicle)",
+        why="TurboVNC's stock xstartup cannot start GNOME while the same user "
+            "is logged in on the car's display, so `vncserver` dies at once. "
+            "Installs a GNOME --builtin session rendered through VirtualGL "
+            "into ~/.vnc, keeping any file it replaces as a .bak, and turns "
+            "the screen lock off: unlocking that session hangs.",
+        group="System config",
+        # The templates are argv so Step.digest() notices when one is edited.
+        run=[_S("install-turbovnc-xstartup.sh"),
+             str(FILES_DIR / "vnc" / "xstartup.turbovnc"),
+             str(FILES_DIR / "vnc" / "turbovncserver.conf")],
+        after=("turbovnc-virtualgl",),
+        verify=["bash", "-c",
+                f"cmp -s {FILES_DIR}/vnc/xstartup.turbovnc ~/.vnc/xstartup.turbovnc"
+                f" && cmp -s {FILES_DIR}/vnc/turbovncserver.conf ~/.vnc/turbovncserver.conf"
+                " && [ \"$(gsettings get org.gnome.desktop.screensaver lock-enabled)\" = false ]"],
+        profiles=_on(),                 # opt-in: a car driven from a laptop over VNC
+    ),
+    Step(
+        id="turbovnc-polkit",
+        label="TurboVNC desktop: no Wi-Fi scan password prompts",
+        why="The VNC session counts as remote, so polkit asks for a password "
+            "on every Wi-Fi scan, every few seconds while Settings is open. "
+            "Allows the scan only, for the sudo group.",
+        group="System config",
+        # argv, not a shell string, so Step.digest() covers the rule file.
+        run=["sudo", "install", "-m", "644",
+             str(FILES_DIR / "vnc" / "45-autosdv-vnc.pkla"),
+             "/etc/polkit-1/localauthority/50-local.d/45-autosdv-vnc.pkla"],
+        requires=Requires(sudo=True),
+        after=("turbovnc-xstartup",),
+        # No verify: 50-local.d is readable by root only.
+        profiles=_on(),                 # opt-in, with turbovnc-xstartup
+    ),
 ]
 
 # ---- the `container` profile, derived rather than restated -----------------

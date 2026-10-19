@@ -169,7 +169,13 @@ class Step:
             h.update(part.encode())
             h.update(b"\0")
             candidate = Path(part)
-            if candidate.is_file() and candidate.is_relative_to(REPO_ROOT):
+            try:
+                in_repo = candidate.is_file() and candidate.is_relative_to(REPO_ROOT)
+            except OSError:
+                # A sudo step may name a path the user cannot stat, such as
+                # /etc/polkit-1/localauthority/...; it is not ours to hash.
+                in_repo = False
+            if in_repo:
                 h.update(candidate.read_bytes())
         return h.hexdigest()[:12]
 
