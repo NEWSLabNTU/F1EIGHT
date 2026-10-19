@@ -3,8 +3,8 @@
 # (vehicle_id:=, dictionary:=, marker_size:=), and nothing here drives the car.
 # The work is scripts/aruco_map/aruco_map.sh; the guide is docs/guides/aruco-map.md.
 #
-#   just aruco-map survey 24                  scan, Ctrl-C solves: a map in board 24's frame
-#   just aruco-map survey 24 --route lab2_uturn   then align it to a route's start box
+#   just aruco-map survey 24 marker_size:=0.467   scan, Ctrl-C solves: a map in board 24's frame
+#   ... --route lab2_uturn                        then align it to a route's start box
 #   just aruco-map align --route lab2_uturn   align surveys/latest (optional)
 #   just aruco-map solve                      solve the scan again, no car
 #   just aruco-map check                      drive by hand, watch the localization
@@ -19,9 +19,9 @@ set working-directory := '..'
 default:
     @just --list aruco-map
 
-#   just aruco-map survey 24                               a new surveys/<date>_<time>, origin board 24
+#   just aruco-map survey 24 marker_size:=0.467            a new surveys/<date>_<time>, origin board 24
 #   just aruco-map survey 24 courses/my_hall vehicle_id:=car_c marker_size:=0.25
-#   just aruco-map survey 24 --route lab2_uturn            then align: start box, first leg, Ctrl-C
+#   just aruco-map survey 24 marker_size:=0.467 --route lab2_uturn   then align: start box, first leg
 # Writes DIR/course.yaml (the boards in the origin board's frame), the lanelet2
 # map, ar_tag.param.yaml, survey_report.yaml, survey_data.npz.
 # Survey the boards: drive past every board, Ctrl-C solves (--route NAME: then align)
@@ -31,7 +31,7 @@ survey ORIGIN_ID *ARGS:
     # exec: the process just waits on is the one that handles Ctrl-C
     exec scripts/aruco_map/aruco_map.sh survey "$@"
 
-#   just aruco-map scan 24 [DIR] [key:=value ...]          (DIR 24 works too)
+#   just aruco-map scan 24 [DIR] marker_size:=M [key:=value ...]   (DIR 24 works too)
 # The scan alone: survey without a route
 [positional-arguments]
 scan *ARGS:
