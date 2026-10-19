@@ -140,7 +140,7 @@ sim *ARGS:
     exec python3 scripts/testing/lab2/part1_run.py "${LAB2_ARGS[@]}"
 
 #   just lab2 plot-sim tmp/lab2/part1/B12345678_lab_2_1/nominal     writes .../nominal/curves.png
-#   just lab2 plot-sim DIR --t0 17 --t1 32 -o tmp/stepdown.png        zoom into a window
+#   just lab2 plot-sim DIR --t0 15 --t1 23 -o tmp/stop.png            zoom into a window
 # No display needed (matplotlib Agg): for runs with rviz:=false gui:=false, which save no dashboard.png.
 # Part 1: draw a run's trace.csv (speed, PWM, failed checks) to a PNG
 [positional-arguments]
@@ -149,7 +149,7 @@ plot-sim *ARGS:
     exec python3 scripts/testing/lab2/plot_part1.py "$@"
 
 #   just lab2 make-part1-course                    rewrite config/courses/lab2_part1 (committed)
-#   just lab2 make-part1-course --estop-offset 12 --out tmp/lab2/part1/course
+#   just lab2 make-part1-course --holds 5,4 --out tmp/lab2/part1/course
 # Prints the segment table; part1_profile.yaml is what the scenario node and the grader read.
 # Regenerate the Part 1 straight (path, map, part1_profile.yaml) from its speed profile
 [positional-arguments]

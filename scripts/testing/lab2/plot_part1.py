@@ -11,10 +11,11 @@ over SSH and after a run with rviz:=false gui:=false, which saves no dashboard.p
 
     speed      target (dashed), measured (what the controller receives), true (the plant)
     motor PWM  with neutral, the brake zone and the dead band shaded
-    grey       the emergency stop
+    grey       the emergency stop, on a profile that has one (the graded course has none)
     red        each failed check's window, from marks.json, labelled with its name
 
---t0/--t1 zoom into a time window [s of simulated time], e.g. the 11 -> 6 m/s step down.
+--t0/--t1 zoom into a time window [s of simulated time], e.g. --t0 15 --t1 23 for the final
+braking onto the stop line.
 """
 import argparse
 import csv

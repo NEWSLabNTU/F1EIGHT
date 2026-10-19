@@ -43,13 +43,29 @@ def test_rates_holds_and_speeds(prof):
             assert seg['rate'] == prof['decel_brake']
 
 
-def test_estop_and_stop_line(prof):
-    h = [s for s in prof['segments'] if s['kind'] == 'hold'][prof['estop_hold_index']]
-    assert h['v0'] == 6.0 and prof['estop_hold_index'] == 3
-    assert prof['estop_trigger_s'] == pytest.approx(h['s0'] + C.DEFAULT_ESTOP_OFFSET)
-    assert h['s0'] < prof['estop_trigger_s'] < h['s1']
-    e = prof['estop']
-    assert (e['hold_s0'], e['hold_s1'], e['trigger_s']) == (h['s0'], h['s1'], prof['estop_trigger_s'])
+def test_the_default_course(prof):
+    assert C.DEFAULT_SPEEDS == (4.0, 11.0) and C.DEFAULT_HOLDS == (4.0, 4.0)
+    kinds = [(s['kind'], s['v0'], s['v1']) for s in prof['segments']]
+    assert kinds == [('accel', 0.0, 4.0), ('hold', 4.0, 4.0), ('accel', 4.0, 11.0),
+                     ('hold', 11.0, 11.0), ('brake', 11.0, 0.0), ('runout', 0.0, 0.0)]
+    assert prof['nominal_duration'] == pytest.approx(16.8)
+    assert prof['stop_line_s'] == pytest.approx(108.4)
+
+
+def test_no_estop_by_default(prof):
+    assert 'estop' not in prof and 'estop_trigger_s' not in prof
+    assert 'estop_hold_index' not in prof
+
+
+def test_an_estop_can_still_be_asked_for():
+    p = C.make_profile(estop_hold_index=1, estop_offset=10.0)
+    h = [s for s in p['segments'] if s['kind'] == 'hold'][1]
+    assert p['estop_trigger_s'] == pytest.approx(h['s0'] + 10.0)
+    e = p['estop']
+    assert (e['hold_s0'], e['hold_s1'], e['trigger_s']) == (h['s0'], h['s1'], p['estop_trigger_s'])
+
+
+def test_stop_line(prof):
     assert prof['stop_line_s'] == prof['segments'][-2]['s1']
     assert prof['segments'][-2]['kind'] == 'brake' and prof['segments'][-1]['kind'] == 'runout'
     assert prof['length'] == pytest.approx(prof['stop_line_s'] + prof['runout'])
@@ -75,7 +91,7 @@ def test_path_speed_follows_the_profile(prof):
 
 def test_bad_estop_offset_is_refused():
     with pytest.raises(C.CourseError):
-        C.make_profile(estop_offset=1000.0)
+        C.make_profile(estop_hold_index=1, estop_offset=1000.0)
 
 
 def test_committed_course_is_the_generators_output(tmp_path):
@@ -90,4 +106,4 @@ def test_committed_course_is_the_generators_output(tmp_path):
 
 def test_committed_profile_parses():
     data = yaml.safe_load((COMMITTED / 'part1_profile.yaml').read_text())
-    assert data['estop_hold_index'] == 3 and data['decel_brake'] > 0
+    assert data['speeds'] == [4.0, 11.0] and data['decel_brake'] > 0 and 'estop' not in data

@@ -9,8 +9,8 @@ students write.
 ## What a student does
 
 ```bash
-just lab2 sim submission:=~/lab2/B12345678_lab_2_1            # one run, live, ~1.5 min
-just lab2 sim submission:=~/lab2/B12345678_lab_2_1 --final    # the graded set, ~5 min
+just lab2 sim submission:=~/lab2/B12345678_lab_2_1            # one run, live, ~1 min
+just lab2 sim submission:=~/lab2/B12345678_lab_2_1 --final    # the graded set, ~2 min
 ```
 
 One command builds the course, starts the Lab 2 stack on the simulated car, opens RViz
@@ -29,13 +29,13 @@ just lab2 sim  ─ runner: course, setsid stack, wait for the result, print mark
 
 waypoint_path_publisher (part1 straight course, v column = speed profile) ─► /planning/trajectory
 kinematic_state + trajectory ─► path_tracker (TA reference pure pursuit; speed = path speed here)
-  ─► lab2_part1_scenario (test fixture: 0 in the e-stop, the resume ramp, the aligned start)
+  ─► lab2_part1_scenario (test fixture: 0 until the aligned start)
   ─► vehicle_cmd_gate ─► /control/command/control_cmd (+ emergency_cmd, via the scenario)
   ─► actuator (hardware:=sim): safety shell + STUDENT SpeedPID   (loaded by import path)
   ─► /rc_sim/pwm ─► rc_sim_plant  (1 kHz physics, owns /clock, tick handshake)
   ─► /rc_sim/hall_edges ─► velocity_report ─► /vehicle/status/velocity_status ─► actuator
 rc_sim_plant ─► /localization/kinematic_state + TF map→base_link (TRUE pose), /rc_sim/state
-lab2_part1_scenario: engage; e-stop injection at the course's trigger; release; resume
+lab2_part1_scenario: engage; the aligned start (no e-stop on the course since 2026-10-19)
 lab2_part1_grader:   live checks ─► /lab2/part1/status, /lab2/part1/violations, trace + marks.json
 lab2_part1_dashboard (window): curves, violation spans, final marks    RViz: car, lane, marks
 ```
@@ -61,81 +61,84 @@ lab2_part1_dashboard (window): curves, violation spans, final marks    RViz: car
 - **So Part 1 shares everything with the car but localization**; what differs is the
   car itself (the plant), the parameter files, and the harness.
 
-### The e-stop: why the scenario stays in the command path
+### Why the scenario stays in the command path: the start
 
 The scenario is the one harness node between the stack's nodes: path_tracker publishes
 on `/control/part1/tracker_cmd` (`tracker_control_topic`), the scenario forwards it to
 `/control/trajectory_follower/control_cmd`; the gate's emergency verdict goes to
 `/control/command/emergency_cmd_gate` (`output_emergency_cmd`) and the scenario forwards it
-to `/control/command/emergency_cmd`, OR-ed with the e-stop. The car's software runs
-unchanged; only the harness touches the command path.
+to `/control/command/emergency_cmd` at once, unchanged. The car's software runs unchanged;
+only the harness touches the command path.
 
-The alternative (D11 in the one-stack plan) was measured on 2026-10-19 and rejected: the
-scenario calls `/control/vehicle_cmd_gate/external_emergency_stop` and
-`clear_external_emergency_stop` (`std_srvs/srv/Trigger`) and path_tracker publishes
-straight to the gate (reference controller, 3 quiet runs and a 3 quiet + 3 loaded
-tolerance round; ntu-sdv-course `2026/labs/Lab2/lab2-one-controller.md`, D11):
+Since the course lost its e-stop (2026-10-19, "The course and the run") the scenario stays
+for the **aligned start** alone: after the engage it holds the speed passed to the gate at 0
+until the 0.1 s grid. Without it `launch_slip` spread 0.027 m/s across runs, over the 0.02
+the grading allows (measured with D11, below).
+
+The e-stop is optional in `part1_profile.yaml`: `just lab2 make-part1-course --estop-hold K
+--estop-offset M` writes an `estop` block, and only then does the scenario create its 20 Hz
+emergency timer, join the clock handshake as participant `emergency`, raise the emergency at
+the trigger, clear it after 1 s at rest and ramp the resume target at 2.5 m/s^2. Without the
+block it has no emergency timer and no lockstep participant (the actuator's emergency gate
+never arms, as in `just sim rc`), the grader's trace aligner waits for the command stream
+alone, and "e-stop never raised" cannot invalidate a run. No check reads the e-stop.
+
+Why an e-stop went through the scenario rather than the gate's external-emergency service
+(D11 in the one-stack plan, measured 2026-10-19 on the previous course and rejected: the
+scenario called `/control/vehicle_cmd_gate/external_emergency_stop` and
+`clear_external_emergency_stop`, path_tracker published straight to the gate; reference
+controller, 3 quiet runs and a 3 quiet + 3 loaded tolerance round; ntu-sdv-course
+`2026/labs/Lab2/lab2-one-controller.md`, D11):
 
 | | scenario (kept) | gate e-stop (D11) |
 |---|---|---|
 | e-stop to first emergency actuator tick | 0.01 s, every run | 0.02 or 0.06 s (4-tick spread; the car's position at it spreads 0.23 m) |
 | why | the scenario's emergency timer is a lockstep participant | the gate's stop command carries a new stamp, so the actuator's command gate waits out its 0.5 s wall guard; the gate is not a participant |
-| `estop_resume_slip` | 0.263 m/s, spread 0.0005 (quiet + loaded) | 4.34-4.58 m/s (limit 0.5), spread 0.242 vs 0.02 allowed: the gate steps back to 6 m/s in about 0.1 s, the rear wheel spins |
+| resume slip | 0.263 m/s, spread 0.0005 (quiet + loaded) | 4.34-4.58 m/s (limit 0.5), spread 0.242 vs 0.02 allowed: the gate steps back to 6 m/s in about 0.1 s, the rear wheel spins |
 | `launch_slip` spread | 0 | 0.027 vs 0.02 allowed, without the aligned start |
 | MRM | none | the gate's e-stop raises one (`emergency_stop_operation`), which the grader counts as an invalid run; its 10 Hz recovery spreads the release by 0.08 s |
-
-The decision (2026-10-19) is the harness exception: the scenario stays, as a documented
-test fixture, and its code and the calibrated limits do not change.
 
 ## The course and the run
 
 One straight, generated (`just lab2 make-part1-course`, default written to the package's
 `config/courses/lab2_part1`). Planner limits a = d = 2.5 m/s^2 (3.5 m/s^2 braking was
-tried and is above every variant's full brake, 2.98-3.36 m/s^2). Segments in order:
+tried and is above every variant's full brake, 2.98-3.36 m/s^2). Simplified 2026-10-19
+from a five-hold course with a step down and an e-stop (32.8 s) to three segments, about
+17 s of driving:
 
-| # | Segment | Purpose |
-|---|---|---|
-| 1 | accel 0 → 2, hold 2 m/s for 3 s | launch from rest (no spin, no lurch), low-speed hold |
-| 2 | accel 2 → 6, hold 3 s | step response, hold |
-| 3 | accel 6 → 11, hold 3 s | full-throttle authority, hold at 40 km/h |
-| 4 | decel 11 → 6, hold 8 s; **e-stop** triggered 15 m into this hold | active braking to a lower speed; emergency stop and clean resume |
-| 5 | accel 6 → 11, hold 3 s | |
-| 6 | decel 11 → 0 onto the stop line, run-out 10 m | planned braking, stop error |
+| # | Segment | s [m] | t [s] (nominal, from the engage) | Purpose |
+|---|---|---|---|---|
+| 1 | accel 0 → 4, hold 4 m/s for 4 s | 0-3.2, 3.2-19.2 | 0-1.6, 1.6-5.6 | launch from rest (no spin, no lurch), low-speed hold |
+| 2 | accel 4 → 11, hold 4 s | 19.2-40.2, 40.2-84.2 | 5.6-8.4, 8.4-12.4 | the speed change: full-throttle authority, hold at 40 km/h |
+| 3 | brake 11 → 0 onto the stop line, run-out 10 m | 84.2-108.4, 108.4-118.4 | 12.4-16.8 | planned braking, stop error |
 
-The e-stop trigger is a position in segment 4: 15 m (2.5 s at 6 m/s) into the hold, so the
-step-down transient has settled before it fires, and the rest of the 8 s hold (33 m) leaves
-room to stop, wait 1 s and resume onto 6 m/s before the next climb. The scenario node
-raises the emergency through the same input the
-car uses (the actuator's `~/input/emergency`, `VehicleEmergencyStamped`), holds it until
-the car is at rest for 1 s, then clears it. The resume target is ramped from 0 at
-2.5 m/s^2 up to the path's speed (6 m/s): a step would spin the rear wheels, and the hall
-sensor on the driven wheel cannot see that. The ramp is applied by the scenario node
-upstream of the command gate (path_tracker publishes to `/control/part1/tracker_cmd`, the
-scenario node forwards it), so it appears in `control_cmd` where the grader reads the
-target. The gate's emergency output is remapped and OR-ed with the e-stop by the same
-node before it reaches the actuator.
+The stop line is at s = 108.4 m. There is no e-stop (optional, see above). The
+target reaches the gate through the scenario node (path_tracker publishes to
+`/control/part1/tracker_cmd`, the scenario node forwards it), so the aligned start
+appears in `control_cmd` where the grader reads the target.
 
 `config/courses/lab2_part1/part1_profile.yaml` is the contract between the course
 generator, the scenario node and the grader:
 
 ```yaml
-speeds: [2.0, 6.0, 11.0, 6.0, 11.0]   # the hold speeds, in order
-holds: [3.0, 3.0, 3.0, 8.0, 3.0]
+speeds: [4.0, 11.0]   # the hold speeds, in order
+holds: [4.0, 4.0]
 accel: 2.5
 decel_brake: 2.5
 runout: 10.0
 engage_velocity: 0.25
 segments:   # s: metres along the path from the start pose; t0/t1 the nominal plan from engage
-  - {kind: accel, s0: 0.0, s1: 0.8, v0: 0.0, v1: 2.0, rate: 2.5, group: 1, t0: 0.0, t1: 0.8}
-  - {kind: hold,  s0: 0.8, s1: 6.8, v0: 2.0, v1: 2.0, rate: 0.0, group: 1, t0: 0.8, t1: 3.8, hold_index: 0}
-  # ... kinds accel | decel | hold | brake | runout; group = the row of the table above
-stop_line_s: 220.4
-length: 230.4
-estop_hold_index: 3
-estop_trigger_s: 113.2     # duplicate of estop.trigger_s kept for simple readers
-estop: {hold_index: 3, hold_s0: 98.2, hold_s1: 146.2, speed: 6.0, trigger_s: 113.2,
-        rest_time: 1.0, resume_accel: 2.5}
-nominal_duration: 32.8
+- {kind: accel, s0: 0.0, s1: 3.2, v0: 0.0, v1: 4.0, rate: 2.5, group: 1, t0: 0.0, t1: 1.6}
+- {kind: hold, s0: 3.2, s1: 19.2, v0: 4.0, v1: 4.0, rate: 0.0, group: 1, t0: 1.6, t1: 5.6, hold_index: 0}
+- {kind: accel, s0: 19.2, s1: 40.2, v0: 4.0, v1: 11.0, rate: 2.5, group: 2, t0: 5.6, t1: 8.4}
+- {kind: hold, s0: 40.2, s1: 84.2, v0: 11.0, v1: 11.0, rate: 0.0, group: 2, t0: 8.4, t1: 12.4, hold_index: 1}
+- {kind: brake, s0: 84.2, s1: 108.4, v0: 11.0, v1: 0.0, rate: 2.5, group: 3, t0: 12.4, t1: 16.8}
+- {kind: runout, s0: 108.4, s1: 118.4, v0: 0.0, v1: 0.0, rate: 0.0, group: 3, t0: 16.8, t1: 16.8}
+stop_line_s: 108.4
+length: 118.4
+nominal_duration: 16.8
+# with --estop-hold/--estop-offset only: estop_hold_index, estop_trigger_s and
+# estop: {hold_index, hold_s0, hold_s1, speed, trigger_s, rest_time: 1.0, resume_accel: 2.5}
 ```
 
 ## Clock synchronization (load-independent within a tolerance)
@@ -156,7 +159,7 @@ publishes or waits.
 | `velocity_report` | 50 ms | publishing its report; it holds a report until the hall edges up to its deadline are in (each edge message is marked complete up to the `/clock` that follows it) |
 | `actuator` | 10 ms | writing its PWM; it holds the tick behind three gates (below) |
 | `path_tracker` | 33.3 ms | publishing the control command for the odometry of its instant (it waits for that odometry) |
-| `emergency` (`lab2_part1_scenario`'s 20 Hz e-stop timer) | 50 ms | publishing the emergency state, stamped with the deadline; the scheduled e-stop and clear apply at the first tick at or after their mark |
+| `emergency` (`lab2_part1_scenario`'s 20 Hz e-stop timer; **only with an e-stop in the profile**, so not on the course) | 50 ms | publishing the emergency state, stamped with the deadline; the scheduled e-stop and clear apply at the first tick at or after their mark |
 
 - **Acks:** `std_msgs/String` on `/rc_sim/lockstep/ack`, `"<name> <sec> <nanosec>
   <period_ns> [key=value ...]"`. The plant learns each participant's period and phase from
@@ -169,7 +172,7 @@ publishes or waits.
   `velocity_report`'s latest deadline at or before the tick, (2) the control command
   stamped with `path_tracker`'s latest deadline at or before it (the forwarder and
   `vehicle_cmd_gate` keep the stamp), and (3) the emergency message of the `emergency`
-  participant's latest deadline. Each gate arms only once its participant has
+  participant's latest deadline (never armed on the course, which has no e-stop). Each gate arms only once its participant has
   acknowledged, and only while the plant's status says the handshake is on and ok. The
   command and emergency gates share a **0.5 s wall guard**: no matching message within it
   disarms the gate with a warning (the next message re-arms it), so a missing upstream
@@ -244,24 +247,30 @@ holds neutral.
 ## Checks and marks
 
 Computed live by the grader from the plant's true state, the commanded target, the PWM
-and the shell's mode, on the windows `part1_profile.yaml` defines. Sixteen checks per run:
+and the shell's mode, on the windows `part1_profile.yaml` defines. Nine checks per run
+(sixteen before the course was simplified on 2026-10-19):
 
 | Check | Window |
 |---|---|
-| `hold_rmse_2`, `hold_rmse_6`, `hold_rmse_11` | steady part of the first hold at each speed |
-| `overshoot` | worst over the three steps up |
-| `reach_s` | worst time to enter the band after a step up |
+| `hold_rmse_4`, `hold_rmse_11` | steady part of each hold (from 1 s in): RMSE of true speed − hold speed |
+| `overshoot` | worst over the two steps up (0 → 4, 4 → 11), % of the step |
+| `reach_s` | worst time to enter the 10 % band after a step up |
 | `launch_slip`, `launch_accel` | first second from rest (wheel spin, lurch) |
-| `stepdown_undershoot`, `stepdown_kappa` | 11 → 6 decel (undershoot below 6, rear wheel lock; slip ratio only above 0.3 m/s) |
-| `stepdown_lag` | 11 → 6 decel up to the e-stop: max of true speed − commanded target (a car that cannot slow down; added 2026-10-18 after the no-brake probe scored 23.33) |
-| `estop_reverse`, `estop_resume_slip`, `estop_resume_overshoot` | e-stop to resumed hold |
+| `stop_lag` | the final brake segment, its start to the stop line: max of true speed − commanded target (a car that cannot slow down; the former `stepdown_lag` on the final brake) |
 | `stop_error`, `stop_kappa` | final braking (distance to the line where the final rest began, wheel lock above 0.3 m/s) |
-| `hold_rmse_11b` | the second 11 m/s hold |
+
+Removed with the step down and the e-stop: `hold_rmse_2`, `hold_rmse_6`, `hold_rmse_11b`,
+`stepdown_undershoot`, `stepdown_kappa`, `stepdown_lag`, `estop_reverse`,
+`estop_resume_slip`, `estop_resume_overshoot`. No undershoot check at the stop: below a
+target of 0 is reversing, which the ESC allows only after the car has stopped and sat at
+neutral, and stopping short of or past the line is `stop_error`'s. Lock in the final brake
+is `stop_kappa`'s, as before.
 
 Validity (not a check): a run is invalid, scores 0 and says why, only for a lockstep
 timeout (before the engage: a startup stall, "run again"), a controller fault, an actuator that never started
 (no mode 2 s after the engage), an MRM, a
-scenario abort, an e-stop that was never raised, or a stack that never engaged. A car that
+scenario abort, an e-stop that was never raised (only possible with an e-stop in the
+profile, which the course does not have), or a stack that never engaged. A car that
 does not move, stops early or does not finish in time has a valid run whose unreached
 checks fail, with a message saying so.
 
@@ -270,19 +279,20 @@ controller's worst case across the graded variants, physical limits (spin, lock,
 reversing) and the stop error are fixed. `scripts/testing/lab2/part1_calibrate.py`
 reproduces them.
 
-**Marks:** an everyday run shows passed/16 on the nominal car. `--final` runs nominal,
-`low_batt` and `low_mu` in sequence; Part 1's run mark is 25 × passed / 48. The TA
+**Marks:** an everyday run shows passed/9 on the nominal car. `--final` runs nominal,
+`low_batt` and `low_mu` in sequence; Part 1's run mark is 25 × passed / 27 (the denominator
+is 3 × `len(metrics.CHECK_NAMES)`, never hard-coded: `part1_run.py` reads it). The TA
 grades by running `--final` on the submission.
 
 ## GUI
 
 - **RViz** (Autoware's config trimmed for the lab): the lane, the stop line, the car, the
   path, violation markers placed where they happened (`/lab2/part1/violations`,
-  `MarkerArray`), the e-stop trigger.
+  `MarkerArray`) (and an e-stop trigger, when a profile has one).
 - **Dashboard window** (matplotlib in a Qt window; both come with ROS Humble's desktop
   install and are added to `setup.sh` where missing): speed vs time with the target and
   the true speed; PWM vs time with neutral and the brake zone shaded; distance to the stop
-  line; violations as red spans; at the end, the marks table. It subscribes to the
+  line; violations as red spans (an e-stop, if any, grey); at the end, the marks table. It subscribes to the
   grader's status topic, so it shows exactly what was graded.
 - `rviz:=false gui:=false` for TA batch runs and CI.
 
@@ -292,78 +302,62 @@ grades by running `--final` on the submission.
 measured, true speed, PWM, mode, rear slip, emergency, segment), `marks.json`, and the
 run's `play_log` path. `--final` adds `final.json` with the 25-point mark.
 
-## Validation (2026-10-18)
-
-**Load tolerance** (`scripts/testing/lab2/part1_tolerance.py`, the reference, 3 quiet + 3
-loaded runs interleaved, busy loops on every core ×2; `tmp/lab2/part1/agents/P2-report.md`
-round 5): **PASS**, all 6 runs valid 15/15 (before `stepdown_lag`). Quiet runs are bit-identical on every check.
-The largest spreads: `stepdown_undershoot` 0.10 % (allowed 0.5), `stop_error` 0.003 m
-(allowed 0.03), `hold_rmse_11b` 0.0012 m/s (allowed 0.011); every other check far inside
-its allowance (at most 0.004 against 0.5 for `estop_resume_overshoot`).
-`stepdown_lag`, evaluated afterwards on the same six traces: 0.5416-0.5481 m/s, spread
-0.0065 (allowed max(2 % of 0.88, 0.01) = 0.018).
-Re-run 2026-10-19 on the shared launch, at the documented load (busy loops ×2, 3 quiet + 3
-loaded interleaved): **PASS**, all 6 runs valid 16/16, quiet runs bit-identical (and equal
-to the old composition's values). The largest spreads, against what is allowed:
-`stepdown_undershoot` 0.31 % (0.5), `estop_resume_overshoot` 0.032 % (0.5), `stepdown_lag`
-0.0074 m/s (0.0176), `hold_rmse_6` 0.0029 m/s (0.01), `stop_error` 0.0019 m (0.03),
-`stop_kappa` 0.0014 (0.01), `hold_rmse_11b` 0.00067 m/s (0.01); every other check 0.001 or
-less. `stepdown_undershoot` is the one to watch: ×2 load moved it from 0.057 % (×1) to 0.31 %.
+## Validation (2026-10-19, the simplified course)
 
 **Calibration** (`scripts/testing/lab2/part1_calibrate.py --repeats 2`: the reference live on
-nominal, low_batt and low_mu, 6 runs, all passing, repeats bit-identical). Limit = 1.5 × the
-worst case, 2 significant figures up, never below the floor in `part1_calibrate.py`
-(hold RMSE 0.05 m/s, reach 0.2 s, undershoot and overshoots 2 %). Fixed limits unchanged.
+nominal, low_batt and low_mu, 6 runs, all passing, repeats bit-identical;
+`tmp/lab2/simple/calibrate/`). Limit = 1.5 × the worst case, 2 significant figures up, never
+below the floor in `part1_calibrate.py` (hold RMSE 0.05 m/s, reach 0.2 s, overshoot 2 %,
+stop lag 0.3 m/s). Fixed limits unchanged.
 
-| Check | Reference worst | Limit | | Check | Reference worst | Limit |
-|---|---|---|---|---|---|---|
-| `hold_rmse_2` | 0.023 m/s | 0.05 (floor) | | `launch_accel` | 2.94 m/s² | 4.5 |
-| `hold_rmse_6` | 0.028 m/s | 0.05 (floor) | | `stepdown_undershoot` / `stepdown_lag` | 0.55 % / 0.586 m/s | 2 (floor) / 0.88 |
-| `hold_rmse_11` | 0.085 m/s | 0.13 | | `estop_resume_overshoot` | 1.59 % | 2.4 |
-| `hold_rmse_11b` | 0.084 m/s | 0.13 | | `launch_slip`, `estop_resume_slip` | 0.11, 0.27 m/s | 0.5 (physical) |
-| `overshoot` | 4.77 % | 7.2 | | `stepdown_kappa`, `stop_kappa` | −0.074 | −0.2 (physical) |
-| `reach_s` | 0.07 s | 0.2 (floor) | | `estop_reverse` / `stop_error` | 0.000 m/s / 0.066 m | −0.05 / 0.5 (fixed) |
-
-**Separation** (`part1_run.py --final`, 16 checks, the calibrated limits, variants of the
-reference's parameters; `tmp/lab2/part1/probes16/`; every run valid):
-
-| Controller | Marks /25 | Fails (cars of 3) |
+| Check | Reference worst | Limit |
 |---|---|---|
-| reference | 25.00 | — |
-| stub (default) | 0.00 | every check, "Your car did not move ... still the stub?" |
-| P-only (`ki` 0, `kd` 0) | 15.62 | `hold_rmse_2/6/11/11b`, `reach_s`, `stepdown_undershoot` (3 each) |
-| no brake (`max_brake_offset` 0) | 21.88 | `stepdown_lag` (2.5-2.6 m/s), `stop_error` (8.9-9.2 m) |
-| no anti-windup (`enable_conditional_integration` false, `integral_limit` 1000) | 25.00 | none (accepted: report question 1 has students provoke windup) |
-| aggressive (`kp` 30, `ki` 40) | 21.35 | `launch_slip`, `estop_resume_slip` (3), `hold_rmse_11b` (1) |
+| `hold_rmse_4` | 0.027 m/s (low_mu) | 0.05 (floor) |
+| `hold_rmse_11` | 0.098 m/s (low_batt) | 0.15 |
+| `overshoot` | 2.49 % (nominal) | 3.8 |
+| `reach_s` | 0.00 s (the car is inside the band when the hold begins) | 0.2 (floor) |
+| `launch_slip` | 0.125 m/s (low_mu) | 0.5 (physical) |
+| `launch_accel` | 2.94 m/s² (nominal) | 4.5 |
+| `stop_lag` | 0.581 m/s (low_mu) | 0.88 |
+| `stop_error` | 0.062 m (low_mu) | 0.5 (fixed) |
+| `stop_kappa` | −0.075 (low_mu) | −0.2 (physical) |
 
-`stepdown_lag` (16th check, added after the 15-check no-brake probe scored 23.33) is
-calibrated from the same six reference traces: worst 0.586 m/s (low_mu), limit 0.88.
+Against the previous course, `overshoot` tightened from 7.2 to 3.8 (its worst case had been
+a lower step) and `hold_rmse_11` loosened from 0.13 to 0.15 (a 4 s hold instead of 3 s).
 
-**Coverage** (nominal car, `tmp/lab2/part1/coverage/`): which checks a parameter mistake
-can fail.
+**Load tolerance** (`scripts/testing/lab2/part1_tolerance.py`, the reference, nominal, 3 quiet
++ 3 loaded runs interleaved, busy loops on every core ×2; `tmp/lab2/simple/tolerance/`):
+**PASS**, all 6 runs valid 9/9, quiet runs bit-identical, the same verdict everywhere. Spreads
+against what is allowed: `stop_lag` 0.0138 m/s (0.0176, the tightest: 78 % of its
+allowance, only under load), `stop_error` 0.0015 m (0.03), `stop_kappa` 0.00076 (0.01),
+`hold_rmse_11` 0.00046 m/s (0.01); `hold_rmse_4`, `overshoot`, `reach_s`, `launch_slip`,
+`launch_accel` 0.
 
-| Probe | Passed /16 | Fails |
-|---|---|---|
-| strong brake (`kp_brake` 60, `brake_deadband` 0, `brake_enter` 0.1) | 12 | `hold_rmse_6/11/11b`, `stepdown_undershoot` 13 % |
-| underdamped (`kp` 25, `ki` 60, `kd` 0) | 12 | `overshoot` 9.0 %, `launch_slip`, `stepdown_undershoot`, `estop_resume_slip` |
-| lurch (`kp` 60, `error_limit` 20) | 9 | holds, `reach_s`, `launch_slip` 2.2, `estop_resume_slip` |
-| windup (`error_limit` 20, no conditional integration, `integral_limit` 1000, `ki` 40) | 14 | `overshoot` 11.3 %, `stepdown_undershoot` |
-| resume kick (`kp` 40, `ki` 80, `error_limit` 3, no conditional integration) | 8 | holds, `reach_s`, slips, `stepdown_undershoot` |
-| heavy feed-forward (`ff_deadband` 20, `ff_gain` 0.09) | 8 | holds, `reach_s`, slips, `stepdown_undershoot` |
+**Marks** (`part1_run.py --final`, `tmp/lab2/simple/`; every run valid):
 
-Never failed by any probe (worst value reached across all 30 probe runs):
+| Controller | Marks /25 | Passed /27 | Fails |
+|---|---|---|---|
+| reference (`config/speed_pid_part1_reference.yaml`) | 25.00 | 27 | — |
+| stub (default; nominal only) | 0 | 0/9 | every check, "Your car did not move ... still the stub?" |
+| reference code, detuned starting values (`config/speed_pid_part1.yaml`) | 16.67 | 18 | `hold_rmse_11` 0.32-0.41 m/s, `stop_lag` 1.68-1.78 m/s, `stop_error` 0.72-0.76 m, on every variant |
 
-- `launch_accel` (3.85 m/s² vs 4.5) and `estop_resume_overshoot` (1.94 % vs 2.4): traction
-  caps the acceleration, so a hard launch spins the wheel and fails `launch_slip` first; the
-  stack ramps the resume target at 2.5 m/s², so the car follows a ramp, not a step.
-- `stepdown_kappa`, `stop_kappa` (−0.077 vs −0.2): the brake authority a student may set is
-  at most 10 counts below neutral (`max_brake_offset`), which cannot lock the rear wheel on
-  any graded car.
-- `estop_reverse` (0.000 vs −0.05): during the e-stop the actuator's override drives the
-  motor, not the student's controller.
+**Windup** (the report question; nominal car, reference code): the student-tuned file
+(the starting values with `integral_limit` 15, `kp_brake` 15, `brake_enter` 0.35,
+`brake_exit` 0.10; 9/9) plus `max_pwm_offset: 85, integral_limit: 500,
+enable_conditional_integration: false` holds the command at its limit (455) through the
+whole 11 m/s hold: the car cannot reach 11 m/s at 85 counts and tops out at 10.18 m/s
+(`hold_rmse_11` 0.82 and `reach_s` fail, 7/9). On this course nothing follows the hold but
+the final brake, and the braking mode sets the integral aside, so the wound integral shows
+only as the throttle staying pinned at 455 for 0.11 s after the target falls below the car
+(the car 0.29 m/s over the target when the brake takes over). With conditional integration
+on, the same parameters release the throttle 0.03 s before the target crosses the car's
+speed; the checks are identical (7/9). The previous course's overshoot after the climb
+does not occur: no larger `ki` (40, 80) or tighter `max_pwm_offset` (93, 95) produced a
+saturation long enough to wind up before the 11 m/s hold.
 
-These remain as physical-safety guards (they would catch a plant or shell change, or a
-controller that escapes its limits), as the ruling accepts.
+The separation and coverage probes of 2026-10-18 (P-only, no brake, aggressive, strong
+brake, underdamped, lurch, heavy feed-forward) were run on the previous 16-check course
+and have not been repeated; see this file's history before the simplification.
 
 ## Not in scope
 

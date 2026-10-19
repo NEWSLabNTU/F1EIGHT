@@ -62,3 +62,11 @@ def test_flush_releases_everything_and_old_commands_are_dropped():
     assert len(a.cmd_t) <= 10
     a.on_cmd(1.0, -1.0)                 # reordered, older than kept: ignored
     assert a.cmd_v[-1] == 99.0
+
+
+def test_without_an_estop_rows_wait_for_the_command_alone():
+    a = RowAligner(need_emergency=False)
+    a.add(row(3.00))
+    a.on_cmd(3.0333, 2.0)
+    out = a.ready(state_t=3.00)                  # no emergency message, no lag: released
+    assert [r['t'] for r in out] == [3.00] and out[0]['emergency'] == 0

@@ -2,6 +2,6 @@
 # For rc_sim_plant (track_dir): where the car starts. Not an rc_sim
 # track: the profile is part1_profile.yaml.
 start_pose: {x: 0.0, y: 0.0, yaw: 0.0}
-goal_pose: {x: 220.4, y: 0.0, yaw: 0.0}
-stop_line_s: 220.4
-length: 230.4
+goal_pose: {x: 108.4, y: 0.0, yaw: 0.0}
+stop_line_s: 108.4
+length: 118.4

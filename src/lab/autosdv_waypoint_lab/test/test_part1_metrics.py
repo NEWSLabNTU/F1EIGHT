@@ -13,9 +13,12 @@ D = 2.5        # decel_brake: every braking segment (lead ruling)
 DT = 0.01
 
 
-def make_profile_dict(speeds=(2.0, 6.0, 11.0, 6.0, 11.0), holds=(3.0, 3.0, 3.0, 8.0, 3.0),
-                      runout=10.0) -> dict:
-    """The spec's course: accel/decel at 2.5 m/s^2 between the holds, then brake to the line."""
+def make_profile_dict(speeds=(4.0, 11.0), holds=(4.0, 4.0), runout=10.0,
+                      estop_offset=None, estop_hold_index=1) -> dict:
+    """The spec's course: accel/decel at 2.5 m/s^2 between the holds, then brake to the line.
+
+    No e-stop unless `estop_offset` [m into hold `estop_hold_index`] is given (it is optional).
+    """
     segs, s, v, k = [], 0.0, 0.0, 0
     for vh, th in zip(speeds, holds):
         kind = 'accel' if vh > v else 'decel'
@@ -32,13 +35,16 @@ def make_profile_dict(speeds=(2.0, 6.0, 11.0, 6.0, 11.0), holds=(3.0, 3.0, 3.0, 
     stop_line = s + ds
     segs.append({'kind': 'runout', 's0': stop_line, 's1': stop_line + runout,
                  'v0': 0.0, 'v1': 0.0})
-    h3 = segs[7]
-    return {'speeds': list(speeds), 'holds': list(holds), 'accel': A, 'decel_brake': D,
-            'runout': runout, 'segments': segs, 'stop_line_s': stop_line,
-            'estop_trigger_s': h3['s0'] + 15.0, 'estop_hold_index': 3}   # P3: hold_s0 + 15 m
+    out = {'speeds': list(speeds), 'holds': list(holds), 'accel': A, 'decel_brake': D,
+           'runout': runout, 'segments': segs, 'stop_line_s': stop_line}
+    if estop_offset is not None:
+        h = [seg for seg in segs if seg['kind'] == 'hold'][estop_hold_index]
+        out.update(estop_trigger_s=h['s0'] + estop_offset, estop_hold_index=estop_hold_index)
+    return out
 
 
 PROFILE = M.profile_from_dict(make_profile_dict())
+N = len(M.CHECK_NAMES)
 
 
 def v_path(p: M.Profile, s: float) -> float:
@@ -57,9 +63,10 @@ def v_path(p: M.Profile, s: float) -> float:
     return 0.0
 
 
-def ideal_rows(p: M.Profile = PROFILE, estop: bool = True, stop_offset: float = 0.0,
+def ideal_rows(p: M.Profile = PROFILE, estop: bool = False, stop_offset: float = 0.0,
                creep: float = 0.0):
-    """A car that drives the profile perfectly (rate-limited to the planner's a and d).
+    """A car that drives the profile perfectly (rate-limited to the planner's a, and 1.1 d so
+    it can follow a stop line moved by `stop_offset`).
 
     After the e-stop clears, the stack ramps the target at A (lead ruling). `creep`: the
     rc_sim neutral creep after the final stop (true speed, m/s).
@@ -69,7 +76,8 @@ def ideal_rows(p: M.Profile = PROFILE, estop: bool = True, stop_offset: float = 
     stop_line = p.stop_line_s + stop_offset
     while True:
         em = 0
-        if phase == 'run' and estop and s >= p.estop_trigger_s and t > 1.0:
+        if phase == 'run' and estop and p.estop_trigger_s is not None \
+                and s >= p.estop_trigger_s and t > 1.0:
             phase = 'estop'
         if phase == 'estop':
             em, target = 1, 0.0
@@ -85,7 +93,7 @@ def ideal_rows(p: M.Profile = PROFILE, estop: bool = True, stop_offset: float = 
                     t_clear = None
             if s >= p.first('brake').s0:
                 target = math.sqrt(max(0.0, 2.0 * D * (stop_line - s)))
-        dv = max(-D * DT, min(A * DT, target - v))
+        dv = max(-1.1 * D * DT, min(A * DT, target - v))   # brakes a little harder than D
         v = max(0.0, v + dv)
         if s >= p.first('brake').s0 and stop_line - s < 0.002:
             v = 0.0
@@ -134,24 +142,37 @@ def first_t(rows, pred):
 
 # ---------------------------------------------------------------- the ideal run
 
-def test_ideal_run_passes_all_fifteen(ideal):
+def test_the_checks():
+    assert M.CHECK_NAMES == ('hold_rmse_4', 'hold_rmse_11', 'overshoot', 'reach_s',
+                             'launch_slip', 'launch_accel', 'stop_lag', 'stop_error',
+                             'stop_kappa')
+
+
+def test_ideal_run_passes_all(ideal):
     checks = run(ideal)
-    assert list(checks) == list(M.CHECK_NAMES) and len(checks) == 16
+    assert list(checks) == list(M.CHECK_NAMES)
     failed = {n: c for n, c in checks.items() if not c['pass']}
     assert not failed, failed
-    assert M.summary(checks, True) == (16, 16)
+    assert M.summary(checks, True) == (N, N)
     assert M.violations(checks) == []
     assert checks['stop_error']['value'] < 0.05
-    assert checks['hold_rmse_11b']['value'] < 1e-6
+    assert checks['hold_rmse_11']['value'] < 1e-6
+    assert sum(r['emergency'] for r in ideal) == 0
 
 
 def test_profile_reading():
     p = PROFILE
-    assert p.first_up_holds == (0, 1, 2)
-    assert p.hold_11b_index == 4
-    assert p.hold(3).v0 == 6.0 and p.before(p.hold(3)).kind == 'decel'
+    assert p.first_up_holds == (0, 1)
+    assert p.hold(1).v0 == 11.0 and p.before(p.hold(1)).kind == 'accel'
+    assert p.estop_trigger_s is None and p.estop_hold_index is None
     assert p.segment_at(-1.0) == 'start'
     assert p.segment_at(p.hold(0).s0 + 0.1) == '1:hold'
+
+
+def test_profile_with_an_optional_estop():
+    p = M.profile_from_dict(make_profile_dict(estop_offset=10.0))
+    assert p.estop_hold_index == 1
+    assert p.estop_trigger_s == pytest.approx(p.hold(1).s0 + 10.0)
 
 
 def test_profile_file_roundtrip(tmp_path):
@@ -181,12 +202,11 @@ def fails_only(rows, name):
     assert failed == [name], {n: checks[n] for n in failed}
     v = M.violations(checks)
     assert len(v) == 1 and v[0]['name'] == name and v[0]['text'].startswith(name)
-    assert M.summary(checks, True) == (15, 16)
+    assert M.summary(checks, True) == (N - 1, N)
     return checks[name]
 
 
-@pytest.mark.parametrize('k,name', [(0, 'hold_rmse_2'), (1, 'hold_rmse_6'), (2, 'hold_rmse_11'),
-                                    (4, 'hold_rmse_11b')])
+@pytest.mark.parametrize('k,name', [(0, 'hold_rmse_4'), (1, 'hold_rmse_11')])
 def test_hold_rmse_fails_on_oscillation(ideal, k, name):
     amp = 2.0 * M.LIMITS[name]
     t_in = first_t(ideal, in_hold(k)) + M.HOLD_SETTLE
@@ -200,22 +220,22 @@ def test_hold_rmse_fails_on_oscillation(ideal, k, name):
 
 
 def test_hold_rmse_ignores_the_settling_second(ideal):
-    t_in = first_t(ideal, in_hold(1))
+    t_in = first_t(ideal, in_hold(0))
     rows = edit(ideal, lambda r: t_in <= r['t'] < t_in + 0.9, speed=lambda r: r['speed'] + 0.2)
-    assert run(rows)['hold_rmse_6']['pass']
+    assert run(rows)['hold_rmse_4']['pass']
 
 
 def test_overshoot_fails_on_a_bump_in_the_top_hold(ideal):
-    t_in = first_t(ideal, in_hold(2))
+    t_in = first_t(ideal, in_hold(1))
     rows = edit(ideal, lambda r: t_in <= r['t'] < t_in + 0.5, speed=lambda r: r['speed'] + 1.0)
     c = fails_only(rows, 'overshoot')
-    assert c['value'] == pytest.approx(100.0 * 1.0 / 5.0, rel=1e-6)
+    assert c['value'] == pytest.approx(100.0 * 1.0 / 7.0, rel=1e-6)
 
 
 def test_reach_fails_on_a_slow_step(ideal):
     h = PROFILE.hold(1)
     t_in = first_t(ideal, in_hold(1))
-    level = h.v0 - 0.1 * 4.0
+    level = h.v0 - 0.1 * 7.0
     # late by 0.8 s: past the reach limit, still inside the hold's settling second
     rows = edit(ideal, lambda r: PROFILE.hold(0).s1 <= r['s'] and r['t'] < t_in + 0.8,
                 speed=lambda r: min(r['speed'], level - 0.05))
@@ -248,55 +268,6 @@ def test_launch_accel_fails_on_a_lurch(ideal):
     assert checks['launch_accel']['value'] > 7.0
 
 
-def test_stepdown_undershoot_fails_on_a_dip(ideal):
-    t_in = first_t(ideal, in_hold(3))
-    rows = edit(ideal, lambda r: t_in <= r['t'] < t_in + 0.5, speed=lambda r: 5.0)
-    c = fails_only(rows, 'stepdown_undershoot')
-    assert c['value'] == pytest.approx(20.0)
-
-
-def test_stepdown_ignores_the_estop_stop(ideal):
-    # the e-stop takes the car to 0 in the same hold; that is not an undershoot
-    checks = run(ideal)
-    assert checks['stepdown_undershoot']['value'] == pytest.approx(0.0)
-
-
-def test_stepdown_kappa_fails_on_rear_lock(ideal):
-    dec = PROFILE.before(PROFILE.hold(3))
-    rows = edit(ideal, lambda r: dec.s0 <= r['s'] < dec.s0 + 2.0, kappa_r=lambda r: -0.5)
-    fails_only(rows, 'stepdown_kappa')
-
-
-def test_estop_reverse_fails_on_reversing(ideal):
-    # the car at rest under the e-stop rolls backwards
-    rows = edit(ideal, lambda r: r['emergency'] and r['speed'] == 0.0, speed=lambda r: -0.2)
-    c = fails_only(rows, 'estop_reverse')
-    assert c['value'] == -0.2
-
-
-def test_estop_resume_slip_fails_on_spin_after_the_clear(ideal):
-    t_off = next(r['t'] for i, r in enumerate(ideal)
-                 if i and ideal[i - 1]['emergency'] and not r['emergency'])
-    rows = edit(ideal, lambda r: t_off + 0.2 <= r['t'] < t_off + 0.5, slip_r=lambda r: 0.8)
-    fails_only(rows, 'estop_resume_slip')
-
-
-def test_estop_resume_overshoot_fails_on_a_bump(ideal):
-    t_off = next(r['t'] for i, r in enumerate(ideal)
-                 if i and ideal[i - 1]['emergency'] and not r['emergency'])
-    h3 = PROFILE.hold(3)
-    rows = edit(ideal, lambda r: r['t'] > t_off and r['s'] < h3.s1 and r['speed'] > 5.9,
-                speed=lambda r: 7.0)
-    c = fails_only(rows, 'estop_resume_overshoot')
-    assert c['value'] == pytest.approx(100.0 / 6.0)
-
-
-def test_estop_checks_fail_when_no_estop_happened():
-    checks = run(ideal_rows(estop=False))
-    for n in ('estop_reverse', 'estop_resume_slip', 'estop_resume_overshoot'):
-        assert checks[n]['pass'] is False and checks[n]['value'] is None
-
-
 def test_stop_error_fails_past_the_line():
     rows = ideal_rows(stop_offset=0.8)
     c = fails_only(rows, 'stop_error')
@@ -325,7 +296,7 @@ def test_standstill_kappa_artifact_is_not_a_lock(ideal):
     # the slip ratio reads < -0.2 below ~0.1 m/s at every stop (rc_sim, P2): not counted
     rows = edit(ideal, lambda r: r['speed'] < 0.1, kappa_r=lambda r: -0.9)
     checks = run(rows)
-    assert checks['stop_kappa']['pass'] and checks['stepdown_kappa']['pass']
+    assert checks['stop_kappa']['pass']
     assert all(c['pass'] for c in checks.values())
 
 
@@ -339,34 +310,24 @@ def test_lock_just_above_the_speed_gate_counts(ideal):
 # ---------------------------------------------------------------- live windows
 
 def test_live_checks_open_as_segments_complete(ideal):
-    h1 = PROFILE.hold(1)
-    part = [r for r in ideal if r['s'] < h1.s1 + 0.5]
+    h0 = PROFILE.hold(0)
+    part = [r for r in ideal if r['s'] < h0.s1 + 0.5]
     checks = run(part, finished=False)
     closed = {n for n, c in checks.items() if c['pass'] is not None}
-    assert closed == {'hold_rmse_2', 'hold_rmse_6', 'launch_slip', 'launch_accel'}
+    assert closed == {'hold_rmse_4', 'launch_slip', 'launch_accel'}
     assert all(c['value'] is None for n, c in checks.items() if n not in closed)
     assert not M.is_finished(M.Trace(part), PROFILE)
 
 
-def test_live_estop_checks_close_after_the_resume(ideal):
-    h3 = PROFILE.hold(3)
-    on = M.Trace(ideal)
-    i_on, i_off = M.estop_times(on)
-    during = ideal[:i_on + 50]
-    c = run(during, finished=False)
-    assert c['stepdown_undershoot']['pass'] is True
-    assert c['estop_reverse']['pass'] is None
-    after = [r for i, r in enumerate(ideal) if i < i_off or r['s'] < h3.s1 + 0.2]
-    c = run(after, finished=False)
-    assert c['estop_resume_overshoot']['pass'] is True
-    assert c['stop_error']['pass'] is None and c['hold_rmse_11b']['pass'] is None
+def test_live_step_checks_close_after_the_top_hold(ideal):
+    h1 = PROFILE.hold(1)
+    c = run([r for r in ideal if r['s'] < h1.s1 + 0.2], finished=False)
+    assert all(c[n]['pass'] is True for n in ('hold_rmse_11', 'overshoot', 'reach_s'))
+    assert all(c[n]['pass'] is None for n in ('stop_lag', 'stop_error', 'stop_kappa'))
 
 
 def test_finish_detection(ideal):
     assert M.is_finished(M.Trace(ideal), PROFILE)
-    # at rest during the e-stop is not the finish
-    _, i_off = M.estop_times(M.Trace(ideal))
-    assert not M.is_finished(M.Trace(ideal[:i_off]), PROFILE)
     # one second at rest at the line is not enough
     b = PROFILE.first('brake')
     i_rest = next(i for i, r in enumerate(ideal) if r['s'] >= b.s0 and r['speed'] == 0.0)
@@ -378,7 +339,7 @@ def test_empty_trace():
     checks = M.evaluate(M.Trace(), PROFILE, finished=False)
     assert all(c['pass'] is None for c in checks.values())
     checks = M.evaluate(M.Trace(), PROFILE, finished=True)
-    assert M.summary(checks, True) == (0, 16)
+    assert M.summary(checks, True) == (0, N)
 
 
 # ---------------------------------------------------------------- validity and limits
@@ -403,7 +364,7 @@ def test_actuator_missing_after_the_grace():
 
 def test_invalid_run_scores_zero(ideal):
     checks = run(ideal)
-    assert M.summary(checks, valid=False) == (0, 16)
+    assert M.summary(checks, valid=False) == (0, N)
 
 
 def test_limits_table_is_complete():
@@ -414,15 +375,15 @@ def test_limits_table_is_complete():
 
 
 def test_fixed_limits_unchanged():
-    assert M.LIMITS['launch_slip'] == 0.5 and M.LIMITS['estop_resume_slip'] == 0.5
-    assert M.LIMITS['stepdown_kappa'] == M.LIMITS['stop_kappa'] == -0.2
-    assert M.LIMITS['estop_reverse'] == -0.05 and M.LIMITS['stop_error'] == 0.5
+    assert M.LIMITS['launch_slip'] == 0.5 and M.LIMITS['stop_kappa'] == -0.2
+    assert M.LIMITS['stop_error'] == 0.5
+    assert M.FIXED == ('launch_slip', 'stop_error', 'stop_kappa')
 
 
 def test_nonfinite_value_fails():
     assert not M.passes('reach_s', float('nan'), 1.0)
-    assert not M.passes('estop_reverse', None, -0.05)
-    assert M.passes('estop_reverse', 0.0, -0.05)
+    assert not M.passes('stop_kappa', None, -0.2)
+    assert M.passes('stop_kappa', 0.0, -0.2)
 
 
 # ---------------------------------------------------------------- the grader node, fed directly
@@ -495,12 +456,12 @@ def _grade_live(tmp_path, rows, mode_at=None, t_engage=0.0, params=(), drop=None
 def test_grader_node_grades_an_ideal_run(tmp_path, ideal):
     out, status = _grade_live(tmp_path, ideal)
     marks = json.loads((out / 'marks.json').read_text())
-    assert marks['valid'] and marks['passed'] == 16 and marks['total'] == 16, marks
+    assert marks['valid'] and marks['passed'] == N and marks['total'] == N, marks
     assert set(marks) >= {'variant', 'valid', 'invalid_reason', 'passed', 'total', 'checks'}
-    assert status['state'] == 'finished' and status['marks'] == {'passed': 16, 'total': 16}
+    assert status['state'] == 'finished' and status['marks'] == {'passed': N, 'total': N}
     back = M.Trace.read_csv(out / 'trace.csv')
-    assert len(back) > 3000 and back['t'][1] - back['t'][0] == pytest.approx(0.01)
-    assert sum(back['emergency']) > 100
+    assert len(back) > 1500 and back['t'][1] - back['t'][0] == pytest.approx(0.01)
+    assert sum(back['emergency']) == 0
 
 
 def test_grader_node_invalid_without_the_actuator(tmp_path, ideal):
@@ -536,25 +497,6 @@ def test_path_frame_projection():
     assert f.point_at(9.0)[0] == pytest.approx(10.0)
 
 
-def test_resume_window_follows_the_ramped_target(ideal):
-    tr = M.Trace(ideal)
-    _, off = M.estop_times(tr)
-    end = M._resume_end(tr, PROFILE, off)
-    t_reach = next(r['t'] for r in ideal[off:] if r['target'] >= 6.0 - M.RESUME_TARGET_TOL)
-    assert t_reach - ideal[off]['t'] == pytest.approx(6.0 / A, abs=0.1)   # the 2.5 m/s^2 ramp
-    assert ideal[end]['t'] == pytest.approx(t_reach + M.RESUME_SETTLE, abs=0.02)
-    assert ideal[end]['s'] < PROFILE.hold(3).s1   # the 6 s hold leaves room after the resume
-
-
-def test_a_bump_after_the_resume_window_is_not_a_resume_overshoot(ideal):
-    tr = M.Trace(ideal)
-    _, off = M.estop_times(tr)
-    t_end = ideal[M._resume_end(tr, PROFILE, off)]['t']
-    h3 = PROFILE.hold(3)
-    rows = edit(ideal, lambda r: r['t'] > t_end + 0.1 and r['s'] < h3.s1, speed=lambda r: 7.0)
-    assert run(rows)['estop_resume_overshoot']['pass']
-
-
 def test_creep_below_the_rest_threshold_finishes():
     rows = ideal_rows(creep=0.03)
     tr = M.Trace(rows)
@@ -570,29 +512,16 @@ def test_creep_above_the_rest_threshold_never_finishes():
 
 
 def test_braking_rate_comes_from_the_profile():
-    dec = PROFILE.before(PROFILE.hold(3))
-    assert dec.kind == 'decel'
-    assert (dec.v0 ** 2 - dec.v1 ** 2) / (2 * (dec.s1 - dec.s0)) == pytest.approx(D)
     b = PROFILE.first('brake')
     assert b.v0 ** 2 / (2 * (b.s1 - b.s0)) == pytest.approx(D)
 
 
 # ---------------------------------------------------------------- fix round 1
 
-def test_stepdown_window_ends_at_the_trigger():
-    rows = ideal_rows(estop=False)
-    trig = PROFILE.estop_trigger_s
-    assert trig == pytest.approx(PROFILE.hold(3).s0 + 15.0)
-    after = edit(rows, lambda r: trig + 1.0 <= r['s'] < trig + 4.0, speed=lambda r: 5.0)
-    assert run(after)['stepdown_undershoot']['value'] == pytest.approx(0.0)
-    before = edit(rows, lambda r: trig - 4.0 <= r['s'] < trig - 1.0, speed=lambda r: 5.0)
-    assert run(before)['stepdown_undershoot']['value'] == pytest.approx(20.0)
-
-
 @pytest.mark.parametrize('col,where,name', [
     ('speed', lambda r: 0.6 < r['t'] < 0.9, 'launch_accel'),
     ('slip_r', lambda r: 0.6 < r['t'] < 0.9, 'launch_slip'),
-    ('speed', lambda r: r['s'] >= 0.5 * (PROFILE.hold(2).s0 + PROFILE.hold(2).s1),
+    ('speed', lambda r: r['s'] >= 0.5 * (PROFILE.hold(1).s0 + PROFILE.hold(1).s1),
      'hold_rmse_11'),
     ('kappa_r', lambda r: r['s'] >= PROFILE.first('brake').s0 + 1.0
      and r['speed'] > 2.0, 'stop_kappa'),
@@ -612,13 +541,13 @@ def test_nan_in_a_window_fails(ideal, col, where, name):
 
 
 def test_unclosed_checks_fail_or_stay_pending(ideal):
-    part = [r for r in ideal if r['s'] < PROFILE.hold(1).s1 + 0.5]
+    part = [r for r in ideal if r['s'] < PROFILE.hold(0).s1 + 0.5]
     tr = M.Trace(part)
     pend = M.evaluate(tr, PROFILE, finished=False, unclosed='pending')
     fail = M.evaluate(tr, PROFILE, finished=False, unclosed='fail')
     assert pend['stop_error']['pass'] is None and fail['stop_error']['pass'] is False
     assert fail['stop_error']['value'] is None
-    assert fail['hold_rmse_2']['pass'] is True     # closed windows keep their verdict
+    assert fail['hold_rmse_4']['pass'] is True     # closed windows keep their verdict
     # a partly driven hold must not show as passed
     assert pend['hold_rmse_11']['pass'] is None
 
@@ -647,16 +576,18 @@ def test_stall_stopped_mid_run(ideal):
     assert msg and msg.startswith('Your car stopped at s =')
 
 
-def test_no_stall_on_a_good_run_or_under_the_estop(ideal):
+def test_no_stall_on_a_good_run(ideal):
     tr = M.Trace(ideal)
     for n in range(500, len(ideal), 500):
         assert M.stall_message(M.Trace(ideal[:n]), 0.0) is None
     assert M.stall_message(tr, 0.0) is None
 
 
-def test_estop_missing():
-    assert M.estop_missing(M.Trace(ideal_rows(estop=False)), PROFILE)
-    assert M.estop_missing(M.Trace(ideal_rows()), PROFILE) is None
+def test_estop_missing_only_when_the_profile_has_one():
+    assert M.estop_missing(M.Trace(ideal_rows()), PROFILE) is None     # no e-stop: never
+    p = M.profile_from_dict(make_profile_dict(estop_offset=10.0))
+    assert M.estop_missing(M.Trace(ideal_rows(p)), p)
+    assert M.estop_missing(M.Trace(ideal_rows(p, estop=True)), p) is None
 
 
 def test_grader_node_stub_is_a_valid_failing_run(tmp_path):
@@ -664,7 +595,7 @@ def test_grader_node_stub_is_a_valid_failing_run(tmp_path):
     marks = json.loads((out / 'marks.json').read_text())
     assert marks['valid'] is True and marks['invalid_reason'] is None
     assert 'did not move' in marks['message'] and 'stub' in marks['message']
-    assert marks['passed'] < 16
+    assert marks['passed'] < N
     assert all(c['pass'] is False for n, c in marks['checks'].items()
                if c['value'] is None)
     assert status['state'] == 'finished' and status['message'] == marks['message']
@@ -676,7 +607,7 @@ def test_grader_node_timeout_counts_from_the_engage(tmp_path, ideal):
     shifted = [dict(r, t=round(r['t'] + boot, 2)) for r in ideal]
     out, status = _grade_live(tmp_path, rest + shifted, t_engage=boot)
     marks = json.loads((out / 'marks.json').read_text())
-    assert marks['valid'] and marks['passed'] == 16, marks['message']
+    assert marks['valid'] and marks['passed'] == N, marks['message']
 
 
 def test_grader_node_never_engaged_is_invalid(tmp_path):
@@ -692,7 +623,7 @@ def test_grader_node_invalid_run_shows_no_false_passes(tmp_path, ideal):
     out, _ = _grade_live(tmp_path, ideal, mode_at=(6.0, 'override_brake:controller_fault'))
     marks = json.loads((out / 'marks.json').read_text())
     assert not marks['valid']
-    assert marks['checks']['hold_rmse_11b']['pass'] is None     # never reached
+    assert marks['checks']['hold_rmse_11']['pass'] is None      # never reached
     assert marks['checks']['stop_error']['pass'] is None
 
 
@@ -702,18 +633,20 @@ def test_grader_node_notes_state_gaps(tmp_path, ideal):
     assert any('gap' in n for n in marks['notes']), marks['notes']
 
 
-def test_stepdown_lag_fails_a_car_that_cannot_slow_down(ideal):
-    dec = PROFILE.before(PROFILE.hold(3))
-    rows = edit(ideal, lambda r: dec.s0 + 2.0 <= r['s'] < dec.s1,
+def test_stop_lag_fails_a_car_that_cannot_slow_down(ideal):
+    b = PROFILE.first('brake')
+    rows = edit(ideal, lambda r: b.s0 + 2.0 <= r['s'] < b.s1 - 5.0,
                 speed=lambda r: r['target'] + 1.5)
-    c = fails_only(rows, 'stepdown_lag')
+    c = fails_only(rows, 'stop_lag')
     assert c['value'] == pytest.approx(1.5)
-    assert dec.s0 <= c['s'] < dec.s1
+    assert b.s0 <= c['s'] < b.s1
 
 
-def test_stepdown_lag_ignores_the_estop(ideal):
-    # the e-stop drops the target to 0 while the car is at 6 m/s: not a step-down lag
-    assert run(ideal)['stepdown_lag']['value'] < 0.1
+def test_stop_lag_is_the_final_brake_only(ideal):
+    # the car above the target before the brake is the hold's business, not stop_lag's
+    h1 = PROFILE.hold(1)
+    rows = edit(ideal, lambda r: h1.s1 - 3.0 <= r['s'] < h1.s1, target=lambda r: 9.0)
+    assert run(rows)['stop_lag']['value'] < 0.1
 
 
 def test_lockstep_stall_before_engage_is_a_startup_fault(tmp_path, ideal):
