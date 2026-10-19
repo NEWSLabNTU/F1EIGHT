@@ -18,14 +18,15 @@ TMP = REPO / 'tmp' / 'test_lab2_run'
 # ---- arguments
 
 def test_parse_splits_settings_flags_and_launch_args():
-    o = lr.parse_args(['--bench', 'config:=x.yaml', 'car:=B', 'team:=3', 'team_dir:=/t',
-                       'seed:=21', '--camera', 'mock', '--timeout=90'])
+    o = lr.parse_args(['--bench', 'config:=x.yaml', 'car:=B', 'team:=3',
+                       'vehicle_model:=team3_vehicle', 'seed:=21', '--camera', 'mock', '--timeout=90'])
     assert o.bench and not o.yes
-    assert o.camera == 'mock' and o.timeout == 90.0
-    assert o.config_args == ('config:=x.yaml', 'car:=B', 'team:=3', 'team_dir:=/t')
+    assert o.camera == 'mock' and o.timeout == 90.0 and o.team == '3'
+    assert o.config_args == ('config:=x.yaml', 'car:=B', 'vehicle_model:=team3_vehicle')
     assert o.launch_args == ('seed:=21',)
-    # team:= is the number, for the recorder; the stack gets team_dir only
-    assert lr.vehicle_config_args(o.config_args) == ['config:=x.yaml', 'car:=B', 'team_dir:=/t']
+    # team:= (the number) is the recorder's; the stack gets the model
+    assert lr.vehicle_config_args(o.config_args + ('team:=3',)) == \
+        ['config:=x.yaml', 'car:=B', 'vehicle_model:=team3_vehicle']
 
 
 def test_yes_only_on_the_bench():
@@ -168,74 +169,77 @@ def test_child_stop_sigint_is_enough_for_a_polite_group():
 
 # ---- the simple command: `just lab2 run team:=3` / `just lab2 run DIR`
 
-def team_dir(home, name='team3', controller='B12345678_lab_2_1'):
-    d = home / name
-    pkg = d / controller / 'lab2_speed'
-    (pkg / 'lab2_speed').mkdir(parents=True)
-    (pkg / 'package.xml').write_text('<package/>')
-    (pkg / 'lab2_speed' / 'speed_pid.py').write_text('class SpeedPID: pass\n')
-    (pkg / 'config').mkdir()
-    (pkg / 'config' / 'speed_pid_car.yaml').write_text('kp: 1.0\n')
-    return d
+class Settings(dict):
+    """lab2_config.Config's get/source over a dict: every value from 'the file'."""
+    def source(self, k):
+        return 'file' if k in self else 'not set'
 
 
-def test_parse_takes_team_number_dir_and_force_flags():
+def built(*models):
+    return lambda m: m in models
+
+
+def test_parse_takes_a_team_number_and_force_flags():
     o = lr.parse_args(['team:=3'])
-    assert o.team == '3' and o.team_pos is None and o.config_args == ()
-    o = lr.parse_args(['/x/team3', '--car'])
-    assert o.team_pos == '/x/team3' and o.car
-    o = lr.parse_args(['team:=/x/t', 'team_number:=7'])
-    assert o.team == '/x/t' and o.team_number == '7'
-    with pytest.raises(lr.UsageError, match='one team'):
-        lr.parse_args(['team:=3', '/x/team3'])
+    assert o.team == '3' and o.config_args == ()
+    o = lr.parse_args(['team:=3', '--car', 'team_number:=7'])
+    assert o.car and o.team_number == '7'
+    with pytest.raises(lr.UsageError, match='team NUMBER'):
+        lr.parse_args(['team:=/x/team3'])
+    with pytest.raises(lr.UsageError, match='no longer a directory'):
+        lr.parse_args(['/x/team3'])
     with pytest.raises(lr.UsageError, match='car:=A'):
         lr.parse_args(['A'])                        # a car letter is car:=, and the TA's
+    for gone in ('team_dir:=/t', 'submission:=/s', 'speed_controller_class:=a.b:C'):
+        with pytest.raises(lr.UsageError, match='is gone'):
+            lr.parse_args([gone])
 
 
-def test_team_number_resolves_under_lab2_home(tmp_path):
-    d = team_dir(tmp_path)
-    args, note = lr.resolve_team(lr.parse_args(['team:=3']), {}, tmp_path)
-    assert args == [f'team_dir:={d}', 'team:=3']
+def test_team_number_runs_its_model():
+    args, note, model = lr.resolve_model(lr.parse_args(['team:=3']), Settings(),
+                                         built('team3_vehicle'))
+    assert args == ['vehicle_model:=team3_vehicle', 'team:=3'] and model == 'team3_vehicle'
 
 
-def test_team_directory_gives_its_number(tmp_path):
-    d = team_dir(tmp_path, 'team12')
-    args, _ = lr.resolve_team(lr.parse_args([str(d)]), {}, tmp_path)
-    assert args == [f'team_dir:={d}', 'team:=12']
-    args, _ = lr.resolve_team(lr.parse_args([f'team:={d}']), {}, tmp_path)
-    assert args == [f'team_dir:={d}', 'team:=12']
-
-
-def test_other_directory_needs_a_team_number(tmp_path):
-    d = team_dir(tmp_path, 'red_team')
+def test_a_model_gives_its_team_number_or_asks():
+    o = lr.parse_args(['vehicle_model:=team12_vehicle'])
+    s = Settings(vehicle_model='team12_vehicle')
+    assert lr.resolve_model(o, s, built('team12_vehicle'))[0] == \
+        ['vehicle_model:=team12_vehicle', 'team:=12']
+    s = Settings(vehicle_model='red_vehicle')
     with pytest.raises(lr.UsageError, match='team_number:='):
-        lr.resolve_team(lr.parse_args([str(d)]), {}, tmp_path)
-    args, _ = lr.resolve_team(lr.parse_args([str(d), 'team_number:=5']), {}, tmp_path)
-    assert args == [f'team_dir:={d}', 'team:=5']
-    args, note = lr.resolve_team(lr.parse_args([str(d)]), {'team': '4'}, tmp_path)
-    assert args == [f'team_dir:={d}', 'team:=4'] and 'settings' in note
+        lr.resolve_model(lr.parse_args([]), s, built('red_vehicle'))
+    assert lr.resolve_model(lr.parse_args(['team_number:=5']), s, built('red_vehicle'))[0] == \
+        ['vehicle_model:=red_vehicle', 'team:=5']
+    args, note, _ = lr.resolve_model(lr.parse_args([]), Settings(vehicle_model='red_vehicle', team='4'),
+                                     built('red_vehicle'))
+    assert args == ['vehicle_model:=red_vehicle', 'team:=4'] and 'settings' in note
 
 
-def test_missing_or_broken_team_directory_is_a_usage_error(tmp_path):
-    with pytest.raises(lr.UsageError, match='team3'):
-        lr.resolve_team(lr.parse_args(['team:=3']), {}, tmp_path)
-    (tmp_path / 'team4').mkdir()                    # no controller inside
-    with pytest.raises(lr.UsageError, match='lab_2_1'):
-        lr.resolve_team(lr.parse_args(['team:=4']), {}, tmp_path)
+def test_no_team_runs_the_reference_as_team_0():
+    args, note, model = lr.resolve_model(lr.parse_args([]), Settings(), built('autosdv_vehicle'))
+    assert args == ['vehicle_model:=autosdv_vehicle', 'team:=0'] and 'reference' in note
+    # the settings' team names the model
+    assert lr.resolve_model(lr.parse_args([]), Settings(team='3'), built('team3_vehicle'))[0] == \
+        ['vehicle_model:=team3_vehicle', 'team:=3']
 
 
-def test_no_team_falls_back_to_the_settings_or_asks(tmp_path):
-    assert lr.resolve_team(lr.parse_args([]), {'team_dir': '/t', 'team': '3'}, tmp_path) == ([], '')
-    with pytest.raises(lr.UsageError, match='just lab2 run team:='):
-        lr.resolve_team(lr.parse_args([]), {}, tmp_path)
+def test_an_unbuilt_model_says_how_to_build_it():
+    with pytest.raises(lr.UsageError, match='new-team 3.*build-teams'):
+        lr.resolve_model(lr.parse_args(['team:=3']), Settings(), built())
 
 
-def test_team_with_an_explicit_controller_is_the_number(tmp_path):
-    """integration-test passes team:=0 beside speed_controller_class:= / submission:=."""
-    for extra in ('speed_controller_class:=a.b:C', 'submission:=/s', 'team_dir:=/t'):
-        o = lr.parse_args(['--bench', 'team:=0', extra])
-        assert lr.resolve_team(o, {}, tmp_path) == ([], '')
-        assert 'team:=0' in o.config_args
+def test_the_car_needs_a_gate_pass_of_this_source(tmp_path):
+    import gate_stamp as gs
+    assert gs.check('autosdv_vehicle', tmp_path, digest='x') == (True, '')
+    ok, why = gs.check('team3_vehicle', tmp_path, digest='abc')
+    assert not ok and 'has not passed' in why
+    gs.write('team3_vehicle', False, {}, tmp_path, digest='abc')
+    assert 'FAILED' in gs.check('team3_vehicle', tmp_path, digest='abc')[1]
+    gs.write('team3_vehicle', True, {}, tmp_path, digest='abc')
+    assert gs.check('team3_vehicle', tmp_path, digest='abc') == (True, '')
+    ok, why = gs.check('team3_vehicle', tmp_path, digest='edited')
+    assert not ok and 'changed since' in why
 
 
 def test_gate_verdict_passes_a_clean_finish():
@@ -251,7 +255,7 @@ def test_gate_verdict_passes_a_clean_finish():
     (lr.End('stalled', 'car did not move'), {'stalled': True}, 'did not move'),
     (lr.End('localization', 'localization lost: x'), {}, 'localization lost'),
     (lr.End('stack', 'the stack exited'), {}, 'the stack exited'),
-    (lr.End('finished', 'stopped'), {'faults': ['neutral:controller_fault']}, 'SpeedPID fault'),
+    (lr.End('finished', 'stopped'), {'faults': ['neutral:controller_fault']}, 'speed controller fault'),
     (lr.End('finished', 'stopped'), {'speeds': [2.5] * 20}, 'speed'),
 ])
 def test_gate_verdict_fails_with_the_reason(end, kw, word):
@@ -277,7 +281,7 @@ def test_car_stack_carries_the_vehicle_id(tmp_path, monkeypatch):
     import lab2_config as lc
     monkeypatch.setattr(lc, 'SURVEY_LATEST', tmp_path / 'no_survey')
     f = tmp_path / 'lab2.yaml'
-    f.write_text(f'car: A\nteam: 3\nteam_dir: /t/team3\nbag_dir: {tmp_path / "bags"}\n')
+    f.write_text(f'car: A\nteam: 3\nbag_dir: {tmp_path / "bags"}\n')
     run = lr.Run(lr.parse_args([f'config:={f}', 'car:=B']))
     run.plan()
     cmd = run.stack_cmd
@@ -286,6 +290,6 @@ def test_car_stack_carries_the_vehicle_id(tmp_path, monkeypatch):
     again, _ = lc.plan('vehicle', cmd[5:])
     assert [a for a in again if a.startswith('vehicle_id:=')] == ['vehicle_id:=car_b']
     # no car anywhere: refused before anything starts
-    f.write_text(f'team: 3\nteam_dir: /t/team3\nbag_dir: {tmp_path / "bags"}\n')
+    f.write_text(f'team: 3\nbag_dir: {tmp_path / "bags"}\n')
     with pytest.raises(lc.ConfigError, match='no car set'):
         lr.Run(lr.parse_args([f'config:={f}'])).plan()

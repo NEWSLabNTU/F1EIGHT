@@ -1,0 +1,70 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<!--
+  Lab 2 vehicle gate, safety half: one vehicle model against one car's ESC, in the RC
+  simulator. `just lab2 gate vehicle_model:=...` starts it once per car
+  (scripts/testing/lab2/vehicle_gate.py); the route half is the vehicle bench.
+
+    lab2_vehicle_gate_probe (autosdv_waypoint_lab/vehicle_gate.py)
+      -> /control/command/control_cmd, /control/command/emergency_cmd,
+         /system/fail_safe/mrm_state
+      -> $(var vehicle_model)_launch vehicle_interface.launch.xml, hardware:=sim,
+         vehicle_id:=$(var vehicle_id)
+      -> /rc_sim/pwm -> rc_sim_plant (the car's ESC and servo points, pwm_param_files)
+      -> /rc_sim/hall_edges -> the model's velocity_report
+    rc_sim_plant -> /localization/kinematic_state, /clock
+
+  Nothing else of the Lab 2 stack runs: no gate, no tracker, no mode manager, so what
+  stops the car here is the model alone. The plant reads the car's points from the files
+  the actuator of the REFERENCE would load (actuator.yaml, the overrides, the car's
+  individual_params file): the car is the car, whatever the model does with them.
+-->
+<launch>
+  <arg name="vehicle_model" default="autosdv_vehicle"/>
+  <arg name="vehicle_id" description="REQUIRED: car_a, car_b, car_c (or sim)"/>
+  <arg name="out_file" description="REQUIRED: the probe writes its verdict (JSON) here"/>
+  <arg name="real_time_factor" default="1.0"/>
+  <arg name="actuator_param_overrides"
+       default="$(find-pkg-share autosdv_rc_sim)/config/actuator_rc_sim.param.yaml"
+       description="as on the car (the lab's steering stand-in), plus the debug topics"/>
+
+  <let name="car_param_file"
+       value="$(find-pkg-share individual_params)/config/$(var vehicle_id)/autosdv_vehicle/actuator.param.yaml"/>
+  <let name="reference_actuator"
+       value="$(find-pkg-share autosdv_vehicle_interface)/params/actuator.yaml"/>
+
+  <set_parameter name="use_sim_time" value="true"/>
+
+  <include file="$(find-pkg-share $(var vehicle_model)_launch)/launch/vehicle_interface.launch.xml">
+    <arg name="hardware" value="sim"/>
+    <arg name="launch_vehicle_interface" value="true"/>
+    <arg name="is_simulation" value="false"/>
+    <arg name="vehicle_id" value="$(var vehicle_id)"/>
+    <arg name="emergency_stop_on_any_mrm" value="true"/>
+    <arg name="publish_operation_mode_availability" value="false"/>
+    <arg name="launch_signal_manager" value="false"/>
+    <arg name="actuator_param_overrides" value="$(var actuator_param_overrides)"/>
+  </include>
+
+  <node pkg="autosdv_waypoint_lab" exec="lab2_vehicle_gate_probe" name="lab2_vehicle_gate_probe"
+        output="screen">
+    <param name="use_sim_time" value="true"/>
+    <param name="param_files"
+           value="[$(var reference_actuator), $(var actuator_param_overrides), $(var car_param_file)]"/>
+    <param name="out_file" value="$(var out_file)"/>
+    <param name="vehicle_model" value="$(var vehicle_model)"/>
+    <param name="vehicle_id" value="$(var vehicle_id)"/>
+  </node>
+
+  <!-- the plant owns /clock: wall time, last (see lab2_part1_sim.launch.xml) -->
+  <group scoped="true">
+    <set_parameter name="use_sim_time" value="false"/>
+    <node pkg="autosdv_rc_sim" exec="rc_sim_plant" name="rc_sim_plant" output="screen">
+      <param from="$(find-pkg-share individual_params)/config/$(var vehicle_id)/autosdv_sensor_kit/imu_corrector.param.yaml"/>
+      <param name="use_sim_time" value="false"/>
+      <param name="real_time_factor" value="$(var real_time_factor)"/>
+      <param name="lockstep" value="false"/>
+      <param name="pwm_param_files"
+             value="[$(var reference_actuator), $(var actuator_param_overrides), $(var car_param_file)]"/>
+    </node>
+  </group>
+</launch>

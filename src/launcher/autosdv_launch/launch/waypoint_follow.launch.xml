@@ -7,8 +7,8 @@
     velocity_report + ZED IMU -> gyro_odometer -> twist ─┴> ekf_localizer
                                                   -> /localization/kinematic_state
     course path.csv -> waypoint_path_publisher -> /planning/trajectory
-                    -> path_tracker [student PathTracker] -> control_cmd
-                    -> vehicle_cmd_gate -> actuator [safety shell + student SpeedPID] -> PWM
+                    -> path_tracker [the TA's PathTracker] -> control_cmd
+                    -> vehicle_cmd_gate -> <vehicle_model>_launch vehicle interface -> PWM
 
   autosdv.launch.yaml with map, localization, perception, planning, control,
   system and AD API off, and the sensor kit's drivers off (no LiDAR in this
@@ -103,17 +103,23 @@
        default="$(find-pkg-share autosdv_waypoint_lab)/config/actuator_lab2.param.yaml"
        description="the measured steering ratio for this car"/>
 
-  <!-- the student's laws -->
+  <!-- the path tracker (the TA's) and the speed controller -->
   <arg name="tracker_class" default="autosdv_waypoint_lab.reference.path_tracker:PathTracker"/>
   <arg name="tracker_param_file" default="$(find-pkg-share autosdv_waypoint_lab)/config/path_tracker.param.yaml"/>
-  <arg name="speed_controller_class"
-       default="autosdv_vehicle_interface.speed_controller:AckermannSpeedPID"
-       description="SpeedPID, package.module:ClassName"/>
+  <!-- The vehicle model's own speed controller and tuning by default: the model
+       (vehicle_model, below) is the submission, and its vehicle_interface.launch.xml
+       picks the class. A class given here is passed on (TA tools, Part 1's
+       controller-only runs); empty passes nothing. -->
+  <arg name="speed_controller_class" default=""
+       description="empty: the vehicle model's own; else package.module:ClassName, passed to the model's vehicle interface"/>
   <arg name="speed_controller_params" default=""
-       description="its parameters, a YAML mapping string: {kp: 20.0, ki: 4.0}"/>
+       description="with speed_controller_class only: its parameters, a YAML mapping string: {kp: 20.0, ki: 4.0}"/>
   <arg name="speed_controller_dt_source" default="loop"/>
   <arg name="is_simulation" default="false" description="actuator dry run: no PWM (hardware:=sim ignores it)"/>
-  <!-- the models (packages); default: the vehicle_id preset's -->
+  <!-- the models (packages); default: the vehicle_id preset's. vehicle_model is
+       Autoware's: <model>_launch/launch/vehicle_interface.launch.xml is the vehicle
+       interface, <model>_description the geometry. Lab 2: autosdv_vehicle (the
+       reference) or a team's, e.g. team3_vehicle (`just lab2 new-team 3`). -->
   <arg name="vehicle_model" default="autosdv_vehicle"/>
   <arg name="sensor_model" default="autosdv_sensor_kit"/>
   <arg name="use_sim_time" default="false"/>
@@ -214,7 +220,24 @@
   <!-- sim: the plant is the hardware, so no dry run -->
   <let name="vi_hardware" value="$(eval &quot;'sim' if $(var hardware_sim) else 'real'&quot;)"/>
   <let name="vi_is_simulation" value="$(eval &quot;'false' if $(var hardware_sim) else '$(var is_simulation)'&quot;)"/>
-  <include file="$(find-pkg-share autosdv_vehicle_launch)/launch/vehicle_interface.launch.xml">
+  <!-- the model's vehicle interface; a controller class only when one is given -->
+  <let name="vi_launch" value="$(find-pkg-share $(var vehicle_model)_launch)/launch/vehicle_interface.launch.xml"/>
+  <let name="vi_own_controller" value="$(eval &quot;'$(var speed_controller_class)' == ''&quot;)"/>
+  <include file="$(var vi_launch)" if="$(var vi_own_controller)">
+    <arg name="hardware" value="$(var vi_hardware)"/>
+    <arg name="launch_vehicle_interface" value="true"/>
+    <arg name="is_simulation" value="$(var vi_is_simulation)"/>
+    <arg name="vehicle_id" value="$(var vehicle_id)"/>
+    <arg name="speed_controller_dt_source" value="$(var speed_controller_dt_source)"/>
+    <!-- the path publisher bypasses Autoware planning and its velocity limit,
+         through which a comfortable-stop MRM acts: brake on any MRM -->
+    <arg name="emergency_stop_on_any_mrm" value="true"/>
+    <arg name="publish_operation_mode_availability" value="false"/>
+    <arg name="launch_signal_manager" value="false"/>
+    <arg name="launch_velocity_report" value="$(var launch_velocity_report)"/>
+    <arg name="actuator_param_overrides" value="$(var actuator_param_overrides)"/>
+  </include>
+  <include file="$(var vi_launch)" unless="$(var vi_own_controller)">
     <arg name="hardware" value="$(var vi_hardware)"/>
     <arg name="launch_vehicle_interface" value="true"/>
     <arg name="is_simulation" value="$(var vi_is_simulation)"/>
@@ -222,8 +245,6 @@
     <arg name="speed_controller_class" value="$(var speed_controller_class)"/>
     <arg name="speed_controller_params" value="$(var speed_controller_params)"/>
     <arg name="speed_controller_dt_source" value="$(var speed_controller_dt_source)"/>
-    <!-- the path publisher bypasses Autoware planning and its velocity limit,
-         through which a comfortable-stop MRM acts: brake on any MRM -->
     <arg name="emergency_stop_on_any_mrm" value="true"/>
     <arg name="publish_operation_mode_availability" value="false"/>
     <arg name="launch_signal_manager" value="false"/>

@@ -1,23 +1,23 @@
 #!/usr/bin/env python3
 """`just lab2 run`: one graded run from one terminal, on the car or on the bench.
 
-    just lab2 run team:=3                  ~/lab2/team3 (the student command)
-    just lab2 run ~/lab2/team3             the same, by directory
+    just lab2 run team:=3                  team 3's vehicle model, team3_vehicle (the student command)
 
     TA:
-    just lab2 run                          team_dir (and team) from ~/lab2/lab2.yaml
-    just lab2 run DIR team_number:=7       a team directory not named teamN
+    just lab2 run                          the settings' vehicle_model / team, else the reference
+    just lab2 run vehicle_model:=team3_vehicle team:=3
+    just lab2 run vehicle_id:=car_c route:=lab2_straight_2m   the reference model on car C
     just lab2 run team:=3 --bench          the vehicle bench, even on a car
     just lab2 run team:=3 --car            the car, even where no Jetson is detected
     just lab2 run --bench --camera mock    ... with rendered boards into the real localizer
     just lab2 run --bench --yes            engage without asking (tests; --bench only)
 
-The team: team:=N is $LAB2_HOME/teamN (~/lab2/teamN), team number N; team:=DIR or a
-positional DIR is that directory (its <student_id>_lab_2_1/ controller and
-path_tracker.param.yaml, as `submission.py --team` reads them), its number from a teamN
-name, else team_number:=, else the settings' `team`. With none, the settings' team_dir.
-Beside an explicit controller (team_dir:=, submission:=, speed_controller_class:=, as
-`just lab2 integration-test` passes them) team:= is the team NUMBER only.
+The model: a team submits its Autoware vehicle model (docs/design/lab2-team-vehicle-models.md),
+built in ~/lab2/ws (`just lab2 new-team N`, `just lab2 build-teams`). team:=N runs
+teamN_vehicle and records team N; vehicle_model:=M runs M, its team number from a teamN_vehicle
+name, else team_number:=, else the settings' `team`, else 0 for the reference
+(autosdv_vehicle). On a car a team model must have passed `just lab2 gate` on this machine
+with its current source (gate_stamp.py); the reference is the TA's and is not held to it.
 
 Car or bench (lab2_env.decide_mode): --bench / --car decide; otherwise a Jetson
 (/etc/nv_tegra_release) is a car and anything else a workstation. A car needs its letter
@@ -38,7 +38,7 @@ files under BAG_DIR/run_logs/<bag name>/ (stack.log, record.log, preflight.log,
 run.log, play_log/):
 
   1. start the stack (`just lab2 vehicle`, or `just lab2 bench`) in its own
-     session; route and team_dir/submission from the settings
+     session; route and vehicle_model from the settings
   2. wait until it is up, then run the preflight; any FAIL stops here
   3. start recording (`lab2_record`: BAG_DIR/lab2_uturn_<next>, car and team
      from the settings)
@@ -116,9 +116,6 @@ ERROR_LEVEL = 2
 INTERRUPTED: List[str] = []    # set by the signal handler, read by Run.check_interrupt
 
 OWN_FLAGS = {'--bench', '--car', '--yes', '--integration'}
-# with one of these on the command line the controller is given, and team:= is the team
-# NUMBER only (as `just lab2 integration-test` passes it)
-CONTROLLER_KEYS = ('team_dir', 'submission', 'speed_controller_class')
 STALL_S, STALL_M = 20.0, 0.5        # bench: 0.5 m within 20 s of the engage (bench_gate's)
 OWN_VALUE_FLAGS = {'--camera', '--timeout', '--ready-timeout', '--max-pose-std'}
 
@@ -137,8 +134,7 @@ class Options:
     max_pose_std: float = MAX_POSE_STD
     config_args: Tuple[str, ...] = ()
     launch_args: Tuple[str, ...] = ()
-    team: Optional[str] = None          # team:=N or team:=DIR
-    team_pos: Optional[str] = None      # a positional DIR
+    team: Optional[str] = None          # team:=N
     team_number: Optional[str] = None   # team_number:=N
     auto_bench: bool = False            # bench because this is not a car (no --bench)
 
@@ -149,17 +145,21 @@ class UsageError(Exception):
 
 def parse_args(argv: List[str]) -> Options:
     """Split our flags, the settings (config:=, KEY:=value), the team and the launch
-    arguments. `team:=N` / `team:=DIR` / a positional DIR name the team (resolve_team);
-    beside an explicit controller (CONTROLLER_KEYS) `team:=` is the team NUMBER only."""
+    arguments. `team:=N` names the team (resolve_model)."""
     o = Options()
     cfg, launch = [], []
-    explicit_ctrl = any(a.split(':=', 1)[0] in CONTROLLER_KEYS and ':=' in a for a in argv)
     it = iter(argv)
     for a in it:
         key, sep, kval = a.partition(':=')
-        if sep and key == 'team' and not explicit_ctrl:
+        if sep and key == 'team':
+            if not kval.isdigit():
+                raise UsageError(f'team:={kval}: a team NUMBER (team:=3 runs team3_vehicle); a team '
+                                 'directory is no longer how a team is named')
             o.team = kval
             continue
+        if sep and key in lc.RETIRED_KEYS + ('speed_controller_class', 'speed_controller_params'):
+            raise UsageError(f'{key}:= is gone: the controller lives in the vehicle model; run '
+                             'one with team:=N or vehicle_model:=teamN_vehicle')
         if sep and key == 'team_number':
             o.team_number = kval
             continue
@@ -167,10 +167,8 @@ def parse_args(argv: List[str]) -> Options:
             if len(a) == 1 and a.isalpha():
                 raise UsageError(f"'{a}' looks like a car letter: that is the TA's, set once per car "
                                  f'(just lab2 init car:={a.upper()}), or car:={a.upper()} for one run')
-            if o.team_pos is not None:
-                raise UsageError(f'one team directory, not {o.team_pos} and {a}')
-            o.team_pos = a
-            continue
+            raise UsageError(f'{a}: a team is no longer a directory; run its vehicle model with '
+                             'team:=N (teamN_vehicle) or vehicle_model:=NAME')
         flag, eq, val = a.partition('=')
         if a in OWN_FLAGS:
             setattr(o, a[2:], True)
@@ -201,8 +199,6 @@ def parse_args(argv: List[str]) -> Options:
             raise UsageError('help')
         else:
             launch.append(a)
-    if o.team is not None and o.team_pos is not None:
-        raise UsageError(f'one team: team:={o.team} or {o.team_pos}, not both')
     if o.yes and not o.bench:
         raise UsageError('--yes engages without asking, which is for the bench only: '
                          'on the car the TA must hold the transmitter first')
@@ -217,46 +213,57 @@ def vehicle_config_args(cfg) -> List[str]:
     return [a for a in cfg if not a.startswith('team:=')]
 
 
-def resolve_team(o: Options, settings, home: Path) -> Tuple[List[str], str]:
-    """([team_dir:=DIR, team:=N] to add to the settings, a note), or ([], '') when the team
-    comes from the settings file (team_dir) or from an explicit controller.
+def resolve_model(o: Options, settings,
+                  installed=None) -> Tuple[List[str], str, str]:
+    """([vehicle_model:=M, team:=N] to add to the settings, a note, M).
 
-    team:=N (digits) is <home>/teamN, number N; team:=DIR or a positional DIR is DIR, its
-    number from a teamN name, else team_number:=, else the settings' `team` (said so)."""
-    given = o.team if o.team is not None else o.team_pos
-    if given is None:
-        if any(a.split(':=', 1)[0] in CONTROLLER_KEYS for a in o.config_args + o.launch_args) \
-                or settings.get('team_dir'):
-            return [], ''
-        raise UsageError(f'which team? `just lab2 run team:=3` ({home}/team3), or '
-                         '`just lab2 run DIR` (the team directory)')
+    team:=N runs teamN_vehicle as team N. Otherwise the model is the settings'
+    (lab2_config.vehicle_model_for: vehicle_model, else team<team>_vehicle, else the
+    reference), and the team number comes from team_number:=, a teamN_vehicle name, the
+    settings' `team`, or 0 for the reference. `installed(model)` says whether the model's
+    packages are built (default: the ament index)."""
     number, note = None, ''
-    if given.isdigit():
-        d, number = home / f'team{int(given)}', str(int(given))
+    if o.team is not None:
+        number = str(int(o.team))
+        model = lc.team_model(number)
+        given = settings.get('vehicle_model')
+        if given and settings.source('vehicle_model') == 'command line' and given != model:
+            raise UsageError(f'team:={o.team} runs {model}, not vehicle_model:={given}: give one')
     else:
-        d = Path(os.path.expanduser(given))
-        m = __import__('re').fullmatch(r'team(\d+)', d.resolve().name)
-        number = str(int(m.group(1))) if m else None
-    d = d.resolve()
-    if o.team_number is not None:
-        if number is not None and o.team_number != number:
-            raise UsageError(f'team_number:={o.team_number}, but {d.name} is team {number}')
-        number = o.team_number
-    if number is None:
-        if settings.get('team'):
+        try:
+            model = lc.vehicle_model_for(settings)
+        except lc.ConfigError as e:
+            raise UsageError(str(e)) from None
+        m = __import__('re').fullmatch(r'team(\d+)_vehicle', model)
+        if m:
+            number = str(int(m.group(1)))
+        elif settings.get('team'):
             number = str(settings.get('team'))
             note = f'team number {number} from the settings file (team_number:= to change)'
-        else:
-            raise UsageError(f'which team number is {d}? Its name is not teamN: add team_number:=N')
-    if not d.is_dir():
-        raise UsageError(f'no team directory {d}: put the team\'s <student_id>_lab_2_1/ and '
-                         'path_tracker.param.yaml there, or name the directory')
-    import submission as sub
+        elif model == lc.REFERENCE_MODEL:
+            number = '0'
+            note = 'the reference model, autosdv_vehicle, recorded as team 0'
+    if o.team_number is not None:
+        if number not in (None, '0') and o.team_number != number and o.team is not None:
+            raise UsageError(f'team_number:={o.team_number}, but team:={o.team}')
+        number = o.team_number
+    if number is None:
+        raise UsageError(f'which team number runs {model}? add team_number:=N')
+    if not (installed or _installed)(model):
+        n = __import__('re').fullmatch(r'team(\d+)_vehicle', model)
+        raise UsageError(f'vehicle model {model} is not built here: '
+                         + (f'`just lab2 new-team {n.group(1)}` (once), then ' if n else '')
+                         + '`just lab2 build-teams`')
+    return [f'vehicle_model:={model}', f'team:={number}'], note, model
+
+
+def _installed(model: str) -> bool:
     try:
-        sub.team_controller(d)
-    except sub.SubmissionError as e:
-        raise UsageError(str(e)) from None
-    return [f'team_dir:={d}', f'team:={number}'], note
+        from ament_index_python.packages import get_package_share_directory
+        get_package_share_directory(f'{model}_launch')
+        return True
+    except Exception:
+        return False
 
 
 def gate_verdict(end: Optional['End'], route: str, v_ref: float, laps: int, speeds, laps_done: int,
@@ -275,7 +282,7 @@ def gate_verdict(end: Optional['End'], route: str, v_ref: float, laps: int, spee
         moving = [v for v in speeds if v > 0.1]
         import statistics
         detail = (f'{laps_done}/{laps} laps, median {statistics.median(moving):.2f} m/s, '
-                  f'peak {max(moving):.2f} m/s, no MRM, SpeedPID clean')
+                  f'peak {max(moving):.2f} m/s, no MRM, controller clean')
     else:
         detail = '; '.join(why)
     return ok, f"{'PASS' if ok else 'FAIL'}  {route}: {detail}"
@@ -531,7 +538,7 @@ def make_monitor():
             self.pose_std = 0.0
             self.monitor = {}
             self.speeds = []             # while AUTONOMOUS: the gate's speed check
-            self.faults = []             # the actuator's SpeedPID faults
+            self.faults = []             # the actuator's speed controller faults
             self.create_subscription(String, '/autosdv/actuator_node/debug/mode',
                                      self.on_actuator_mode, latched)
             self.create_subscription(OperationModeState, '/api/operation_mode/state', self.on_mode, latched)
@@ -996,8 +1003,13 @@ def main(argv=None) -> int:
     try:
         cfg_file, cli, _ = lc.split_args('record', list(o.config_args))
         c = lc.Config(cli, cfg_file)
-        extra, note = resolve_team(o, c, le.lab2_home())
+        extra, note, model = resolve_model(o, c)
         mode = le.decide_mode(le.car_hardware(), c.get('car'), o.bench, o.car)
+        if mode == 'car':
+            import gate_stamp
+            may, why = gate_stamp.check(model)
+            if not may:
+                raise UsageError(f'{why}. A model drives a car only after it passed the gate')
     except (UsageError, lc.ConfigError, le.Lab2EnvError) as e:
         print(f'lab2 run: {e}', file=sys.stderr)
         return 2
