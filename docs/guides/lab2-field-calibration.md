@@ -32,7 +32,7 @@ and which diagnostic blocks it if not. Both are described in
 ## Car gate: steering ratio and lock (`lab2_steer_cal`)
 
 **Why.** `tire_angle_to_steer_ratio` converts a tire angle to servo counts
-(`pwm = 489 + int(average_angle * ratio)`), and nothing on the car measures the
+(`pwm = init_steer + int(average_angle * ratio)`), and nothing on the car measures the
 angle: no sensor, and `steering_status` republishes the command
 (`known-config-defects.md` section 8). The Lab 2 launch loads a stand-in of
 -143 (`config/actuator_lab2.param.yaml`) and `vehicle_info.param.yaml` claims
@@ -50,22 +50,28 @@ once, and again after the servo, linkage or horn is touched.
 
 **Holding a fixed steer PWM.** The offset is the independent variable, so the
 tool commands the tire angle that makes the actuator write exactly
-`489 + offset`, whichever ratio is loaded (it inverts the actuator's Ackermann
-averaging):
+`init_steer + offset`, whichever car profile is loaded (it inverts the
+actuator's Ackermann averaging):
 
 ```bash
-just control basic                  # terminal 1: actuator without the gate; the spotter is the stop
-just lab2 steer-hold -25            # terminal 2: PWM held at 464, 0.4 m/s; Ctrl-C stops it
+just control basic car_profile:=car_b   # terminal 1: actuator on the car's profile, no gate; the spotter is the stop
+just lab2 steer-hold -25            # terminal 2: PWM held at init_steer-25 (car B: 375), 0.4 m/s; Ctrl-C stops it
 ```
 
-`steer-hold` assumes the actuator runs `actuator.yaml`'s -1000, which
-`control basic` loads; pass `--ratio R` when it runs another. Offsets beyond
-+-50 (the servo window) or beyond the 0.349 rad clamp are refused.
+`steer-hold` reads `init_steer`, `min_steer`, `max_steer`,
+`tire_angle_to_steer_ratio`, `max_steer_angle` and the wheel geometry from the
+running `/autosdv/actuator_node` (`--node` to name another), so it always
+matches the car profile that drives the servo, and prints them with the PWM it
+holds. No actuator within 3 s (`--timeout`) is an error naming the node.
+Offsets outside the servo window (`min_steer - init_steer .. max_steer -
+init_steer`: car A +-50, car B +-45) or beyond the `max_steer_angle` clamp are
+refused with a message, never silently clamped.
 
 **Procedure** (car on the floor, 2 m clear radius around it, spotter with the
 transmitter, G1 working):
 
-1. For each offset in -50, -25, -10, +10, +25, +50: `steer-hold`, gear DRIVE
+1. For each offset in -10, -25, the window edge (car B -45) and the same to the
+   left: `steer-hold`, gear DRIVE
    (`just tool controller`, `x`), let it run one full slow circle, and mark the
    path (chalk dot under the rear axle centre every quarter turn, or the track
    of the inner rear tyre).
@@ -76,26 +82,30 @@ transmitter, G1 working):
 3. Fit:
 
 ```bash
-just lab2 steer-fit -50:+1.6 -25:+3.1 -10:+7.9 10:-7.9 25:-3.1 50:-1.6   # example numbers
+just lab2 steer-fit --car-profile car_b -45:+0.9 -25:+1.7 -10:+4.2 10:-4.2 25:-1.7 45:-0.9   # example numbers
 ```
 
-It prints the ratio (counts/rad, with sign), the centre error (counts away from
-489 that mean straight), the fit residual, the true lock (`delta` at +-50
-counts) and the smallest radius, and says PASS when that radius is at most
-0.2 m inside the U-turn's (0.9 m for R 1.1 m). It also prints the share of the
-lock the U-turn uses, for information. Exit code 0 is PASS, 1 is FAIL, 2 is bad input. A positive ratio
-means this servo turns left above 489, opposite to the shipped sign: that is
+`steer-fit` is offline: `--car-profile` (required) supplies the centre, window
+and current ratio from `params/cars/<car>.param.yaml`, and offsets outside that
+window are refused (they were clamped while held). It prints the ratio
+(counts/rad, with sign), the centre error (counts away from `init_steer` that
+mean straight), the fit residual, the true lock (`delta` at the nearer servo
+limit: car A +-50 counts, car B +-45) and the smallest radius, and says PASS
+when that radius is at most 0.2 m inside the U-turn's (0.9 m for R 1.1 m). It
+also prints the share of the lock the U-turn uses, for information. Exit code 0
+is PASS, 1 is FAIL, 2 is bad input. A positive ratio
+means this servo turns left above `init_steer`, opposite to the shipped sign: that is
 part of the value, not an error.
 
 **Where the values go** (before any circle reference run):
 
 | Value | File | Scope |
 |---|---|---|
-| `tire_angle_to_steer_ratio` (with sign) | a per-car copy of `src/lab/autosdv_waypoint_lab/config/actuator_lab2.param.yaml`, e.g. `actuator_lab2_carA.param.yaml`; pass `actuator_param_overrides:=$PWD/...` to `just lab2 vehicle` | per car |
+| `tire_angle_to_steer_ratio` (with sign) | the car's profile, `src/vehicle/autosdv_vehicle_launch/autosdv_vehicle_interface/params/cars/<car>.param.yaml` (the fit's last lines name the file) | per car |
 | `max_steer_angle` (the fitted lock, rounded down) | `vehicle_info.param.yaml`; it is what the planner and the path tracker clamp to. Use the smallest of the three cars; the same key may be added to a car's override file for the actuator alone | all cars |
 
-Re-run `steer-hold` once at -50 with the new ratio loaded
-(`--ratio <fitted>`): the circle must match the first fit's radius within
+Re-run `steer-hold` once at the window edge with the new ratio loaded (restart
+`just control basic` so the actuator reads the edited profile): the circle must match the first fit's radius within
 10 %. Then drive the R 1.1 m U-turn (`lab2_uturn`) by hand and check the tracker's
 commanded angle stays below `max_steer_angle`, with nothing at the clamp. A car
 that fails the gate cannot run the R 1.1 m U-turn reliably: tell the instructor; the course
@@ -113,11 +123,21 @@ parameters are provisional guesses.
 the stack without the planner:
 
 ```bash
-just coach vehicle launch_planner:=false                     # terminal 1 (Robin-W, ZED IMU)
+just coach vehicle launch_planner:=false car_profile:=car_b  # terminal 1 (Robin-W, ZED IMU)
 just coach record-cal steps1                                  # terminal 2
 just coach speed-steps                                        # terminal 3: 0,0.3,0.6,0 m/s, 4 s each (about 2 m)
 just coach engage                                             # terminal 4: starts the schedule
 ```
+
+Or all four from one terminal, which also fits and exports at the end:
+`just coach record-part1 car_profile:=car_b --name steps1` (`car_profile:=`
+is required; `--bench` defaults to `car_a`).
+
+`record-cal` first saves the running actuator's parameters
+(`ros2 param dump /autosdv/actuator_node`: `init_pwm`, `brake_pwm`,
+`min_pwm`/`max_pwm`, `car_profile`) as `BAG/actuator_params.yaml`, and refuses
+to record if the actuator is not up within 30 s (`RECORD_CAL_WAIT`). The fit
+reads the car's neutral from that file.
 
 The schedule starts on engage and ends stopped. It also stops early with a
 braking ramp after `max_distance` metres (2.5 m by default, so give it about
@@ -137,6 +157,15 @@ publish `control_cmd` directly; that would bypass the gate.
 ```bash
 just coach fit-motor rosbags/lab2cal_steps1 -o tmp/motor_plant.yaml
 ```
+
+The deadband and the gain are measured from the car's neutral `init_pwm`
+(car A 370, car B 395), which the fit takes from `BAG/actuator_params.yaml`.
+A bag recorded before `record-cal` saved it, or a CSV, needs the car named:
+`just coach fit-motor rosbags/lab2cal_old --car-profile car_b`; without one
+the fit refuses. `--prior '{init_pwm: N}'` overrides both. (Fitted from the
+wrong neutral, a car B bag puts the 25-count offset into the deadband, which
+pins at `--deadband-max` -- counts beyond `init_pwm`, default 15 -- and the
+gain comes out a third of the truth.)
 
 The fit replays the recorded PWM (`/autosdv/actuator_node/debug/pwm_values`)
 through `MotorPlant` and through `HallSpeedSensor`, the model of

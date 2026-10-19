@@ -83,21 +83,33 @@ PART1_CLASS = 'lab2_speed.speed_pid:SpeedPID'
 CLASS = PART1_CLASS            # Part 2 drives the same class, with the car file
 CAR_YAML = 'speed_pid_car.yaml'
 FF_KEYS = ('ff_deadband', 'ff_gain')
-ACTUATOR_YAML = REPO / 'src/vehicle/autosdv_vehicle_launch/autosdv_vehicle_interface/params/actuator.yaml'
-_PWM_FALLBACK = {'init_pwm': 370, 'min_pwm': 360, 'max_pwm': 470}
+DEFAULT_CAR_PROFILE = 'car_a'     # where no car is known: the sims and the bench run car A
+PWM_KEYS = ('init_pwm', 'min_pwm', 'max_pwm')
 
 
-def actuator_pwm(path: Path = ACTUATOR_YAML) -> dict:
-    """init_pwm, min_pwm and max_pwm from the actuator's file (the limits of the offsets)."""
+def _car_profile():
     try:
-        doc = yaml.safe_load(path.read_text())['/**']['ros__parameters']
-        return {k: int(doc[k]) for k in _PWM_FALLBACK}
-    except (OSError, KeyError, TypeError, ValueError, yaml.YAMLError):
-        return dict(_PWM_FALLBACK)
+        from autosdv_vehicle_interface import car_profile
+    except ImportError:     # no ROS environment sourced: the source tree
+        sys.path.insert(0, str(REPO / 'src/vehicle/autosdv_vehicle_launch/autosdv_vehicle_interface'))
+        from autosdv_vehicle_interface import car_profile
+    return car_profile
+
+
+def actuator_pwm(profile: str = None) -> dict:
+    """init_pwm, min_pwm and max_pwm under the car's profile (the limits of the offsets):
+    actuator.yaml with params/cars/<profile>.param.yaml over it. No profile: car_a."""
+    try:
+        p = _car_profile().load(profile or DEFAULT_CAR_PROFILE)
+    except ValueError as e:
+        raise SubmissionError(str(e)) from None
+    return {k: int(p[k]) for k in PWM_KEYS}
 
 
 def part1_keys(pwm: dict = None) -> dict:
-    """{key: (type, low, high, low_inclusive)}: what config/speed_pid.yaml may hold.
+    """{key: (type, low, high, low_inclusive)}: what config/speed_pid.yaml may hold. pwm: the
+    car's actuator_pwm() (default car_a's): forward headroom max_pwm - init_pwm, brake room
+    init_pwm - min_pwm.
 
     The course handout's lab2_speed/selfcheck.py carries a copy of this table (KEYS); a change
     here must be made there too.
@@ -203,10 +215,10 @@ def check_part1_yaml(path: Path, pwm: dict = None):
     return out, warnings
 
 
-def resolve_part1(path):
+def resolve_part1(path, pwm: dict = None):
     """(package dir, [launch args], [warnings]) for a Part 1 (simulated car) submission."""
     pkg = part1_package_dir(path)
-    mapping, warnings = part1_params(pkg)
+    mapping, warnings = part1_params(pkg, pwm)
     return pkg, [f'speed_controller_class:={PART1_CLASS}',
                  f'speed_controller_params:={flow_mapping(mapping)}'], warnings
 
@@ -236,10 +248,10 @@ def _load(path: Path) -> dict:
     return data
 
 
-def params(pkg: Path):
-    """(merged speed_controller_params mapping, [warnings]): the checked car file, then the
-    calibration's feed-forward under it."""
-    data, warnings = check_part1_yaml(pkg / 'config' / CAR_YAML)
+def params(pkg: Path, pwm: dict = None):
+    """(merged speed_controller_params mapping, [warnings]): the checked car file (offsets
+    bounded by pwm, the car's actuator_pwm()), then the calibration's feed-forward under it."""
+    data, warnings = check_part1_yaml(pkg / 'config' / CAR_YAML, pwm)
     # the car file leaves the feed-forward to calibration.yaml on purpose
     warnings = [w for w in warnings if not any(w.startswith(f'{CAR_YAML}: {k} ') for k in FF_KEYS)]
     deadband, gain, cal_warnings = calibration_ff(pkg / 'config' / 'calibration.yaml')
@@ -284,10 +296,10 @@ def flow_mapping(d: dict) -> str:
     return '{' + ', '.join(f'{k}: {json.dumps(v)}' for k, v in d.items()) + '}'
 
 
-def resolve(path):
-    """(package dir, [launch args], [warnings])."""
+def resolve(path, pwm: dict = None):
+    """(package dir, [launch args], [warnings]). pwm: the car's actuator_pwm()."""
     pkg = package_dir(path)
-    mapping, warnings = params(pkg)
+    mapping, warnings = params(pkg, pwm)
     return pkg, [f'speed_controller_class:={CLASS}',
                  f'speed_controller_params:={flow_mapping(mapping)}'], warnings
 
@@ -344,12 +356,12 @@ def merge_tracker(team_file: Path, default_file: Path = TRACKER_DEFAULT):
     return base, {k: merged_tracker[k] for k in TUNABLE}
 
 
-def resolve_team(path, out_dir: Path = REPO / 'tmp' / 'lab2'):
+def resolve_team(path, out_dir: Path = REPO / 'tmp' / 'lab2', pwm: dict = None):
     """(package dir, [launch args], [warnings]) for a Part 2 team directory."""
     team = Path(path).expanduser().resolve()
     if not team.is_dir():
         raise SubmissionError(f'{team}: no such directory')
-    pkg, args, warnings = resolve(team_controller(team))
+    pkg, args, warnings = resolve(team_controller(team), pwm)
     tf = team / TRACKER_FILE
     if not tf.is_file():
         warnings.append(f'{tf} missing: the default lookahead is used')
@@ -371,13 +383,17 @@ def main(argv=None) -> int:
                       help='DIR is a Part 2 team directory (controller + path_tracker.param.yaml)')
     mode.add_argument('--part1', action='store_true',
                       help='DIR is a Part 1 submission for the simulated car (lab2_speed/)')
+    ap.add_argument('--car-profile', default=None,
+                    help='the car whose PWM bounds the offsets: car_a, car_b or car_c (default '
+                    'car_a; `just lab2 vehicle` passes the car_profile:= that `car` picked)')
     what = ap.add_mutually_exclusive_group()
     what.add_argument('--pythonpath', action='store_true', help='print the PYTHONPATH entry only')
     what.add_argument('--launch-args', action='store_true', help='print the launch args, one per line')
     args = ap.parse_args(argv)
     try:
+        pwm = actuator_pwm(args.car_profile)
         resolver = resolve_team if args.team else resolve_part1 if args.part1 else resolve
-        pkg, launch_args, warnings = resolver(args.dir)
+        pkg, launch_args, warnings = resolver(args.dir, pwm=pwm)
     except SubmissionError as e:
         print(f'submission error: {e}', file=sys.stderr)
         return 2

@@ -48,7 +48,7 @@ just lab2 plot                    # the latest bag
 
 | Key | Used by | Default |
 | --- | --- | --- |
-| `car` | `record`, `check-bags` | none (required by `record`) |
+| `car` | `A`, `B` or `C`: the bags' label (`record`, `check-bags`, `audit`) AND the car's PWM profile: `vehicle`, `run` and `loc-check` pass `car_profile:=car_<car>` (`params/cars/` in `autosdv_vehicle_interface`), and the submission's PWM offsets are bounded by that car's neutral. A `car_profile:=` given as well must agree | none: required by `record`, and by `vehicle`/`run`/`loc-check` on the car (they refuse without it); the bench (`run --bench`) and the sims run `car_a` |
 | `team` | `record`, `check-bags` (the team number) | none (required by `record`) |
 | `team_dir` | `vehicle`: the team's controller and `path_tracker.param.yaml` (what `team:=DIR` passes) | none (required by `vehicle`) |
 | `submission` | `gate`: the controller to gate (what `submission:=DIR` passes) | none (required by `gate`) |

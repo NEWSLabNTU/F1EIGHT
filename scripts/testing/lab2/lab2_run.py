@@ -699,8 +699,11 @@ class Run:
             if not any(a.startswith('camera:=') for a in stack_args):
                 stack.append(f'camera:={camera}')
         else:
+            # `just lab2 vehicle` plans again from the same file: a car:= given here goes
+            # with it, or the car_profile:= planned above would disagree with the file's car
+            car = [a for a in o.config_args if a.startswith('car:=')][-1:]
             stack = ['just', 'lab2', 'vehicle', '--log-dir', str(self.logdir / 'play_log')] \
-                + cfg_file + stack_args
+                + cfg_file + car + stack_args
         self.stack_cmd = stack
         self.record_cmd = ['ros2', 'run', 'autosdv_waypoint_lab', 'lab2_record'] + record_args \
             + (['--bench'] if o.bench else [])

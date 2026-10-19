@@ -271,3 +271,21 @@ def test_bench_ends_a_run_that_does_not_move():
     assert lr.end_reason(s, 100.0, 300.0) is None                 # the car: no such rule
     assert lr.end_reason(snap(now=121.0, progress=0.6), 100.0, 300.0, stall=True) is None
     assert lr.end_reason(snap(now=110.0, progress=0.0), 100.0, 300.0, stall=True) is None
+
+
+def test_car_stack_carries_the_car_profile(tmp_path, monkeypatch):
+    import lab2_config as lc
+    monkeypatch.setattr(lc, 'SURVEY_LATEST', tmp_path / 'no_survey')
+    f = tmp_path / 'lab2.yaml'
+    f.write_text(f'car: A\nteam: 3\nteam_dir: /t/team3\nbag_dir: {tmp_path / "bags"}\n')
+    run = lr.Run(lr.parse_args([f'config:={f}', 'car:=B']))
+    run.plan()
+    cmd = run.stack_cmd
+    assert cmd[:3] == ['just', 'lab2', 'vehicle'] and 'car_profile:=car_b' in cmd
+    # `just lab2 vehicle` plans again from the same file: car:=B goes with it, no conflict
+    again, _ = lc.plan('vehicle', cmd[5:])
+    assert [a for a in again if a.startswith('car_profile:=')] == ['car_profile:=car_b']
+    # no car anywhere: refused before anything starts
+    f.write_text(f'team: 3\nteam_dir: /t/team3\nbag_dir: {tmp_path / "bags"}\n')
+    with pytest.raises(lc.ConfigError, match='no car set'):
+        lr.Run(lr.parse_args([f'config:={f}'])).plan()

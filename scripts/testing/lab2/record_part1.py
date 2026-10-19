@@ -1,17 +1,23 @@
 #!/usr/bin/env python3
 """`just coach record-part1`: the Part 1 speed-step bag from one terminal.
 
-    just coach record-part1                         rosbags/lab2cal_<time>, the default steps
-    just coach record-part1 --name steps1           rosbags/lab2cal_steps1
-    just coach record-part1 --steps 0,0.4,0.7,0 --hold 2.5 --max-distance 3
+    just coach record-part1 car_profile:=car_b                 rosbags/lab2cal_<time>, the default steps
+    just coach record-part1 car_profile:=car_b --name steps1   rosbags/lab2cal_steps1
+    just coach record-part1 car_profile:=car_b --steps 0,0.4,0.7,0 --hold 2.5 --max-distance 3
     just coach record-part1 --bench --yes           the same flow on the vehicle bench (no car)
+
+car_profile:= is required on the car (the actuator refuses to start without
+one, and the fit measures deadband and gain from that car's init_pwm); the
+bench defaults to car_a.
 
 In order, with short status lines here and the rest in BAG/run_logs/:
 
   1. start the stack without the pursuit planner (`just coach vehicle
      launch_planner:=false`, or `just coach bench ...` with --bench); any
      other KEY:=VALUE words are passed to it
-  2. start the speed step planner and the recording (`just coach record-cal`)
+  2. once /autosdv/actuator_node is up, start the speed step planner and the
+     recording (`just coach record-cal`, which first saves the actuator's
+     parameters as BAG/actuator_params.yaml; no engage without that file)
   3. wait until autonomous mode is available, then ask before engaging (the
      spotter must hold the transmitter)
   4. engage; the planner drives the schedule and stops; the run ends when the
@@ -47,6 +53,19 @@ READY_STEADY = 3.0        # s of continuous availability before asking
 REST_HOLD = 1.0           # s at rest after the schedule ended
 SETTLE_AFTER_END = 2.0    # s recorded after the end
 RUN_MARGIN = 20.0         # s beyond the schedule's own length before giving up
+ACTUATOR = ('actuator_node', '/autosdv')
+PARAMS_FILE = 'actuator_params.yaml'   # motor_fit.ACTUATOR_PARAMS_FILE, written by record-cal
+PARAMS_TIMEOUT = 40.0     # s for record-cal to save it (its own wait is 30 s)
+
+
+def launch_car_profile(launch_args):
+    """The value of the last car_profile:= among the launch arguments, or None."""
+    found = None
+    for w in launch_args:
+        key, _, value = w.partition(':=')
+        if key == 'car_profile':
+            found = value
+    return found
 
 
 def parse_args(argv):
@@ -66,6 +85,15 @@ def parse_args(argv):
     if opts.yes and not opts.bench:
         ap.error('--yes is for --bench only: on the car, a person engages')
     opts.launch_args = rest
+    car = launch_car_profile(rest)
+    if car is None and not opts.bench:
+        ap.error('car_profile:= is required on the car, e.g. `just coach record-part1 car_profile:=car_b`: '
+                 'the fit measures the deadband and gain from that car\'s init_pwm')
+    if car is not None:
+        from autosdv_vehicle_interface import car_profile
+        if car not in car_profile.names():
+            ap.error(f'car_profile:={car}: one of {", ".join(car_profile.names())}')
+    opts.car_profile = car or 'car_a'      # coach_pursuit_bench.launch.xml's default
     try:
         opts.speeds = [float(x) for x in opts.steps.split(',') if x.strip()]
     except ValueError:
@@ -192,6 +220,12 @@ def main(argv=None) -> int:
         say(f'1. stack: {" ".join(stack.cmd)}   (log {stack.log.relative_to(REPO)})')
         stack.start()
         rclpy, mon = make_monitor()
+        say(f'   car profile {opts.car_profile}; waiting for /autosdv/actuator_node ...')
+        t0 = time.monotonic()
+        while ACTUATOR not in mon.get_node_names_and_namespaces():
+            spin(0.5)
+            if time.monotonic() - t0 > READY_TIMEOUT:
+                raise Stop(f'/autosdv/actuator_node not up after {READY_TIMEOUT:.0f} s (see {stack.log})')
         say(f'2. planner: {opts.steps} m/s, {opts.hold:g} s each, brake at {opts.max_distance:g} m; '
             f'recording to {bag.relative_to(REPO)}')
         planner.start()
@@ -202,6 +236,11 @@ def main(argv=None) -> int:
             spin(0.5)
             if not recorder.alive():
                 raise Stop(f'the recording exited (see {recorder.log})')
+            if not (bag / PARAMS_FILE).is_file():
+                if time.monotonic() - t0 > PARAMS_TIMEOUT:
+                    raise Stop(f'no {bag.relative_to(REPO)}/{PARAMS_FILE}: the fit could not use '
+                               f'this bag (see {recorder.log})')
+                continue
             if mon.available:
                 since = since or time.monotonic()
                 if time.monotonic() - since >= READY_STEADY:
@@ -264,11 +303,13 @@ def main(argv=None) -> int:
         say(f'bag: {bag.relative_to(REPO)}')
         return 0
     say('6. fitting the motor and exporting the CSV ...')
-    fit = subprocess.run(just + ['fit-motor', str(bag), '-o', str(bag / 'motor_plant.yaml')], cwd=REPO,
+    fit = subprocess.run(just + ['fit-motor', str(bag), '--car-profile', opts.car_profile,
+                                 '-o', str(bag / 'motor_plant.yaml')], cwd=REPO,
                          stdout=subprocess.PIPE, stderr=subprocess.STDOUT, text=True)
     (logs / 'fit.log').write_text(fit.stdout)
     for line in fit.stdout.splitlines():
-        if line.startswith(('excitation', 'steady levels', '# NOT identified', '# WEAKLY',
+        if line.startswith(('prior ', 'lab2_fit_motor:', 'excitation', 'steady levels',
+                            '# NOT identified', '# WEAKLY',
                             'deadband:', 'gain:', 'time_constant:', 'coast_time_constant:')):
             say('   ' + line)
     csv = subprocess.run(just + ['export-speed-csv', str(bag), '-o', str(bag / 'speed_step.csv')], cwd=REPO,

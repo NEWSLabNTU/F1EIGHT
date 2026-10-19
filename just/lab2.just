@@ -380,31 +380,35 @@ loc-check *ARGS:
         echo "error: no course directory '$dir': run \`just lab2 survey ORIGIN_ID\` first, or name one" >&2; exit 1
     fi
     dir=$(realpath "$dir")
+    # car (settings file or car:=) -> car_profile:=car_<car>; refuses without one
+    source scripts/testing/lab2/lab2_config.sh
+    lab2_config loc-check "$@" || exit 2
     # The ZED never gets a DISPLAY (camera_display.sh says why); viewers get it back.
     source scripts/testing/lab2/camera_display.sh
     lab2_camera_display
     rviz=false; [ -n "$VIEWER_DISPLAY" ] && rviz=true
     cmd=(play_launch launch --web-addr '{{ web_addr }}' autosdv_launch waypoint_loc_check.launch.xml
-         "course_dir:=$dir" "rviz:=$rviz" "viewer_display:=$VIEWER_DISPLAY" "$@")
+         "course_dir:=$dir" "rviz:=$rviz" "viewer_display:=$VIEWER_DISPLAY" "${LAB2_ARGS[@]}")
     printf '\033[2m%s\033[0m\n' "${cmd[*]}"
     source scripts/env.sh
     exec "${cmd[@]}"
 
 # --- Steering calibration (car gate): hold a servo offset, fit the ratio from the circles ----
-#   just control basic                       terminal 1 (no gate: the spotter is the stop)
-#   just lab2 steer-hold -25                 terminal 2: steer PWM held at 489-25, 0.4 m/s
-#   (drive a full circle, measure its radius, Ctrl-C, repeat for +-10 +-25 +-50)
-#   just lab2 steer-fit -50:+1.6 -25:+3.1 -10:+7.9 10:-7.9 25:-3.1 50:-1.6
-# Radius: positive = left turn. Pass --ratio R if the actuator runs a ratio other than -1000.
+#   just control basic car_profile:=car_b    terminal 1: actuator on this car's profile; no gate, spotter stops
+#   just lab2 steer-hold -25                 terminal 2: steer PWM held at init_steer-25, 0.4 m/s
+#   (drive a full circle, measure its radius, Ctrl-C, repeat for +-10 +-25 and the window edge)
+#   just lab2 steer-fit --car-profile car_b -45:+0.9 -25:+1.7 -10:+4.2 10:-4.2 25:-1.7 45:-0.9
+# Radius: positive = left turn. steer-hold reads init_steer, min/max_steer and the ratio from
+# the running /autosdv/actuator_node, and refuses offsets the servo window would clamp.
 
-# Publish the tire angle that holds the steering servo at 489 + OFFSET (Ctrl-C stops)
+# Hold the steering servo at the running actuator's init_steer + OFFSET (Ctrl-C stops)
 [positional-arguments]
 steer-hold OFFSET *ARGS:
     #!/usr/bin/env bash
     source scripts/env.sh
     exec ros2 run autosdv_waypoint_lab lab2_steer_cal hold "$@"
 
-# Fit tire_angle_to_steer_ratio and the true steering lock from OFFSET:RADIUS pairs
+# Fit tire_angle_to_steer_ratio and the steering lock: --car-profile car_X OFFSET:RADIUS ...
 [positional-arguments]
 steer-fit *PAIRS:
     #!/usr/bin/env bash
