@@ -363,6 +363,13 @@ def main():
     model, _ = vg.split(extra)
     if not any(a.startswith('vehicle_model:=') for a in extra):
         extra.append(f'vehicle_model:={model}')
+    import lab2_ws
+    problems = lab2_ws.controller_problems(model)
+    if problems:
+        print(f'{model} does not run its own SpeedPID (only speed_pid.py\'s SpeedPID is '
+              'graded):\n  ' + '\n  '.join(problems))
+        print('\n  -> GATE FAILED')
+        return 1
     safety_ok, safety = True, []
     if not args.skip_safety:
         cars = [c for c in args.cars.split(',') if c] or vg.cars()

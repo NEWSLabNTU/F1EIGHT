@@ -76,3 +76,20 @@ def test_car_points_read_the_files_in_order(tmp_path):
     c.write_text('/**:\n  ros__parameters:\n    init_pwm: 380\n    reverse_arm_pwm: 345\n')
     p = vg.car_points([str(a), '', str(c)])
     assert (p.init_pwm, p.reverse_arm_pwm, p.no_drive) == (380, 345, 380)
+
+
+def test_only_a_team_models_own_speedpid_is_accepted():
+    from autosdv_waypoint_lab import bag_meta as bm
+    own = 'team3_vehicle_interface.speed_pid:SpeedPID'
+    assert bm.expected_controller('team3_vehicle') == own
+    assert bm.expected_controller('autosdv_vehicle') is None        # the reference: exempt
+    assert bm.expected_controller('lab2_sim_vehicle') is None       # Part 1 checks its own runs
+    assert bm.controller_problem({'vehicle_model': 'team3_vehicle',
+                                  'speed_controller_class': own}) is None
+    bad = bm.controller_problem({'vehicle_model': 'team3_vehicle', 'speed_controller_class':
+                                 'team3_vehicle_interface.speed_controller:AckermannSpeedPID'})
+    assert bad and 'only the model' in bad
+    assert 'no speed controller recorded' in bm.controller_problem({'vehicle_model': 'team3_vehicle'})
+    assert bm.controller_problem({'vehicle_model': 'autosdv_vehicle',
+                                  'speed_controller_class': 'x:Y'}) is None
+    assert bm.controller_problem({}) is None                         # a bag from before models

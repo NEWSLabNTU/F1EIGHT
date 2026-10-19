@@ -134,6 +134,9 @@ def check_messages(name: str, topics: Dict[str, list], msgs: Dict[str, list], me
             else:
                 v.reasons.append('bench bag (simulated car, rendered or synthetic camera), not a run '
                                  'on the car; only --bench (the TA integration test) accepts it')
+        bad = bm.controller_problem(meta)
+        if bad:
+            v.reasons.append(bad)
         if meta.get('git_dirty'):
             v.warnings.append('recorded from a modified git tree')
         if test is not None:

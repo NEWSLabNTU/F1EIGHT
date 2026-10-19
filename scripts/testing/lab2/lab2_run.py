@@ -137,6 +137,7 @@ class Options:
     team: Optional[str] = None          # team:=N
     team_number: Optional[str] = None   # team_number:=N
     auto_bench: bool = False            # bench because this is not a car (no --bench)
+    model: str = ''                     # the vehicle model the run uses (resolve_model)
 
 
 class UsageError(Exception):
@@ -932,6 +933,30 @@ class Run:
             return None
 
 
+def loaded_controller(logdir: Path) -> Optional[str]:
+    """The class in the actuator's "Speed controller: X" log line, or None."""
+    for f in sorted(Path(logdir).glob('play_log/*/node/actuator_node/*')):
+        if f.name in ('out', 'err'):
+            for line in f.read_text(errors='replace').splitlines():
+                if 'Speed controller: ' in line:
+                    return line.split('Speed controller: ', 1)[1].strip().split()[0]
+    return None
+
+
+def loaded_controller_problem(model: str, logdir: Path) -> Optional[str]:
+    """Why the running actuator is not a team model's own SpeedPID, or None (the
+    reference model, or the right class)."""
+    import lab2_ws
+    if lab2_ws.team_of(model) is None:
+        return None
+    want = f'{model}_interface.speed_pid:SpeedPID'
+    got = loaded_controller(logdir)
+    if got != want:
+        return (f'the actuator loaded {got or "no speed controller (no log line)"}, not '
+                f'{model}\'s own {want}: only that SpeedPID is graded; not engaging')
+    return None
+
+
 def bench_gate_line(run: 'Run') -> Tuple[bool, str]:
     """The gate's verdict for a bench run (`just lab2 gate`'s PASS/FAIL line)."""
     import bench_gate
@@ -1007,6 +1032,13 @@ def main(argv=None) -> int:
         return 2
     if note:
         print(f'lab2 run: {note}')
+    import lab2_ws
+    problems = lab2_ws.controller_problems(model)
+    if problems:
+        print(f'lab2 run: {model} does not run its own SpeedPID (only speed_pid.py\'s SpeedPID '
+              'is graded):\n  ' + '\n  '.join(problems), file=sys.stderr)
+        return 2
+    o.model = model
     if mode == 'bench':
         if not o.bench:
             o.bench, o.auto_bench, o.yes = True, True, True
@@ -1048,6 +1080,11 @@ def main(argv=None) -> int:
         run.start_stack(env)
         if not run.wait_ready():
             run.end = End('stack', 'the stack did not come up')
+            return 1
+        bad = loaded_controller_problem(o.model, run.logdir)
+        if bad:
+            run.say(f'      {bad}')
+            run.end = End('stack', 'not the model\'s own SpeedPID')
             return 1
         if not run.preflight(env):
             run.say('      preflight FAILED: fix the FAIL lines above, then run again')
