@@ -342,7 +342,7 @@ just lab2 sim                             # Lab 2 Part 1: the one ~/lab2/*_lab_2
 just lab2 run team:=3                     # Lab 2 Part 2: ~/lab2/team3 on the car, or the vehicle bench + gate elsewhere
 ```
 The RC simulator's vehicle model, grader and limits: `docs/guides/rc-sim.md`.
-Lab 2 Part 1 (the course, the 16 checks, the controller and its physics): `docs/guides/lab2-part1-sim.md`.
+Lab 2 Part 1 (the course, the 9 checks, the controller and its physics): `docs/guides/lab2-part1-sim.md`.
 See `docs/guides/simulation_testing.md` for the full simulation guide
 (planning sim, rosbag replay, CARLA integration).
 

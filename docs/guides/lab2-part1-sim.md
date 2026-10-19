@@ -46,8 +46,8 @@ in one line; the run and its marks are the same, and `curves.png` is still drawn
 
 TA only: `variant:=low_mu` runs one car (no mark out of 25), `--name LABEL` labels the
 run directory, `--out DIR` writes `DIR/<variant>/` (the old layout, which
-`part1_calibrate.py` and `part1_tolerance.py` read back), and `--final` is still
-accepted (it is the default now).
+the TA's calibration and tolerance tools read back), and `--final` is accepted as a
+no-op (the graded set is the default).
 
 Setup is the repository's standard one: `./setup.sh`, then `just build`.
 

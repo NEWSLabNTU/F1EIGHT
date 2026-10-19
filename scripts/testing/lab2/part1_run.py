@@ -52,7 +52,7 @@ no progress, MRM, its own timeout) and writes the reason into marks.json.
 Outputs: <out> = tmp/lab2/part1/<submission name>/<YYYY-mm-dd_HH-MM-SS>[_<--name>]/, a new
 directory per run, with tmp/lab2/part1/<submission name>/latest pointing at the newest.
 An explicit --out DIR writes DIR/<variant>/ instead (no date, no latest: the TA tools
-part1_calibrate and part1_tolerance read it back). Per car: <variant>/trace.csv and
+the TA's calibration and tolerance tools read it back). Per car: <variant>/trace.csv and
 <variant>/marks.json (the grader's), <variant>/run.json (the command, the play_log, the
 timings), <variant>/curves.png (plot_part1.py, drawn when the run ends, no display needed),
 <variant>/dashboard.png (with the dashboard). The graded set adds final.json:
@@ -263,7 +263,7 @@ def point_latest(run):
 
 def out_root_for(args, name, base=PART1_TMP, now=None):
     """(the run's output root, dated). An explicit --out keeps <out>/<variant>/, for the
-    TA tools (part1_calibrate, part1_tolerance) that read it back."""
+    TA's calibration and tolerance tools that read it back."""
     if args.out:
         return Path(args.out).expanduser(), False
     import datetime
