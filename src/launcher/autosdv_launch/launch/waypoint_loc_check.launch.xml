@@ -20,6 +20,7 @@
   <arg name="course_dir" description="the surveyed course directory"/>
   <arg name="sensor_suite" default="robin_zed"/>
   <arg name="rviz" default="false" description="open RViz on the check (`just lab2 loc-check` sets it when DISPLAY is set)"/>
+  <arg name="viewer_display" default="$(env DISPLAY '')" description="the X display RViz opens on"/>
 
   <let name="launch_vehicle_interface" value="false"/>
   <let name="launch_pointcloud_preprocessor" value="false"/>
@@ -70,5 +71,6 @@
   <include file="$(find-pkg-share autosdv_waypoint_lab)/launch/loc_check.launch.xml">
     <arg name="course_dir" value="$(var course_dir)"/>
     <arg name="rviz" value="$(var rviz)"/>
+    <arg name="viewer_display" value="$(var viewer_display)"/>
   </include>
 </launch>

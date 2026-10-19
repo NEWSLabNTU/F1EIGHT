@@ -33,6 +33,8 @@
   <arg name="compressed" default="false" description="subscribe to the compressed image (a bag recorded that way)"/>
   <arg name="viewer" default="false"
        description="true: open rqt_image_view on the detections (needs a display); `just lab2 survey` sets it when DISPLAY is set"/>
+  <arg name="viewer_display" default="$(env DISPLAY '')"
+       description="the X display the viewer opens on; `just lab2 survey` passes it, because the launch itself runs without DISPLAY (the ZED cannot have one)"/>
   <arg name="vehicle_model" default="autosdv_vehicle"/>
   <arg name="sensor_model" default="autosdv_sensor_kit"/>
   <arg name="vehicle_id" default="$(env VEHICLE_ID default)"/>
@@ -69,5 +71,7 @@
   <!-- the processed frames with the detections drawn: green known, yellow new,
        red too small; the origin outlined thicker -->
   <node pkg="rqt_image_view" exec="rqt_image_view" name="survey_viewer"
-        args="/marker_survey/debug/image" if="$(var viewer)"/>
+        args="/marker_survey/debug/image" if="$(var viewer)">
+    <env name="DISPLAY" value="$(var viewer_display)"/>
+  </node>
 </launch>

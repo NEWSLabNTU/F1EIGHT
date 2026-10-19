@@ -92,6 +92,7 @@ bench *ARGS:
 [positional-arguments]
 vehicle *ARGS:
     #!/usr/bin/env bash
+    unset DISPLAY                       # the ZED cannot have one: scripts/testing/lab2/camera_display.sh
     source scripts/env.sh
     source scripts/testing/lab2/submission.sh
     source scripts/testing/lab2/lab2_config.sh
@@ -199,6 +200,7 @@ health *ARGS:
 [positional-arguments]
 run *ARGS:
     #!/usr/bin/env bash
+    unset DISPLAY                       # the ZED cannot have one: scripts/testing/lab2/camera_display.sh
     source scripts/env.sh
     exec python3 scripts/testing/lab2/lab2_run.py "$@"
 
@@ -341,26 +343,12 @@ loc-check *ARGS:
         echo "error: no course directory '$dir': run \`just lab2 survey ORIGIN_ID\` first, or name one" >&2; exit 1
     fi
     dir=$(realpath "$dir")
-    # DISPLAY is usable only if an X connection works. An empty or dead DISPLAY makes Argus
-    # fail and the ZED wrapper hang at "CAMERA OPENING": unset it (never leave it empty).
-    if [ "${DISPLAY+set}" = set ]; then
-        ok=0
-        if [ -z "$DISPLAY" ]; then ok=1
-        elif command -v xdpyinfo >/dev/null 2>&1; then xdpyinfo -display "$DISPLAY" >/dev/null 2>&1 || ok=1
-        elif command -v xset >/dev/null 2>&1; then xset -display "$DISPLAY" q >/dev/null 2>&1 || ok=1
-        else
-            case "$DISPLAY" in
-                :*|unix:*) n=${DISPLAY#*:}; n=${n%%.*}; [ -S "/tmp/.X11-unix/X$n" ] || ok=1 ;;
-            esac
-        fi
-        if [ "$ok" != 0 ]; then
-            echo "warning: DISPLAY='$DISPLAY' has no working X server (a desktop is usually :1 on the car); unsetting it for this launch, no viewer." >&2
-            unset DISPLAY
-        fi
-    fi
-    rviz=false; [ -n "${DISPLAY:-}" ] && rviz=true
+    # The ZED never gets a DISPLAY (camera_display.sh says why); viewers get it back.
+    source scripts/testing/lab2/camera_display.sh
+    lab2_camera_display
+    rviz=false; [ -n "$VIEWER_DISPLAY" ] && rviz=true
     cmd=(play_launch launch --web-addr '{{ web_addr }}' autosdv_launch waypoint_loc_check.launch.xml
-         "course_dir:=$dir" "rviz:=$rviz" "$@")
+         "course_dir:=$dir" "rviz:=$rviz" "viewer_display:=$VIEWER_DISPLAY" "$@")
     printf '\033[2m%s\033[0m\n' "${cmd[*]}"
     source scripts/env.sh
     exec "${cmd[@]}"
@@ -412,26 +400,12 @@ survey *ARGS:
     case "$dir" in "$PWD"/surveys/*) target=${dir#"$PWD"/surveys/} ;; *) target=$dir ;; esac
     ln -sfn "$target" surveys/latest
     echo "survey -> $dir (surveys/latest)"
-    # DISPLAY is usable only if an X connection works. An empty or dead DISPLAY makes Argus
-    # fail and the ZED wrapper hang at "CAMERA OPENING": unset it (never leave it empty).
-    if [ "${DISPLAY+set}" = set ]; then
-        ok=0
-        if [ -z "$DISPLAY" ]; then ok=1
-        elif command -v xdpyinfo >/dev/null 2>&1; then xdpyinfo -display "$DISPLAY" >/dev/null 2>&1 || ok=1
-        elif command -v xset >/dev/null 2>&1; then xset -display "$DISPLAY" q >/dev/null 2>&1 || ok=1
-        else
-            case "$DISPLAY" in
-                :*|unix:*) n=${DISPLAY#*:}; n=${n%%.*}; [ -S "/tmp/.X11-unix/X$n" ] || ok=1 ;;
-            esac
-        fi
-        if [ "$ok" != 0 ]; then
-            echo "warning: DISPLAY='$DISPLAY' has no working X server (a desktop is usually :1 on the car); unsetting it for this launch, no viewer." >&2
-            unset DISPLAY
-        fi
-    fi
-    viewer=false; [ -n "${DISPLAY:-}" ] && viewer=true      # the detection video, given a display
+    # The ZED never gets a DISPLAY (camera_display.sh says why); viewers get it back.
+    source scripts/testing/lab2/camera_display.sh
+    lab2_camera_display
+    viewer=false; [ -n "$VIEWER_DISPLAY" ] && viewer=true   # the detection video, given a display
     cmd=(play_launch launch --web-addr '{{ web_addr }}' autosdv_marker_survey marker_survey.launch.xml
-         "course_dir:=$dir" "origin_id:=$origin" "viewer:=$viewer" "$@")
+         "course_dir:=$dir" "origin_id:=$origin" "viewer:=$viewer" "viewer_display:=$VIEWER_DISPLAY" "$@")
     printf '\033[2m%s\033[0m\n' "${cmd[*]}"
     source scripts/env.sh
     exec "${cmd[@]}"
@@ -467,6 +441,7 @@ survey-solve *ARGS:
 [positional-arguments]
 survey-align *ARGS:
     #!/usr/bin/env bash
+    unset DISPLAY                       # the ZED cannot have one: scripts/testing/lab2/camera_display.sh
     source scripts/env.sh
     exec python3 scripts/testing/lab2/survey_align.py "$@"
 
