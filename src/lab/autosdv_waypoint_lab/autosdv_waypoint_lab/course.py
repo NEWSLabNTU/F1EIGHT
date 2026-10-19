@@ -24,7 +24,7 @@ course.yaml:
       - {id: 2, x: 0.0, y: 4.0, yaw: 0.0, pitch: 0.05, roll: -0.02}
 
 `pitch` and `roll` (radians, default 0) describe a board that does not stand
-exactly upright, as `just lab2 survey` measures it: pitch is its top leaning
+exactly upright, as `just aruco-map scan` measures it: pitch is its top leaning
 back, away from the viewer; roll is the board turned in its own plane,
 counter-clockwise as seen from the front. The localizer reads a marker's full
 orientation from its corners, so a map that leaves a measured tilt out puts

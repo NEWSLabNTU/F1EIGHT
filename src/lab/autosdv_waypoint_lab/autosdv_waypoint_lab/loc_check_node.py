@@ -1,6 +1,6 @@
 """loc_check: is the course's localization good? Drive the car by hand and watch.
 
-Publishes, for RViz (`just lab2 loc-check` opens it):
+Publishes, for RViz (`just aruco-map check` opens it):
 
   /lab2/course_path   nav_msgs/Path, the whole course from path.csv (latched)
   /lab2/trail         nav_msgs/Path, where the localizer has put the car so far

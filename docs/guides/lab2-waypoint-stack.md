@@ -48,12 +48,12 @@ just lab2 plot                    # the latest bag
 
 | Key | Used by | Default |
 | --- | --- | --- |
-| `car` | `A`, `B` or `C`: the bags' label (`record`, `check-bags`, `audit`) AND the car's instance: `vehicle`, `run`, `loc-check` and `survey` pass `vehicle_id:=car_<car>` (`individual_params/config/car_<car>/`), and the submission's PWM offsets are bounded by that car's neutral. A `vehicle_id:=` given as well must agree | none: required by `record`, and by `vehicle`/`run`/`loc-check` on the car (they refuse without it); the bench (`run --bench`) and the sims run `sim`, the simulated nominal car |
+| `car` | `A`, `B` or `C`: the bags' label (`record`, `check-bags`, `audit`) AND the car's instance: `vehicle`, `run` and the `just aruco-map` commands pass `vehicle_id:=car_<car>` (`individual_params/config/car_<car>/`), and the submission's PWM offsets are bounded by that car's neutral. A `vehicle_id:=` given as well must agree | none: required by `record`, and by `vehicle`/`run` on the car (they refuse without it); `just aruco-map` (nothing there drives), the bench (`run --bench`) and the sims run `sim`, the simulated nominal car |
 | `team` | `record`, `check-bags` (the team number) | none (required by `record`) |
 | `team_dir` | `vehicle`: the team's controller and `path_tracker.param.yaml` (what `team:=DIR` passes) | none (required by `vehicle`) |
 | `submission` | `gate`: the controller to gate (what `submission:=DIR` passes) | none (required by `gate`) |
 | `route` | `vehicle`, and the bag name (`lab2_uturn` -> `uturn_N`) | `lab2_uturn` |
-| `course_dir` | `vehicle`/`run`: the course the car runs. `auto`: `surveys/latest` if `survey-align` aligned it for `route` (same `path.csv`, start pose, laps, `v_ref`), else the route's packaged course, with a warning; `package`; or a directory. The bench (`run --bench`) takes `auto` as `package` | `auto` |
+| `course_dir` | `vehicle`/`run`: the course the car runs. `auto`: `surveys/latest` if `just aruco-map align` aligned it for `route` (same `path.csv`, start pose, laps, `v_ref`), else the route's packaged course, with a warning; `package`; or a directory. The bench (`run --bench`) takes `auto` as `package` | `auto` |
 | `reference` | `grade`: the car's TA reference bag | `~/lab2/reference/uturn` |
 | `bag_dir` | where `record` writes and `grade`/`check-bags`/`plot` look | `rosbags` |
 
@@ -415,7 +415,7 @@ camera run, so it is not fitted in. To see what it would cost, run the bench
 with `pose_noise_std` 0.09 and yaw noise 1.6° (below). `distance_threshold`
 (5 m) could be raised for a 480 mm marker; that has not been measured.
 
-## On the field: tape, boards, survey, align (`just lab2 survey`, `just lab2 survey-align`)
+## On the field: tape, boards, survey, align (`just aruco-map survey`)
 
 Boards are placed anew each visit and never land exactly where they did last
 time, nor exactly where the plan says; the car is never placed exactly the same
@@ -425,7 +425,14 @@ into the route's own frame, the START-BOX frame: origin at the start box (the
 rear axle, `base_link`), x along the first leg, y to the car's left, z up.
 `path.csv` is written in that frame once (`make-uturn`) and never moves.
 
-The procedure, on the car, in tmux:
+The procedure, on the car, in tmux. Steps 3 and 4 are one guided command,
+`just aruco-map survey 24`: it runs the scan, which Ctrl-C ends and solves, then
+asks for the car in the start box (Enter), runs the alignment, which Ctrl-C ends
+after the straight drive, and prints the next command. `just aruco-map scan` and
+`just aruco-map align` run the stages on their own, `just aruco-map solve`
+re-solves a scan without the car, and `just aruco-map check` is the localization
+check. `just` itself prints `interrupted by SIGINT` after any Ctrl-C; the
+command's own last line says whether the stage worked.
 
 1. **Tape the route** from the numbers in `lab2_uturn/course.yaml`'s header
    (start box at (0, 0) facing +x, turn centre (2, -1.1), stop line (0, -2.2)
@@ -433,7 +440,7 @@ The procedure, on the car, in tmux:
 2. **Place the boards** by the same header's table, measured from the start box.
    A few centimetres or degrees off does not matter: the survey measures where
    they really are. Upright, on the floor.
-3. **Stage 1, the survey:** `just lab2 survey 24` (any board id can be the
+3. **Stage 1, the survey:** `just aruco-map scan 24` (any board id can be the
    origin; 24, the anchor, faces the first leg). Drive or push the car slowly
    past every board, Ctrl-C. This measures the boards relative to one another,
    in the frame of that board, and writes `surveys/<date>_<time>/` (and
@@ -442,7 +449,7 @@ The procedure, on the car, in tmux:
    and shifts it, which is what stage 2 removes. Details:
    `src/lab/autosdv_marker_survey/README.md`.
 4. **Stage 2, the alignment:** put the car in the taped start box pointing
-   along the first leg, then `just lab2 survey-align`. It starts the
+   along the first leg, then `just aruco-map align`. It starts the
    localization on the stage-1 map (ZED, AR-tag localizer, EKF; the actuator as
    a dry run, no tracker: nothing can drive the car), finds the boards in the
    image and seeds the EKF from them, and prints **READY**. Then drive the car
@@ -455,7 +462,7 @@ The procedure, on the car, in tmux:
    in `align_poses.csv` / `align_pnp.csv` (`lab2_survey_align_solve DIR [--force]`
    aligns it again without the car). Surveying into the directory again drops
    the alignment; align again after it.
-5. **`just lab2 loc-check`**: drive the U-turn by hand along the tape; the red
+5. **`just aruco-map check`**: drive the U-turn by hand along the tape; the red
    trail should lie on the white path.
 6. **`just lab2 run`** for each graded run: with `course_dir: auto` (the
    default) it runs `surveys/latest` once it is aligned for the route.
@@ -509,7 +516,7 @@ x -2.5 to 5.0 m, y -5.5 to 0.5 m. The path publisher's end ramp stops the car on
 waypoint, the stop line, level with the start box; once the run is finished
 the whole trajectory reads 0 m/s, so the car stays stopped even when the
 localized pose settles a little short of the line. The template is in the
-START-BOX frame `just lab2 survey-align` writes (above): the TA tapes the route
+START-BOX frame `just aruco-map align` writes (above): the TA tapes the route
 and places the boards from `course.yaml`'s header, surveys, and aligns.
 
 | | start-box frame (m) |
@@ -641,7 +648,7 @@ but `surveys/latest` is aligned for `lab2_uturn`, `course_dir: auto` builds
 the drive survey-align recorded (`align_poses.csv`, `align_pnp.csv`; the
 `lab2_survey_align_solve` solver), and runs it; the run prints one
 `survey: ...` line naming it. `surveys/latest` itself is never written, so the
-U-turn and its reference bags keep their survey. A new `survey-align` changes
+U-turn and its reference bags keep their survey. A new `just aruco-map align` changes
 latest's alignment inputs and the copy is rebuilt on the next run. If the copy
 cannot be made (no recorded drive, a refused solve), the run uses the packaged
 course with the usual warning.
@@ -663,11 +670,11 @@ to rest and reports the peak speed (bench: stop error 0.08 m, path deviation
 0.088 m, jump 0.04 m). For a speed measurement, use `make-straight` with a lower
 `--speed`, or the U-turn.
 
-## Checking localization by hand (`just lab2 loc-check`)
+## Checking localization by hand (`just aruco-map check`)
 
 Before letting the tracker drive a freshly surveyed course, drive it by hand
 and watch where the localizer puts the car:
-`just lab2 loc-check COURSE_DIR`, with the car in the start box (the EKF is
+`just aruco-map check COURSE_DIR`, with the car in the start box (the EKF is
 seeded there) and the selector switch on the joystick. It runs the waypoint
 stack's localization unchanged and nothing that drives: no path publisher, no
 tracker, no engage, and the actuator as a dry run, so the transmitter has the
@@ -694,12 +701,12 @@ odometry median 10 cm / p95 24 cm with the bench's default detection noise
 The order on the car, each step in the same tmux session (a window each), each
 one cheap enough to repeat after any change to the car:
 
-0. after the boards are placed (each visit): `just lab2 survey 24`, then
-   `just lab2 survey-align` (On the field, above);
+0. after the boards are placed (each visit): `just aruco-map scan 24`, then
+   `just aruco-map align` (On the field, above);
 1. `just lab2 preflight` with the stack up and the car in the start box
    (`just lab2 run` also runs it itself before engaging);
 2. `just lab2 camera-check COURSE`: fix quality and the per-marker survey check;
-3. `just lab2 loc-check COURSE`: drive the course by hand, watch the trail;
+3. `just aruco-map check COURSE`: drive the course by hand, watch the trail;
 4. `just lab2 run` in one window, `just lab2 health --with-run` beside it in
    another, started once the run says it is recording; Ctrl-C the health
    monitor when the run has finished;
@@ -870,7 +877,7 @@ The car stops within 5 cm of the start. `just lab2 bench-checks`: 5/5:
 ## Not checked without a car
 
 - The ZED driver with `zed_aruco.yaml`.
-- `just lab2 loc-check` on the car, and its RViz view (checked headless: the
+- `just aruco-map check` on the car, and its RViz view (checked headless: the
   file parses and every topic it names is published).
 - The localizer's CPU use on the Orin at full resolution.
 - Real detection range and noise in the hall's lighting, which set

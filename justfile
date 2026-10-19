@@ -29,6 +29,8 @@ mod sim 'just/sim.just'
 mod tool 'just/tool.just'
 # Lab 2, ArUco localization and waypoint following: bench, vehicle, grading
 mod lab2 'just/lab2.just'
+# ArUco map: survey the boards (scan, align), check the localization on the map
+mod aruco-map 'just/aruco_map.just'
 # The coach-board pursuit stack (Lab 2 before 2026-10-13), and the field
 # calibration recipes (speed steps, motor fit, braking) that both labs use
 mod coach 'just/coach.just'

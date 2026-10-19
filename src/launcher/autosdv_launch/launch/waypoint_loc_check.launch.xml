@@ -1,7 +1,7 @@
 <?xml version="1.0" encoding="UTF-8"?>
 <!--
   Lab 2 localization check: drive the car BY HAND around a surveyed course and
-  watch where the localizer puts it. `just lab2 loc-check COURSE_DIR`.
+  watch where the localizer puts it. `just aruco-map check COURSE_DIR`.
 
     ZED -> ar_tag_based_localizer ─┐
     velocity_report + ZED IMU -> gyro_odometer ─┴> ekf_localizer -> /localization/kinematic_state
@@ -20,7 +20,7 @@
   <arg name="course_dir" description="the surveyed course directory"/>
   <arg name="vehicle_id"
        description="REQUIRED: which car, car_a, car_b or car_c: individual_params/config/VEHICLE_ID (calibration, autosdv_vehicle/actuator.param.yaml, autosdv.preset.yaml, whose sensor_suite the kit uses)"/>
-  <arg name="rviz" default="false" description="open RViz on the check (`just lab2 loc-check` sets it when DISPLAY is set)"/>
+  <arg name="rviz" default="false" description="open RViz on the check (`just aruco-map check` sets it when DISPLAY is set)"/>
   <arg name="viewer_display" default="$(env DISPLAY '')" description="the X display RViz opens on"/>
 
   <let name="launch_vehicle_interface" value="false"/>

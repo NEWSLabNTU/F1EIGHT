@@ -1,4 +1,4 @@
-"""bench_straight_driver: the TA's transmitter for `just lab2 survey-align --bench`. BENCH ONLY.
+"""bench_straight_driver: the TA's transmitter for `just aruco-map align --bench`. BENCH ONLY.
 
 On the field the TA drives the car straight along the taped first leg by
 transmitter; on the bench this node does it to the simulated car. It writes the

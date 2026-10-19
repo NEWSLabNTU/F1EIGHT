@@ -1,7 +1,7 @@
 <?xml version="1.0"?>
 <!--
   Marker survey: drive the car around the room, get the course's marker map.
-  `just lab2 survey COURSE_DIR ORIGIN_ID`.
+  `just aruco-map scan COURSE_DIR ORIGIN_ID`.
 
     ZED X Mini (rectified image + positional tracking)
       -> marker_survey: detects every marker, places it live (~/markers in
@@ -32,9 +32,9 @@
   <arg name="use_sim_time" default="false"/>
   <arg name="compressed" default="false" description="subscribe to the compressed image (a bag recorded that way)"/>
   <arg name="viewer" default="false"
-       description="true: open rqt_image_view on the detections (needs a display); `just lab2 survey` sets it when DISPLAY is set"/>
+       description="true: open rqt_image_view on the detections (needs a display); `just aruco-map scan` sets it when DISPLAY is set"/>
   <arg name="viewer_display" default="$(env DISPLAY '')"
-       description="the X display the viewer opens on; `just lab2 survey` passes it, because the launch itself runs without DISPLAY (the ZED cannot have one)"/>
+       description="the X display the viewer opens on; `just aruco-map scan` passes it, because the launch itself runs without DISPLAY (the ZED cannot have one)"/>
   <arg name="vehicle_model" default="autosdv_vehicle"/>
   <arg name="sensor_model" default="autosdv_sensor_kit"/>
   <arg name="vehicle_id"

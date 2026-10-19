@@ -60,7 +60,7 @@ team NUMBER everywhere (team:=3 is team3_vehicle). The team_dir:= and submission
 SpeedPID-only lab are gone from vehicle and gate: the controller lives in the model.
 
 Which course the car runs (`course_dir`): `auto` (the default) is the aligned
-survey surveys/latest when `just lab2 survey-align` aligned it for `route`,
+survey surveys/latest when `just aruco-map align` aligned it for `route`,
 else the route's packaged course (its PLANNED boards, with a warning); `package`
 is always the packaged course; a directory is that course. The bench
 (`just lab2 run --bench`) takes `auto` as `package`: a survey is of the field.
@@ -238,7 +238,7 @@ def _route_fields(course_dir: Path):
 
 
 def aligned_for(course_dir, route: str):
-    """(True, '') if course_dir is a survey that `just lab2 survey-align` aligned for the
+    """(True, '') if course_dir is a survey that `just aruco-map align` aligned for the
     route `route` (a packaged course name), with that route's path, start pose, laps
     and v_ref unchanged since; else (False, why)."""
     course_dir = Path(course_dir)
@@ -251,7 +251,7 @@ def aligned_for(course_dir, route: str):
         return False, f'{course_dir}: {e}'
     al = d.get('alignment')
     if not isinstance(al, dict):
-        return False, f'{course_dir} is not aligned (run `just lab2 survey-align`)'
+        return False, f'{course_dir} is not aligned (run `just aruco-map align`)'
     if str(al.get('route')) != template.name:
         return False, f'{course_dir} is aligned for route {al.get("route")!r}, not {template.name!r}'
     try:
@@ -260,7 +260,7 @@ def aligned_for(course_dir, route: str):
         return False, f'route {template}: {e}'
     if mine != theirs:
         return False, (f'{course_dir} was aligned for an older {template.name} (its path, start pose, '
-                       'laps or v_ref differ): run `just lab2 survey-align` again')
+                       'laps or v_ref differ): run `just aruco-map align` again')
     return True, ''
 
 
@@ -333,7 +333,7 @@ def reuse_survey(latest: Path, route: str) -> Tuple[Optional[Path], str]:
         return None, str(e)
     al_ = d.get('alignment')
     if not isinstance(al_, dict):
-        return None, f'{latest} is not aligned (run `just lab2 survey-align`)'
+        return None, f'{latest} is not aligned (run `just aruco-map align`)'
     other = str(al_.get('route'))
     if other == _template(route).name:
         return None, 'aligned for this route'
@@ -405,7 +405,7 @@ def course_for(c: 'Config', bench: bool = False):
                     'where the plan put them, not where they stand')
         else:
             warn = (f'no surveys/latest: running the PACKAGED {route}, whose boards are where the plan '
-                    'put them (survey, then `just lab2 survey-align`)')
+                    'put them (survey, then `just aruco-map align`)')
     arg = f'course_dir:={route}' if '/' in route else f'route:={route}'
     return arg, ('route', route), warn
 
