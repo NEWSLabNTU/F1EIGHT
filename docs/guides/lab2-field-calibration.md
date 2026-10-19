@@ -37,12 +37,14 @@ angle: no sensor, and `steering_status` republishes the command
 (`known-config-defects.md` section 8). The Lab 2 launch loads a stand-in of
 -143 (`config/actuator_lab2.param.yaml`) and `vehicle_info.param.yaml` claims
 0.349 rad of lock; neither is measured. The graded U-turn (`lab2_uturn`) needs
-`atan(0.319 / R)`: **0.282 rad at R 1.1 m**. The gate wants that to be at most
-80 % of the lock, so the real lock must be at least about 0.35 rad (0.352). That
-is the claimed 0.349 rad with no room to spare: a car whose lock is exactly the
-claim, or the -143 stand-in's 0.350 rad, uses 81 % and FAILs. The gate reads the
-radius from `lab2_uturn/course.yaml` (`uturn.radius`), so it follows the course
-when `make-uturn` changes it. It decides the course before any reference bag is
+`atan(0.319 / R)`: **0.282 rad at R 1.1 m**. The gate is a radius: the car's
+measured minimum turning radius must be at most 0.2 m inside the course's, so
+**at most 0.9 m** for R 1.1 m. The course radius was chosen that way, from a
+measured minimum of about 0.9 m. In angle terms that is a lock of at least
+0.340 rad; the claimed 0.349 rad turns the car on 0.88 m and the -143 stand-in's
+0.350 rad on 0.87 m, and both PASS. The gate reads the radius from
+`lab2_uturn/course.yaml` (`uturn.radius`), so it follows the course when
+`make-uturn` changes it. It decides the course before any reference bag is
 recorded. Per car (A, B, C),
 once, and again after the servo, linkage or horn is touched.
 
@@ -79,8 +81,9 @@ just lab2 steer-fit -50:+1.6 -25:+3.1 -10:+7.9 10:-7.9 25:-3.1 50:-1.6   # examp
 
 It prints the ratio (counts/rad, with sign), the centre error (counts away from
 489 that mean straight), the fit residual, the true lock (`delta` at +-50
-counts) and the smallest radius, and says PASS when the U-turn's radius (R 1.1 m) needs at
-most 80 % of the lock. Exit code 0 is PASS, 1 is FAIL, 2 is bad input. A positive ratio
+counts) and the smallest radius, and says PASS when that radius is at most
+0.2 m inside the U-turn's (0.9 m for R 1.1 m). It also prints the share of the
+lock the U-turn uses, for information. Exit code 0 is PASS, 1 is FAIL, 2 is bad input. A positive ratio
 means this servo turns left above 489, opposite to the shipped sign: that is
 part of the value, not an error.
 
@@ -94,8 +97,8 @@ part of the value, not an error.
 Re-run `steer-hold` once at -50 with the new ratio loaded
 (`--ratio <fitted>`): the circle must match the first fit's radius within
 10 %. Then drive the R 1.1 m U-turn (`lab2_uturn`) by hand and check the tracker's
-commanded angle stays under 80 % of `max_steer_angle`. A car that fails the
-margin cannot run the R 1.1 m U-turn reliably: tell the instructor; the course
+commanded angle stays below `max_steer_angle`, with nothing at the clamp. A car
+that fails the gate cannot run the R 1.1 m U-turn reliably: tell the instructor; the course
 changes (`just lab2 make-uturn` with a larger radius, if the field allows), not
 the check. The measured values go on the car's sign-off sheet
 (`field/lab2-car-signoff.md`, part C in the course repository).
