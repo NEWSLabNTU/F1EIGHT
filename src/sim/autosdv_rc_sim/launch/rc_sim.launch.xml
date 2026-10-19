@@ -100,6 +100,8 @@
     <arg name="launch_vehicle_interface" value="true"/>
     <arg name="is_simulation" value="false"/>
     <arg name="vehicle_id" value="$(var vehicle_id)"/>
+    <!-- the plant models actuator.yaml's car, which is car A -->
+    <arg name="car_profile" value="car_a"/>
     <arg name="speed_controller_params" value="$(var speed_controller_params)"/>
     <arg name="speed_controller_dt_source" value="loop"/>
     <arg name="actuator_param_overrides"

@@ -90,7 +90,13 @@ def parse(argv):
     ap.add_argument('--speed', type=float, default=0.3, help='--bench: m/s')
     ap.add_argument('--bench-timeout', type=float, default=90.0)
     ap.add_argument('--config', default=None)
+    ap.add_argument('--car-profile', default=None,
+                    help='car_a, car_b or car_c: the car\'s PWM profile (required on the car; --bench: car_a)')
     a = ap.parse_args(argv)
+    if a.car_profile is None:
+        if not a.bench:
+            ap.error('--car-profile is required on the car (car_a, car_b or car_c)')
+        a.car_profile = 'car_a'
     if a.bench and not a.truth:
         raise Usage('--bench needs --truth DIR: the course the mock camera renders')
     if a.truth and not a.bench:
@@ -396,7 +402,8 @@ def main(argv=None) -> int:
     logdir = survey / 'align_logs' / time.strftime('%Y-%m-%d_%H-%M-%S')
     cmd = ['play_launch', 'launch', '--log-dir', str(logdir / 'play_log'),
            '--web-addr', env.get('LAB2_WEB_ADDR', '0.0.0.0:8081'),
-           'autosdv_launch', 'waypoint_survey_align.launch.xml', f'course_dir:={stage1}']
+           'autosdv_launch', 'waypoint_survey_align.launch.xml', f'course_dir:={stage1}',
+           f'car_profile:={a.car_profile}']
     if a.bench:
         cmd += ['bench:=true', f'truth_dir:={truth}', f'distance:={a.distance}', f'speed:={a.speed}']
     say(f'survey-align: {survey}')

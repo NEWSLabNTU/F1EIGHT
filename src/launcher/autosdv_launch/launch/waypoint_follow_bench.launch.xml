@@ -34,6 +34,8 @@
 <launch>
   <!-- `route` is the name the Lab 2 handout uses (a "course" reads as a class);
        `course` stays, so older commands keep working. -->
+  <arg name="car_profile" default="car_a"
+       description="which car the bench models: autosdv_vehicle_interface/params/cars/CAR_PROFILE.param.yaml, for the dry-run vehicle interface and the plant alike. car_a by default: a bench drives no motor"/>
   <arg name="route" default="hall_demo" description="a directory under autosdv_waypoint_lab/config/courses"/>
   <arg name="course" default="$(var route)" description="old name of route"/>
   <arg name="course_dir" default="$(find-pkg-share autosdv_waypoint_lab)/config/courses/$(var course)"/>
@@ -92,6 +94,7 @@
   <node pkg="autosdv_coach_lab" exec="vehicle_bench_plant" name="vehicle_bench_plant" output="screen">
     <param from="$(find-pkg-share autosdv_vehicle_interface)/params/actuator.yaml"/>
     <param from="$(var actuator_param_overrides)"/>
+    <param from="$(find-pkg-share autosdv_vehicle_interface)/params/cars/$(var car_profile).param.yaml"/>
     <param from="$(var vehicle_info_param_file)"/>
     <param from="$(find-pkg-share autosdv_vehicle_interface)/params/velocity_report.yaml"/>
     <param from="$(var imu_corrector_param_file)"/>
