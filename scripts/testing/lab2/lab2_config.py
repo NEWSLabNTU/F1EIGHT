@@ -34,7 +34,9 @@ Recipes:
     plot        no bag: LATEST
     audit       no bag: LATEST; --car --team when set; --reference REFERENCE if it is a bag
     config      print every value and where it came from
-    init        write a commented template to the user's file (never overwrites)
+    init        write a commented template to the user's file; on an existing file, set
+                only the key:=value keys given (other lines and comments kept), and
+                refuse when none is given
 
 `team:=` means the team DIRECTORY in vehicle and gate (as it always has) and
 the team NUMBER elsewhere.
@@ -56,6 +58,7 @@ rebuilt when latest's alignment inputs change (a hash in its .reused_from). One
 stderr line names the survey a run uses; on any failure, the packaged course
 with the warning, as before.
 """
+import json
 import os
 import re
 import sys
@@ -603,6 +606,60 @@ def template(values=None) -> str:
     return '\n'.join(out) + '\n'
 
 
+def _yaml_scalar(value) -> str:
+    """value as it would be written after `key: `, quoted only when YAML would misread it."""
+    v = str(value)
+    try:
+        ok = v.strip() == v and v != '' and yaml.safe_load(f'k: {v}') == {'k': yaml.safe_load(v)} \
+            and type(yaml.safe_load(v)) in (str, int, float) and ' #' not in v
+    except yaml.YAMLError:
+        ok = False
+    return v if ok else json.dumps(v)
+
+
+def _with_comment(head: str, line: str, comment: Optional[str]) -> str:
+    """head, then the trailing comment of line kept at its column where it fits."""
+    if not comment:
+        return head
+    col = line.index(comment)
+    return head + ' ' * max(2, col - len(head)) + comment
+
+
+_ENTRY = r'^{prefix}({key})\s*:(?P<value>.*?)(?:\s+(?P<comment>#.*))?$'
+
+
+def set_keys(text: str, values: dict) -> Tuple[str, list]:
+    """(text with each key set to its value, [what changed]). A key already set is
+    rewritten in place (its comment kept); else its commented template line
+    (`# key: example  # why`) is uncommented; else it is appended. Every other line is
+    kept as it is."""
+    lines = text.splitlines()
+    changes = []
+    for key, value in values.items():
+        new = f'{key}: {_yaml_scalar(value)}'
+        live = re.compile(_ENTRY.format(prefix='', key=re.escape(key)))
+        hits = [i for i, ln in enumerate(lines) if live.match(ln)]
+        if hits:
+            for i in hits:
+                m = live.match(lines[i])
+                old = m.group('value').strip()
+                if old == _yaml_scalar(value) or old == str(value):
+                    changes.append(f'{key}: {old} (unchanged)')
+                    continue
+                lines[i] = _with_comment(new, lines[i], m.group('comment'))
+                changes.append(f'{key}: {old or "(empty)"} -> {_yaml_scalar(value)}')
+            continue
+        dead = re.compile(_ENTRY.format(prefix=r'#\s*', key=re.escape(key)))
+        hit = next((i for i, ln in enumerate(lines) if dead.match(ln)), None)
+        if hit is not None:
+            lines[hit] = _with_comment(new, lines[hit], dead.match(lines[hit]).group('comment'))
+            changes.append(f'{key}: {_yaml_scalar(value)} (was commented out)')
+        else:
+            lines.append(new)
+            changes.append(f'{key}: {_yaml_scalar(value)} (added at the end)')
+    return '\n'.join(lines) + '\n', changes
+
+
 def init(argv, cwd=REPO) -> str:
     cfg_file, cli, rest = split_args('init', argv)
     if rest:
@@ -611,7 +668,28 @@ def init(argv, cwd=REPO) -> str:
     if not path.is_absolute():
         path = (Path(cwd) / path).resolve()
     if path.exists():
-        raise ConfigError(f'{path} exists; edit it, or remove it first (init never overwrites)')
+        if not cli:
+            raise ConfigError(f'{path} exists; init never overwrites it. Give the keys to set '
+                              f'(`just lab2 init car:=A`), or edit it')
+        _load_yaml(path)                    # refuse to edit a file that does not load
+        text, changes = set_keys(path.read_text(), cli)
+        try:
+            data = yaml.safe_load(text) or {}
+        except yaml.YAMLError as e:
+            raise ConfigError(f'{path}: setting {", ".join(cli)} would break it ({e}); '
+                              f'edit it by hand') from None
+        wrong = [k for k, v in cli.items() if data.get(k) != yaml.safe_load(_yaml_scalar(v))]
+        if wrong:
+            raise ConfigError(f'{path}: could not set {", ".join(wrong)} in place; edit it by hand')
+        if text != path.read_text():
+            tmp = path.with_name(path.name + '.tmp')
+            tmp.write_text(text)
+            os.chmod(tmp, path.stat().st_mode & 0o7777)
+            os.replace(tmp, path)
+            head = f'updated {path}'
+        else:
+            head = f'{path}: nothing to change'
+        return head + '\n' + '\n'.join('  ' + c for c in changes)
     path.parent.mkdir(parents=True, exist_ok=True)
     path.write_text(template(cli))
     return f"wrote {path}\n{INIT_KEYS_HINT}"

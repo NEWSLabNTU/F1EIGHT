@@ -73,8 +73,9 @@ config *ARGS:
 
 #   just lab2 init                           ~/lab2/lab2.yaml
 #   just lab2 init car:=A team:=3            fill those in, leave the rest commented
+#                                            (a file that exists: only those keys change)
 #   just lab2 init config:=FILE              another file
-# Write a commented settings template (never overwrites an existing file)
+# Write a commented settings template, or set just the given keys in an existing one
 [positional-arguments]
 init *ARGS:
     #!/usr/bin/env bash
