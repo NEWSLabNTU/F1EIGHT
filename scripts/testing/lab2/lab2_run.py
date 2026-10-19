@@ -1,11 +1,37 @@
 #!/usr/bin/env python3
-"""`just lab2 run`: one graded run from one terminal.
+"""`just lab2 run`: one graded run from one terminal, on the car or on the bench.
 
-    just lab2 run                          the car: settings from ~/lab2/lab2.yaml
-    just lab2 run config:=FILE car:=B      another file, a command-line override
-    just lab2 run --bench                  the same flow on the vehicle bench (no car)
+    just lab2 run team:=3                  ~/lab2/team3 (the student command)
+    just lab2 run ~/lab2/team3             the same, by directory
+
+    TA:
+    just lab2 run                          team_dir (and team) from ~/lab2/lab2.yaml
+    just lab2 run DIR team_number:=7       a team directory not named teamN
+    just lab2 run team:=3 --bench          the vehicle bench, even on a car
+    just lab2 run team:=3 --car            the car, even where no Jetson is detected
     just lab2 run --bench --camera mock    ... with rendered boards into the real localizer
     just lab2 run --bench --yes            engage without asking (tests; --bench only)
+
+The team: team:=N is $LAB2_HOME/teamN (~/lab2/teamN), team number N; team:=DIR or a
+positional DIR is that directory (its <student_id>_lab_2_1/ controller and
+path_tracker.param.yaml, as `submission.py --team` reads them), its number from a teamN
+name, else team_number:=, else the settings' `team`. With none, the settings' team_dir.
+Beside an explicit controller (team_dir:=, submission:=, speed_controller_class:=, as
+`just lab2 integration-test` passes them) team:= is the team NUMBER only.
+
+Car or bench (lab2_env.decide_mode): --bench / --car decide; otherwise a Jetson
+(/etc/nv_tegra_release) is a car and anything else a workstation. A car needs its letter
+(`car:` in ~/lab2/lab2.yaml, the TA's `just lab2 init car:=X`) and stops without it. A
+workstation runs the vehicle bench (car SIM unless `car:` is set), engages without asking,
+ends a run that has not moved 0.5 m in 20 s, and prints the gate verdict of
+bench_gate.judge (`just lab2 gate`'s PASS/FAIL) at the end.
+
+Over SSH (SSH_CONNECTION or SSH_TTY) and not inside tmux, the command re-runs itself in a
+new tmux session (lab2-run, or lab2-run-2, ...), and says how to reattach if the
+connection drops; without tmux, a warning. The windows: $DISPLAY if it answers, else :1
+(the car's desktop, seen over RDP) if it answers, else headless; one line says which. The
+stack never gets a DISPLAY (the ZED: scripts/testing/lab2/camera_display.sh); audit.png
+opens on the display chosen, and its path is always printed.
 
 In order, with short status lines on the terminal and everything else in log
 files under BAG_DIR/run_logs/<bag name>/ (stack.log, record.log, preflight.log,
@@ -24,7 +50,10 @@ run.log, play_log/):
      finish disengages at once
   6. record 3 s more, disengage if still engaged, stop the recording, stop
      the stack
-  7. audit the bag (`lab2_audit`: verdict, metrics, violations, audit.png)
+  7. audit the bag (`lab2_audit`: verdict, every graded metric with its value, the
+     car's reference value (the `reference` bag, ~/lab2/reference/uturn) and its marks,
+     validity, the total; violations; audit.png, opened when there is a display); on
+     the bench, the gate verdict after it
 
 Localization loss stops the car (disengage, so Autoware's stop mode brakes it)
 as soon as any of these holds while engaged, without waiting for the MRM the
@@ -42,8 +71,8 @@ Ctrl-C (or a closed terminal) at any point: disengage if engaged, stop the
 recording, stop the stack. Every process this starts is in a session of its
 own, and is stopped by process group: SIGINT, then SIGTERM, then SIGKILL.
 
-Exit status: 0 for a finished run whose audit is VALID, 1 otherwise, 2 for a
-usage or settings error. With --integration (`just lab2 integration-test`):
+Exit status: 0 for a finished run whose audit is VALID (the bench: the gate passed),
+1 otherwise, 2 for a usage or settings error. With --integration (`just lab2 integration-test`):
 0 only if the run finished, check-bags (bench mode) accepted the bag, the grade
 is valid, audit.png exists and the localization against the bench's true pose
 is within audit.LOC_LIMITS.
@@ -53,6 +82,7 @@ import json
 import math
 import os
 import select
+import shutil
 import signal
 import subprocess
 import sys
@@ -64,6 +94,7 @@ from typing import Dict, List, Optional, Tuple
 HERE = Path(__file__).resolve().parent
 sys.path.insert(0, str(HERE))
 import lab2_config as lc  # noqa: E402
+import lab2_env as le  # noqa: E402
 
 REPO = lc.REPO
 COURSES_DIR = REPO / 'src/lab/autosdv_waypoint_lab/config/courses'
@@ -84,7 +115,11 @@ ERROR_LEVEL = 2
 
 INTERRUPTED: List[str] = []    # set by the signal handler, read by Run.check_interrupt
 
-OWN_FLAGS = {'--bench', '--yes', '--integration'}
+OWN_FLAGS = {'--bench', '--car', '--yes', '--integration'}
+# with one of these on the command line the controller is given, and team:= is the team
+# NUMBER only (as `just lab2 integration-test` passes it)
+CONTROLLER_KEYS = ('team_dir', 'submission', 'speed_controller_class')
+STALL_S, STALL_M = 20.0, 0.5        # bench: 0.5 m within 20 s of the engage (bench_gate's)
 OWN_VALUE_FLAGS = {'--camera', '--timeout', '--ready-timeout', '--max-pose-std'}
 
 
@@ -93,6 +128,7 @@ OWN_VALUE_FLAGS = {'--camera', '--timeout', '--ready-timeout', '--max-pose-std'}
 @dataclass
 class Options:
     bench: bool = False
+    car: bool = False
     yes: bool = False
     integration: bool = False
     camera: Optional[str] = None
@@ -101,6 +137,10 @@ class Options:
     max_pose_std: float = MAX_POSE_STD
     config_args: Tuple[str, ...] = ()
     launch_args: Tuple[str, ...] = ()
+    team: Optional[str] = None          # team:=N or team:=DIR
+    team_pos: Optional[str] = None      # a positional DIR
+    team_number: Optional[str] = None   # team_number:=N
+    auto_bench: bool = False            # bench because this is not a car (no --bench)
 
 
 class UsageError(Exception):
@@ -108,12 +148,29 @@ class UsageError(Exception):
 
 
 def parse_args(argv: List[str]) -> Options:
-    """Split our flags, the settings (config:=, KEY:=value) and the launch arguments.
-    `team:=` here is the team NUMBER (as in record); the directory is team_dir:=."""
+    """Split our flags, the settings (config:=, KEY:=value), the team and the launch
+    arguments. `team:=N` / `team:=DIR` / a positional DIR name the team (resolve_team);
+    beside an explicit controller (CONTROLLER_KEYS) `team:=` is the team NUMBER only."""
     o = Options()
     cfg, launch = [], []
+    explicit_ctrl = any(a.split(':=', 1)[0] in CONTROLLER_KEYS and ':=' in a for a in argv)
     it = iter(argv)
     for a in it:
+        key, sep, kval = a.partition(':=')
+        if sep and key == 'team' and not explicit_ctrl:
+            o.team = kval
+            continue
+        if sep and key == 'team_number':
+            o.team_number = kval
+            continue
+        if not sep and a and not a.startswith('-'):
+            if len(a) == 1 and a.isalpha():
+                raise UsageError(f"'{a}' looks like a car letter: that is the TA's, set once per car "
+                                 f'(just lab2 init car:={a.upper()}), or car:={a.upper()} for one run')
+            if o.team_pos is not None:
+                raise UsageError(f'one team directory, not {o.team_pos} and {a}')
+            o.team_pos = a
+            continue
         flag, eq, val = a.partition('=')
         if a in OWN_FLAGS:
             setattr(o, a[2:], True)
@@ -144,6 +201,8 @@ def parse_args(argv: List[str]) -> Options:
             raise UsageError('help')
         else:
             launch.append(a)
+    if o.team is not None and o.team_pos is not None:
+        raise UsageError(f'one team: team:={o.team} or {o.team_pos}, not both')
     if o.yes and not o.bench:
         raise UsageError('--yes engages without asking, which is for the bench only: '
                          'on the car the TA must hold the transmitter first')
@@ -156,6 +215,70 @@ def parse_args(argv: List[str]) -> Options:
 def vehicle_config_args(cfg) -> List[str]:
     """The settings for the stack: team:= (the number) is the recorder's, not the stack's."""
     return [a for a in cfg if not a.startswith('team:=')]
+
+
+def resolve_team(o: Options, settings, home: Path) -> Tuple[List[str], str]:
+    """([team_dir:=DIR, team:=N] to add to the settings, a note), or ([], '') when the team
+    comes from the settings file (team_dir) or from an explicit controller.
+
+    team:=N (digits) is <home>/teamN, number N; team:=DIR or a positional DIR is DIR, its
+    number from a teamN name, else team_number:=, else the settings' `team` (said so)."""
+    given = o.team if o.team is not None else o.team_pos
+    if given is None:
+        if any(a.split(':=', 1)[0] in CONTROLLER_KEYS for a in o.config_args + o.launch_args) \
+                or settings.get('team_dir'):
+            return [], ''
+        raise UsageError(f'which team? `just lab2 run team:=3` ({home}/team3), or '
+                         '`just lab2 run DIR` (the team directory)')
+    number, note = None, ''
+    if given.isdigit():
+        d, number = home / f'team{int(given)}', str(int(given))
+    else:
+        d = Path(os.path.expanduser(given))
+        m = __import__('re').fullmatch(r'team(\d+)', d.resolve().name)
+        number = str(int(m.group(1))) if m else None
+    d = d.resolve()
+    if o.team_number is not None:
+        if number is not None and o.team_number != number:
+            raise UsageError(f'team_number:={o.team_number}, but {d.name} is team {number}')
+        number = o.team_number
+    if number is None:
+        if settings.get('team'):
+            number = str(settings.get('team'))
+            note = f'team number {number} from the settings file (team_number:= to change)'
+        else:
+            raise UsageError(f'which team number is {d}? Its name is not teamN: add team_number:=N')
+    if not d.is_dir():
+        raise UsageError(f'no team directory {d}: put the team\'s <student_id>_lab_2_1/ and '
+                         'path_tracker.param.yaml there, or name the directory')
+    import submission as sub
+    try:
+        sub.team_controller(d)
+    except sub.SubmissionError as e:
+        raise UsageError(str(e)) from None
+    return [f'team_dir:={d}', f'team:={number}'], note
+
+
+def gate_verdict(end: Optional['End'], route: str, v_ref: float, laps: int, speeds, laps_done: int,
+                 faults, stalled: bool, at_rest: bool) -> Tuple[bool, str]:
+    """(PASS, the line) for a bench run, by bench_gate.judge: the verdict `just lab2 gate`
+    prints, from what `just lab2 run` watched."""
+    import bench_gate
+    kind = end.kind if end else 'aborted'
+    loc = end.text if kind == 'localization' else None
+    ok, why = bench_gate.judge(v_ref, list(speeds), kind == 'finished', laps_done, laps,
+                               end.text if kind == 'mrm' else False, list(faults),
+                               stalled or kind == 'stalled', at_rest, kind == 'timeout', loc)
+    if kind in ('stack', 'recorder', 'aborted', 'interrupted', 'disengaged'):
+        ok, why = False, [end.text if end else 'did not run'] + why
+    if ok:
+        moving = [v for v in speeds if v > 0.1]
+        import statistics
+        detail = (f'{laps_done}/{laps} laps, median {statistics.median(moving):.2f} m/s, '
+                  f'peak {max(moving):.2f} m/s, no MRM, SpeedPID clean')
+    else:
+        detail = '; '.join(why)
+    return ok, f"{'PASS' if ok else 'FAIL'}  {route}: {detail}"
 
 
 def route_dir(route: str) -> Path:
@@ -202,11 +325,12 @@ class Snapshot:
     monitor: Optional[Dict[str, Tuple[int, str, float]]] = None   # name -> (level, message, rx)
     stack_alive: bool = True
     recorder_alive: bool = True
+    progress: Optional[float] = None  # m along the route
 
 
 @dataclass
 class End:
-    kind: str        # finished | mrm | disengaged | localization | timeout | stack | recorder
+    kind: str        # finished | mrm | disengaged | localization | stalled | timeout | stack | recorder
     text: str
 
     @property
@@ -235,9 +359,10 @@ def localization_problem(s: Snapshot, max_pose_std: float = MAX_POSE_STD) -> Opt
 
 
 def end_reason(s: Snapshot, t_engage: float, timeout: float,
-               max_pose_std: float = MAX_POSE_STD) -> Optional[End]:
+               max_pose_std: float = MAX_POSE_STD, stall: bool = False) -> Optional[End]:
     """Has the run ended, and how? Safety first: a dead stack, an MRM and a lost pose
-    win over a finish seen in the same instant."""
+    win over a finish seen in the same instant. stall (the bench): less than STALL_M
+    along the route STALL_S after the engage ends it, as the gate does."""
     if not s.stack_alive:
         return End('stack', 'the stack exited')
     if s.mrm:
@@ -254,6 +379,8 @@ def end_reason(s: Snapshot, t_engage: float, timeout: float,
         return End('localization', f'localization lost: {loc}')
     if not s.recorder_alive:
         return End('recorder', 'the recording stopped')
+    if stall and s.now - t_engage > STALL_S and (s.progress is None or s.progress < STALL_M):
+        return End('stalled', f'car did not move ({STALL_M} m in {STALL_S:.0f} s)')
     if s.now - t_engage > timeout:
         return End('timeout', f'not finished after {timeout:.0f} s')
     return None
@@ -373,6 +500,7 @@ def make_monitor():
     from nav_msgs.msg import Odometry
     from rclpy.node import Node
     from rclpy.qos import DurabilityPolicy, QoSProfile, ReliabilityPolicy
+    from std_msgs.msg import String
     from tier4_system_msgs.msg import OperationModeAvailability
 
     # our own SIGINT handling: Ctrl-C must still be able to disengage through rclpy
@@ -402,6 +530,10 @@ def make_monitor():
             self.pose_rx = None
             self.pose_std = 0.0
             self.monitor = {}
+            self.speeds = []             # while AUTONOMOUS: the gate's speed check
+            self.faults = []             # the actuator's SpeedPID faults
+            self.create_subscription(String, '/autosdv/actuator_node/debug/mode',
+                                     self.on_actuator_mode, latched)
             self.create_subscription(OperationModeState, '/api/operation_mode/state', self.on_mode, latched)
             self.create_subscription(MrmState, '/system/fail_safe/mrm_state', self.on_mrm, 10)
             self.create_subscription(OperationModeAvailability, '/system/operation_mode/availability',
@@ -428,8 +560,14 @@ def make_monitor():
         def on_avail(self, m):
             self.available = bool(m.autonomous)
 
+        def on_actuator_mode(self, m):
+            if 'controller_fault' in m.data:
+                self.faults.append(m.data)
+
         def on_vel(self, m):
             self.speed = float(m.longitudinal_velocity)
+            if self.mode == self.AUTONOMOUS:
+                self.speeds.append(self.speed)
             if abs(self.speed) < AT_REST:
                 self.rest_since = self.rest_since or time.monotonic()
             else:
@@ -454,7 +592,8 @@ def make_monitor():
             p = self.progress
             return Snapshot(time.monotonic(), self.mode == self.AUTONOMOUS, self.mrm,
                             bool(p and p.finished), self.speed, self.rest_since, self.pose_rx,
-                            self.pose_std, dict(self.monitor), stack_alive, recorder_alive)
+                            self.pose_std, dict(self.monitor), stack_alive, recorder_alive,
+                            float(p.progress) if p else None)
 
         def mode_name(self):
             return self.MODES.get(self.mode, '?') if self.mode is not None else '-'
@@ -488,6 +627,7 @@ class Run:
         self.logf = None
         self.tty = sys.stdout.isatty()
         self.bag: Optional[Path] = None
+        self.viewer: Optional[str] = None     # the X display audit.png opens on, or None
 
     # ---- output
     def say(self, msg=''):
@@ -566,6 +706,7 @@ class Run:
             + (['--bench'] if o.bench else [])
         self.audit_cmd = ['ros2', 'run', 'autosdv_waypoint_lab', 'lab2_audit'] \
             + [str(self.bag) if a == 'BAG' else a for a in audit_args]
+        self.route_name = self.course_dir.name
         return summary
 
     def start_stack(self, env):
@@ -730,7 +871,7 @@ class Run:
         while True:
             self.spin(0.05)
             s = self.snap()
-            end = end_reason(s, t0, self.timeout, self.o.max_pose_std)
+            end = end_reason(s, t0, self.timeout, self.o.max_pose_std, stall=self.o.bench)
             if end:
                 self.status('')
                 return end
@@ -763,18 +904,40 @@ class Run:
     def audit(self, env) -> Optional[dict]:
         if not (self.bag / 'metadata.yaml').is_file():
             return None
-        self.say('[7/7] audit')
-        r = subprocess.run(self.audit_cmd, cwd=REPO, env=env, capture_output=True, text=True,
+        self.say('[7/7] audit: the grading, and the plot')
+        env = dict(env)
+        cmd = list(self.audit_cmd)
+        if self.viewer:
+            env['DISPLAY'] = self.viewer
+            cmd.append('--show')
+        r = subprocess.run(cmd, cwd=REPO, env=env, capture_output=True, text=True,
                            start_new_session=True, timeout=300)
         (self.logdir / 'audit.log').write_text(r.stdout + r.stderr)
         for ln in r.stdout.splitlines():
             self.say(ln)
         if r.returncode not in (0, 1):
             self.say(f'      the audit failed: {self.tail(self.logdir / "audit.log", 4)}')
+        if not self.viewer and (self.bag / 'audit.png').is_file():
+            self.say(f'      no display to open it on; the plot is {self.bag / "audit.png"}')
         try:
             return json.loads((self.bag / 'audit.json').read_text())
         except (OSError, ValueError):
             return None
+
+
+def bench_gate_line(run: 'Run') -> Tuple[bool, str]:
+    """The gate's verdict for a bench run (`just lab2 gate`'s PASS/FAIL line)."""
+    import bench_gate
+    try:
+        _, v_ref, laps = bench_gate.course_info(str(run.course_dir))
+    except (OSError, ValueError):
+        v_ref, laps = 0.8, 1
+    p = run.mon.progress if run.mon is not None else None
+    return gate_verdict(run.end, run.route_name, v_ref, laps,
+                        run.mon.speeds if run.mon is not None else [],
+                        int(p.laps_done) if p else 0,
+                        run.mon.faults if run.mon is not None else [],
+                        False, abs(run.mon.speed) < 0.05 if run.mon is not None else False)
 
 
 def integration_verdict(end: Optional[End], audit: Optional[dict]) -> Tuple[bool, List[str]]:
@@ -816,7 +979,39 @@ def main(argv=None) -> int:
             return 0
         print(f'lab2 run: {e}', file=sys.stderr)
         return 2
+    # over SSH: inside tmux, so a dropped connection does not stop the run
+    how = le.tmux_plan(os.environ, bool(shutil.which('tmux')), sys.stdin.isatty())
+    if how == 'reexec':
+        name = le.tmux_session_name(le.tmux_exists)
+        print(f'lab2 run: over SSH, so this runs inside tmux session {name}; if the connection '
+              f'drops, log in again and `tmux attach -t {name}`', flush=True)
+        cmd = le.tmux_command(name, ['just', 'lab2', 'run'] + argv, REPO, os.environ)
+        os.execvp(cmd[0], cmd)
+    if how == 'warn':
+        print('lab2 run: warning: over SSH without tmux (sudo apt install tmux): a dropped '
+              'connection stops the run', file=sys.stderr)
+    try:
+        cfg_file, cli, _ = lc.split_args('record', list(o.config_args))
+        c = lc.Config(cli, cfg_file)
+        extra, note = resolve_team(o, c, le.lab2_home())
+        mode = le.decide_mode(le.car_hardware(), c.get('car'), o.bench, o.car)
+    except (UsageError, lc.ConfigError, le.Lab2EnvError) as e:
+        print(f'lab2 run: {e}', file=sys.stderr)
+        return 2
+    if note:
+        print(f'lab2 run: {note}')
+    if mode == 'bench':
+        if not o.bench:
+            o.bench, o.auto_bench, o.yes = True, True, True
+            print('lab2 run: not a car (no /etc/nv_tegra_release): the vehicle bench, a simulated '
+                  'car, engaged without asking; then the gate verdict (--car forces the car)')
+        if not c.get('car'):
+            extra.append('car:=SIM')
+    o.config_args = tuple(o.config_args) + tuple(extra)
+    viewer, why_display = le.pick_display(os.environ)
+    print(f'lab2 run: {why_display}')
     env = dict(os.environ)
+    env.pop('DISPLAY', None)      # the ZED cannot have one: scripts/testing/lab2/camera_display.sh
     if o.bench:
         env.setdefault('ROS_DOMAIN_ID', '73')
         if env['ROS_DOMAIN_ID'] == '0':
@@ -825,6 +1020,7 @@ def main(argv=None) -> int:
         env.setdefault('LAB2_WEB_ADDR', '127.0.0.1:8091')
     os.environ.update({k: env[k] for k in ('ROS_DOMAIN_ID',) if k in env})
     run = Run(o)
+    run.viewer = viewer
     try:
         summary = run.plan()
     except lc.ConfigError as e:
@@ -884,6 +1080,13 @@ def main(argv=None) -> int:
         audit = run.audit(env)
     elif run.bag and (run.bag / 'metadata.yaml').is_file():
         run.say(f'audit it with: just lab2 audit {run.bag}')
+    gate_ok = None
+    if o.bench and not o.integration:
+        gate_ok, line = bench_gate_line(run)
+        run.say('')
+        run.say('gate (as `just lab2 gate`):')
+        run.say('  ' + line)
+        run.say('  -> GATE PASSED' if gate_ok else '  -> GATE FAILED')
     if o.integration:
         ok, lines = integration_verdict(run.end, audit)
         run.say('')
@@ -892,6 +1095,8 @@ def main(argv=None) -> int:
             run.say('  ' + ln)
         run.say('INTEGRATION TEST ' + ('PASSED' if ok else 'FAILED'))
         return 0 if ok else 1
+    if gate_ok is not None:
+        return 0 if gate_ok else 1
     return 0 if finished_ok and audit and audit.get('valid') else 1
 
 

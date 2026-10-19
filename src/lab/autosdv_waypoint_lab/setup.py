@@ -52,6 +52,7 @@ setup(
             'lab2_check_bags = autosdv_waypoint_lab.check_bags:main',
             'lab2_steer_cal = autosdv_waypoint_lab.steer_cal:main',
             'lab2_make_uturn = autosdv_waypoint_lab.uturn:main',
+            'lab2_make_straight = autosdv_waypoint_lab.straight:main',
             'lab2_audit = autosdv_waypoint_lab.audit:main',
             'mock_aruco_camera = autosdv_waypoint_lab.mock_camera_node:main',
             'bench_straight_driver = autosdv_waypoint_lab.bench_straight_driver_node:main',

@@ -20,7 +20,8 @@ def test_fit_recovers_ratio_and_lock():
     assert r.max_angle == pytest.approx(50 / 143.0, rel=1e-6)
     assert r.centre == pytest.approx(0.0, abs=1e-6)
     assert r.angle_needed == pytest.approx(math.atan(sc.WHEEL_BASE / sc.R_FIRST_CIRCLE))
-    assert r.margin_ok == (r.angle_needed <= sc.MARGIN * r.max_angle)
+    assert r.min_radius == pytest.approx(sc.WHEEL_BASE / math.tan(r.max_angle))
+    assert r.margin_ok == (r.min_radius <= sc.MAX_MIN_RADIUS)
 
 
 def test_the_gate_is_the_graded_uturn_radius():
@@ -28,6 +29,12 @@ def test_the_gate_is_the_graded_uturn_radius():
     from autosdv_waypoint_lab import route_grade as rg
     with open(rg.template_dir('uturn') + '/course.yaml') as f:
         assert sc.R_FIRST_CIRCLE == float(yaml.safe_load(f)['uturn']['radius'])
+    assert sc.MAX_MIN_RADIUS == pytest.approx(sc.R_FIRST_CIRCLE - 0.2)
+
+
+def test_the_stand_in_ratio_passes():
+    # -143 gives 0.350 rad of lock: a 0.87 m minimum radius, inside 0.9 m at R 1.1 m
+    assert sc.fit(_circles(-143.0)).margin_ok
 
 
 def test_fit_sees_a_centre_error():
@@ -43,11 +50,11 @@ def test_the_shipped_ratio_cannot_hold_the_tight_circle():
 
 
 def test_a_marginal_car_fails():
-    # the ratio whose lock the tightest circle uses exactly MARGIN of
-    needed = math.atan(sc.WHEEL_BASE / sc.R_FIRST_CIRCLE)
-    limit = sc.SERVO_HALF_RANGE * sc.MARGIN / needed
-    assert not sc.fit(_circles(-1.05 * limit)).margin_ok     # 84 % of lock
-    assert sc.fit(_circles(-0.99 * limit)).margin_ok          # 79 %
+    # the ratio whose lock turns the car on exactly MAX_MIN_RADIUS
+    lock = math.atan(sc.WHEEL_BASE / sc.MAX_MIN_RADIUS)
+    limit = sc.SERVO_HALF_RANGE / lock
+    assert not sc.fit(_circles(-1.05 * limit)).margin_ok     # less lock: radius over the gate
+    assert sc.fit(_circles(-0.99 * limit)).margin_ok          # a little more lock: inside
 
 
 def test_measurement_noise_is_tolerated():

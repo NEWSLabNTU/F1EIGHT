@@ -1,0 +1,20 @@
+# AutoSDV vehicle: polkit rules for the TurboVNC desktop. Installed by the setup
+# step `turbovnc-polkit` into /etc/polkit-1/localauthority/50-local.d/.
+#
+# logind counts the VNC session as remote, so polkit asks for an admin password
+# where the car's own desktop asks for nothing. Settings' Wi-Fi panel rescans
+# every few seconds, and each scan raised "System policy prevents Wi-Fi scans".
+#
+# polkit here is 0.105, which reads these .pkla files only. The JavaScript
+# /etc/polkit-1/rules.d/45-turbovnc-gnome3.rules that TurboVNC installs is for
+# newer polkit and has no effect on Ubuntu 22.04.
+#
+# Only the scan: joining or changing a network still asks. Limited to the sudo
+# group, who could authenticate for it anyway.
+
+[AutoSDV VNC: Wi-Fi scan without a password]
+Identity=unix-group:sudo
+Action=org.freedesktop.NetworkManager.wifi.scan
+ResultAny=yes
+ResultInactive=yes
+ResultActive=yes

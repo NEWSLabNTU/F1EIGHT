@@ -1,13 +1,16 @@
 #!/usr/bin/env python3
 """Draw a Lab 2 Part 1 run's curves to a PNG, with no display.
 
-    just lab2 plot-sim tmp/lab2/part1/B12345678_lab_2_1/nominal
-    python3 scripts/testing/lab2/plot_part1.py RUN_DIR [-o FILE] [--t0 S] [--t1 S]
+    just lab2 plot-sim                      the latest run, every car
+    just lab2 plot-sim tmp/lab2/part1/B12345678_lab_2_1/latest/nominal
+    python3 scripts/testing/lab2/plot_part1.py [DIR] [-o FILE] [--t0 S] [--t1 S]
 
-RUN_DIR is one run's output directory, the one holding trace.csv (and marks.json).
-A directory with a single variant below it (nominal/, low_mu/, ...) is also accepted.
-Writes RUN_DIR/curves.png (or -o FILE) with matplotlib's Agg backend, so it works
-over SSH and after a run with rviz:=false gui:=false, which saves no dashboard.png:
+`just lab2 sim` already draws curves.png into every car's directory when it ends; this
+redraws them, or zooms in. DIR is one car's directory (the one holding trace.csv and
+marks.json), or a run directory with a car per subdirectory (nominal/, low_batt/,
+low_mu/): every car is drawn. No DIR: the latest run, the newest
+tmp/lab2/part1/<submission>/latest. Writes <car>/curves.png (or -o FILE, one car only)
+with matplotlib's Agg backend, so it works over SSH and after a headless run:
 
     speed      target (dashed), measured (what the controller receives), true (the plant)
     motor PWM  with neutral, the brake zone and the dead band shaded
@@ -23,11 +26,31 @@ import json
 from pathlib import Path
 import sys
 
+PART1_TMP = Path(__file__).resolve().parents[3] / 'tmp/lab2/part1'
 PWM_DEFAULTS = {'init_pwm': 370, 'min_pwm': 360, 'max_pwm': 470, 'brake_pwm': 340}
 BRAKE_DEADBAND = 5          # the ESC's dead band below neutral [counts]
 SURFACE, INK_2, GRID = '#fcfcfb', '#52514e', '#e4e3df'
 C_TRUE, C_MEASURED, C_TARGET = '#2a78d6', '#eb6834', '#52514e'
 C_FAIL, C_ESTOP, C_BRAKE = '#e34948', '#b9b8b2', '#2a78d6'
+
+
+def find_runs(path: Path):
+    """[path] when it holds trace.csv, else every car directory below it."""
+    if (path / 'trace.csv').is_file():
+        return [path]
+    runs = sorted(p.parent for p in path.glob('*/trace.csv'))
+    if runs:
+        return runs
+    raise SystemExit(f'no trace.csv in {path} (give a run directory, '
+                     'tmp/lab2/part1/<submission>/<date>_<time>, or one car below it)')
+
+
+def latest_run(base: Path = PART1_TMP) -> Path:
+    """The newest tmp/lab2/part1/<submission>/latest (by when the link was made)."""
+    links = [p for p in Path(base).glob('*/latest') if p.is_symlink() and p.exists()]
+    if not links:
+        raise SystemExit(f'no run under {base}: run `just lab2 sim` first, or name a directory')
+    return max(links, key=lambda p: p.lstat().st_mtime)
 
 
 def find_run(path: Path) -> Path:
@@ -72,6 +95,15 @@ def spans(t, flags):
     if start is not None and t:
         out.append((start, t[-1]))
     return out
+
+
+def title_for(run: Path) -> str:
+    """<submission> / <date>_<time> / <car> (through `latest`), or <dir> / <car>."""
+    run = Path(run).resolve()
+    title = f"{run.parent.name} / {run.name}"
+    if run.parent.name[:2] == '20' and run.parent.parent.name:     # <submission>/<date>/<car>
+        title = f"{run.parent.parent.name} / {title}"
+    return title
 
 
 def plot(run: Path, out: Path, t0=None, t1=None) -> Path:
@@ -126,7 +158,7 @@ def plot(run: Path, out: Path, t0=None, t1=None) -> Path:
         ax_v.text(a, 0.92 - 0.07 * (i % 6), f" {v.get('name', '?')}",
                   transform=ax_v.get_xaxis_transform(), va='top', fontsize=8, color=C_FAIL, clip_on=True)
 
-    title = f"{run.parent.name} / {run.name}"
+    title = title_for(run)
     if marks:
         if marks.get('valid', True):
             title += f"   {marks.get('passed', '?')}/{marks.get('total', '?')} checks passed"
@@ -144,7 +176,8 @@ def plot(run: Path, out: Path, t0=None, t1=None) -> Path:
 def main(argv=None) -> int:
     ap = argparse.ArgumentParser(description="Draw a Part 1 run's trace.csv to a PNG "
                                              '(no display needed).')
-    ap.add_argument('run_dir', type=Path, help='tmp/lab2/part1/<name>/<variant>')
+    ap.add_argument('run_dir', type=Path, nargs='?', default=None,
+                    help='a run or one car of it (default: the latest run)')
     ap.add_argument('-o', '--out', type=Path, default=None,
                     help='the PNG to write (default RUN_DIR/curves.png)')
     ap.add_argument('--t0', type=float, default=None, help='zoom: from this time [s]')
@@ -155,9 +188,15 @@ def main(argv=None) -> int:
     except ImportError:
         print('matplotlib is not installed: sudo apt install python3-matplotlib', file=sys.stderr)
         return 2
-    run = find_run(args.run_dir.expanduser())
-    out = args.out.expanduser() if args.out else run / 'curves.png'
-    print(plot(run, out, args.t0, args.t1))
+    where = args.run_dir.expanduser() if args.run_dir else latest_run()
+    runs = find_runs(where)
+    if args.out and len(runs) > 1:
+        names = ', '.join(r.name for r in runs)
+        raise SystemExit(f'{where} holds several runs ({names}); -o draws one: name it, '
+                         f'e.g. {runs[0]}')
+    for run in runs:
+        print(plot(run, args.out.expanduser() if args.out else run / 'curves.png',
+                   args.t0, args.t1))
     return 0
 
 

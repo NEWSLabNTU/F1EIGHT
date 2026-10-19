@@ -13,7 +13,7 @@ localized pose and the path) and the `SpeedPID` (the actuator's inner loop).
 | `just lab2 preflight` | (reads the running stack) | before engaging: nodes, rates, marker fixes, start box, TF, availability, MRM, graph |
 | `just lab2 gate` | (starts a bench) | a team's SpeedPID drives `lab2_uturn`, PASS/FAIL before car time |
 | `just lab2 make-uturn R [--leg L]` | (no ROS) | regenerate the graded course from its radius and leg length |
-| `just lab2 run` | (starts the stack) | ONE graded run: stack, preflight, record, engage (asks), stop, audit |
+| `just lab2 run team:=N` | (starts the stack) | ONE graded run: stack, preflight, record, engage (asks), stop, grading table, `audit.png`; on a workstation the vehicle bench and the gate verdict |
 | `just lab2 audit` | (no stack) | the latest bag: VALID/INVALID, every metric, the violations, `audit.png` |
 | `just lab2 health` | (reads the running stack) | beside a run: topic rates and gaps, CPU, memory, GPU, temperatures, throttling; OK/WARN/FAIL |
 | `just lab2 integration-test` | (starts a bench) | TA: the whole Part 2 pipeline on the bench, rendered boards, PASS/FAIL |
@@ -26,8 +26,13 @@ localized pose and the path) and the `SpeedPID` (the actuator's inner loop).
 
 ## Settings (`~/lab2/lab2.yaml`)
 
-The student recipes take their car, team and directories from one file instead
-of the command line, so the whole run is short:
+The student commands need no settings: `just lab2 sim` finds
+`~/lab2/<id>_lab_2_1` itself, and `just lab2 run team:=3` names the team on the
+command line. The file is for the TA (the car's letter, set once per car with
+`just lab2 init car:=A`) and for the step-by-step recipes, which take their car,
+team and directories from it instead of the command line. `LAB2_HOME` moves
+`~/lab2` (the settings file, the submissions, the team directories, the
+reference bag), for tests and for a TA grading elsewhere:
 
 ```bash
 just lab2 init car:=A team:=3     # once: writes ~/lab2/lab2.yaml, then fill in the paths
@@ -75,17 +80,46 @@ components are shared with this one.
 
 ## A graded run from one terminal (`just lab2 run`, `just lab2 audit`)
 
-On the car there is no monitor: students work over ssh, in tmux so a dropped
-connection does not end the run. One command does the run, a second looks at
-it:
+On the car there is no monitor: students work over ssh. One command does the
+run, a second looks at it:
 
 ```bash
 ssh car-a
-tmux new -s lab2                  # or `tmux attach -t lab2`
-just lab2 run                     # settings from ~/lab2/lab2.yaml
+just lab2 run team:=3             # ~/lab2/team3 (or: just lab2 run ~/lab2/team3)
 just lab2 audit                   # the latest bag again, any time later
 just lab2 audit --show            # also open audit.png: `export DISPLAY=:1` first, view over RDP
 ```
+
+What `just lab2 run` decides by itself (`scripts/testing/lab2/lab2_env.py`, unit
+tested in `test_lab2_env.py`):
+
+- **The team.** `team:=N` is `~/lab2/teamN`, team number N. `team:=DIR` or a
+  positional `DIR` is that directory (its `<student_id>_lab_2_1/` controller and
+  `path_tracker.param.yaml`, checked before anything starts); the number comes
+  from a `teamN` name, else `team_number:=N`, else the settings' `team` (said
+  so), else it stops and asks for `team_number:=`. No team on the command line:
+  the settings' `team_dir`. Beside an explicit controller (`team_dir:=`,
+  `submission:=`, `speed_controller_class:=`, as `integration-test` passes
+  them) `team:=` stays the team number.
+- **Car or bench.** A Jetson (`/etc/nv_tegra_release` exists) is a car; it
+  needs its letter, `car:` in `~/lab2/lab2.yaml`, which the TA writes once per
+  car with `just lab2 init car:=X`; without it the run stops and says so.
+  Anything else is a workstation: the same flow on the vehicle bench (car `SIM`
+  unless `car:` is set), engaged without asking, a run that has not moved
+  0.5 m within 20 s ended, and at the end the gate verdict of `bench_gate.judge`,
+  the PASS/FAIL line `just lab2 gate` prints. `--bench` and `--car` force
+  either. The PCA9685 is not probed: reading the I2C bus needs the `i2c` group
+  and races the actuator, and every car is a Jetson.
+- **tmux.** Started over SSH (`SSH_CONNECTION` or `SSH_TTY`) and not inside tmux,
+  it re-runs the same command in a new tmux session `lab2-run` (`lab2-run-2`,
+  ... while one is running) and prints `tmux attach -t lab2-run` for when the
+  connection drops; the window stays until Enter after the run. No tmux: a
+  warning, and the run goes on.
+- **The display.** `$DISPLAY` if it answers, else `:1` (the car's desktop, seen
+  over RDP) if `/tmp/.X11-unix/X1` exists and answers, else headless; one line
+  says which. The stack never gets a DISPLAY (the ZED,
+  `scripts/testing/lab2/camera_display.sh`); `audit.png` opens on the display
+  chosen, and its path is printed either way.
 
 `just lab2 run`, in one terminal, with one status line at a time:
 
@@ -112,12 +146,16 @@ just lab2 audit --show            # also open audit.png: `export DISPLAY=:1` fir
    stops the recording, and stops the stack: SIGINT, then SIGTERM after
    20 s, then SIGKILL, to every process group of its session (play_launch gives
    its nodes groups of their own);
-7. audits the new bag and prints the verdict and the plot's path.
+7. audits the new bag: the table of every graded metric (its value, the car's
+   reference value from the `reference` bag, `~/lab2/reference/uturn`, when it
+   is there, the full-marks and zero lines, the marks), the validity lines,
+   VALID/INVALID and the total; a non-graded route (`lab2_straight_*`) shows
+   its metrics only. Then `audit.png`, opened in a window when there is a
+   display, its path printed always; on the bench, the gate verdict last.
 
 Ctrl-C at any stage (or the terminal going away) disengages first if engaged,
 then closes the bag, then stops the stack; a second Ctrl-C during that only
-prints "please wait". `team:=` here is the team NUMBER, as in `record`; the
-controller directory is `team_dir:=`.
+prints "please wait".
 
 ```
 config ~/lab2/lab2.yaml: route lab2_uturn, team_dir ~/lab2/team3
@@ -562,6 +600,68 @@ Grading (`route_grade.py`, `lab2-submission-bags.md`): speed RMSE on the legs
 car's reference bag; a bag off the path by more than 0.3 m, with a localization
 jump (pose vs integrated wheel speed over 1 s, 0.3 m), a non-finite pose or
 speed, unfinished, with an MRM or a disengage is invalid and scores 0.
+
+## Straight test routes (`lab2_straight_2m`, `lab2_straight_3m`)
+
+TA and testing only, never graded: the same commands the teams use, on a
+shorter route, for bags to inspect.
+
+```bash
+just lab2 run team:=3 route:=lab2_straight_3m  # stack, preflight, record, engage (asks), watch, stop, audit
+just lab2 audit rosbags/lab2_straight_3m_1     # METRICS ONLY: speed RMSE, overshoot, stop error, audit.png
+just lab2 vehicle route:=lab2_straight_3m      # step by step: vehicle, record route:=..., engage
+just lab2 record route:=lab2_straight_3m       # rosbags/lab2_straight_3m_<next>
+just lab2 run --bench --yes route:=lab2_straight_3m car:=SIM team:=0 \
+    speed_controller_class:=autosdv_vehicle_interface.speed_controller:AckermannSpeedPID   # no car
+```
+
+Or put `route: lab2_straight_3m` in `~/lab2/lab2.yaml` for a session of them.
+
+**The field is the U-turn's.** Each straight starts in the U-turn's start box
+and drives +x along its first leg at 0.8 m/s, open path, one run, and the path
+publisher's end ramp stops it on the last waypoint: `lab2_straight_2m` at
+x = 2 (the U-turn's turn entry), `lab2_straight_3m` at x = 3, 1.5 m short of
+boards 24/25. Same start-box frame, same four boards, so the tape and boards of
+`lab2_uturn` serve unchanged. Coverage (`marker_sim`): the 2 m sees boards 24
+and 25 throughout; the 3 m sees both up to s = 2.6 m and board 24 alone, 1.5 m
+ahead, on the last 0.3 m (the end ramp and the stop).
+
+**Generated, not edited.** `just lab2 make-straight LENGTH [--speed V] [--name NAME]
+[--write]` (`autosdv_waypoint_lab/straight.py`) copies the boards from
+`lab2_uturn/course.yaml` and prints the coverage; without `--write` it is a
+dry run. A straight that brings the nose within 1 m of a board, or leaves a
+stretch with no board, is refused. When the U-turn's boards move, regenerate
+both (`test_straight.py` fails until you do).
+
+**The survey is reused, not redone.** A straight's `course.yaml` says
+`field: lab2_uturn`: routes on one field share its start box, boards and
+frame (a route without the key is its own field). When `route` is a straight
+but `surveys/latest` is aligned for `lab2_uturn`, `course_dir: auto` builds
+`surveys/<latest dir>.lab2_straight_3m/` once, re-solved for the straight from
+the drive survey-align recorded (`align_poses.csv`, `align_pnp.csv`; the
+`lab2_survey_align_solve` solver), and runs it; the run prints one
+`survey: ...` line naming it. `surveys/latest` itself is never written, so the
+U-turn and its reference bags keep their survey. A new `survey-align` changes
+latest's alignment inputs and the copy is rebuilt on the next run. If the copy
+cannot be made (no recorded drive, a refused solve), the run uses the packaged
+course with the usual warning.
+
+**Bags** are `BAG_DIR/lab2_straight_3m_N` (the stem drops `lab2_`), the logs
+`BAG_DIR/run_logs/lab2_straight_3m_N/`. `check-bags` checks a straight against
+its own course (hash, v_ref, path deviation, topics) and warns "not a graded
+route: metrics only"; `audit` prints METRICS ONLY (INVALID if check-bags
+rejects the bag) and writes `audit.png` and `audit.json`; `grade --score`
+prints the metrics with no points; `plot` opens it like any bag. The U-turn's
+reference bag, its turn split and its 45 points do not apply.
+
+**Short means no steady window.** On the bench (2026-10-19, reference SpeedPID,
+`--bench --yes`) the commanded speed is at 0.8 m/s within 0.3 s, but the
+measured speed peaks at 0.60 m/s at s = 2.4 m before the end ramp: the 3 m
+straight never reaches 90 % of v_ref, so speed RMSE and overshoot are n/a.
+The audit then measures the stop, the path deviation and the jump from engage
+to rest and reports the peak speed (bench: stop error 0.08 m, path deviation
+0.088 m, jump 0.04 m). For a speed measurement, use `make-straight` with a lower
+`--speed`, or the U-turn.
 
 ## Checking localization by hand (`just lab2 loc-check`)
 

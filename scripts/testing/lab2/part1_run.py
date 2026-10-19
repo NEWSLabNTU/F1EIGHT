@@ -1,32 +1,38 @@
 #!/usr/bin/env python3
-"""Lab 2 Part 1 runner: one live run (or the graded set) of a SpeedPID on the simulated car.
+"""Lab 2 Part 1 runner: a SpeedPID on the simulated car, live, graded, plotted.
 
-    just lab2 sim submission:=~/lab2/B12345678_lab_2_1            one run, nominal car
-    just lab2 sim submission:=DIR --final                          nominal, low_batt, low_mu
-    just lab2 sim submission:=DIR variant:=low_mu rviz:=false gui:=false
+    just lab2 sim                           the graded set (nominal, low_batt, low_mu), mark / 25
+    just lab2 sim --no-gui                  the same without windows (SSH, batch)
+    just lab2 plot-sim                      redraw the latest run's curves.png
 
-    python3 scripts/testing/lab2/part1_run.py --submission DIR [--variant V | --final]
+    TA:
+    just lab2 sim submission:=DIR           another submission
+    just lab2 sim variant:=low_mu           one car only (no mark out of 25)
     python3 scripts/testing/lab2/part1_run.py --class pkg.module:Class --params '{kp: 30.0}'
         [--out DIR] [--no-rviz] [--no-gui] [--timeout S] [--stall S] [key:=value ...]
 
-Each run starts `play_launch launch autosdv_launch lab2_part1_sim.launch.xml` in its own
-session (setsid), output to <out>/<variant>/stack.log, waits for the grader's marks.json
-in <out>/<variant>/, prints the marks, and stops the whole process group (SIGINT, SIGTERM,
-SIGKILL). Nothing it started is left running, whatever happens (Ctrl-C included).
-
-A single run from a terminal holds the finished run open first: the dashboard and RViz
-stay up with the final curves, violations and marks until the dashboard window is closed,
-Enter or Ctrl-C (--no-hold skips it; --final and a non-terminal stdin never hold; --hold
-forces it). The dashboard saves its window to <out>/<variant>/dashboard.png when it closes.
+The submission, in order: submission:=DIR on the command line, `part1_submission` from
+~/lab2/lab2.yaml (scripts/testing/lab2/lab2_config.py), else the single
+~/lab2/*_lab_2_1 directory holding lab2_speed/. None or several: stop, listing what was
+found and the fix. $LAB2_HOME moves ~/lab2 (tests; a TA grading elsewhere).
 
     --submission DIR   a Part 1 submission (<id>_lab_2_1/ holding lab2_speed/, or the
                        package): scripts/testing/lab2/submission.py --part1 gives the class,
-                       the parameters and the PYTHONPATH entry. `just lab2 sim` also takes
-                       `part1_submission` from ~/lab2/lab2.yaml
-                       (scripts/testing/lab2/lab2_config.py)
+                       the parameters and the PYTHONPATH entry
     --class/--params   a controller by import path, with its parameters
-    neither            THE STUB (autosdv_waypoint_lab.stub.speed_pid_part1, which holds
-                       neutral), with a loud warning: the car does not move
+    --final            accepted, a no-op: the graded set is the default
+
+Each car starts `play_launch launch autosdv_launch lab2_part1_sim.launch.xml` in its own
+session (setsid), output to <out>/<variant>/stack.log, waits for the grader's marks.json
+in <out>/<variant>/, prints the checks, and stops the whole process group (SIGINT,
+SIGTERM, SIGKILL). Nothing it started is left running, whatever happens (Ctrl-C included).
+
+Windows: the live dashboard and RViz for every car. After the LAST car, from a terminal,
+the windows stay up with the final curves, violations and marks until the dashboard
+window is closed, Enter or Ctrl-C (--no-hold skips it; --hold forces it). The dashboard
+saves its window to <out>/<variant>/dashboard.png when it closes. --no-gui (or
+rviz:=false gui:=false) opens none; with no working X display the run is headless on its
+own, with one line saying so.
 
 Timeouts follow the simulation, not the wall clock, because the clock handshake slows
 simulated time under load:
@@ -41,10 +47,14 @@ simulated time under load:
 While simulated time advances the runner waits: the grader ends every run itself (finish,
 no progress, MRM, its own timeout) and writes the reason into marks.json.
 
-Outputs (default <out> = tmp/lab2/part1/<submission name>): <variant>/trace.csv and
+Outputs: <out> = tmp/lab2/part1/<submission name>/<YYYY-mm-dd_HH-MM-SS>[_<--name>]/, a new
+directory per run, with tmp/lab2/part1/<submission name>/latest pointing at the newest.
+An explicit --out DIR writes DIR/<variant>/ instead (no date, no latest: the TA tools
+part1_calibrate and part1_tolerance read it back). Per car: <variant>/trace.csv and
 <variant>/marks.json (the grader's), <variant>/run.json (the command, the play_log, the
-timings), <variant>/dashboard.png (with the dashboard), and with --final, final.json: marks = 25 * sum(passed) / sum(total), an invalid
-run counting 0 of its checks.
+timings), <variant>/curves.png (plot_part1.py, drawn when the run ends, no display needed),
+<variant>/dashboard.png (with the dashboard). The graded set adds final.json:
+marks = 25 * sum(passed) / sum(total), an invalid run counting 0 of its checks.
 
 Exit status: 0 when every run was valid (passed or not), 1 when a run was invalid or never
 produced marks, 2 on a usage error (bad arguments, an unknown variant, a submission that
@@ -56,9 +66,6 @@ and a laptop's `export ROS_DOMAIN_ID=0` does not collide with other stacks; it p
 value to export for `ros2 topic echo` beside the run. The web UI (play_launch's) is likewise
 per user, 127.0.0.1:(8081 + uid % 100), unless LAB2_WEB_ADDR (or --web-addr) moves it, so
 two users on one workstation run side by side without colliding.
-
-Each run overwrites <out>/<variant>/: the runner ends by saying where the outputs are and,
-unless --name or --out was given, that `--name LABEL` keeps a run for the report.
 """
 import argparse
 import json
@@ -73,11 +80,15 @@ import time
 
 import yaml
 
+HERE = Path(__file__).resolve().parent
+sys.path.insert(0, str(HERE))
+import lab2_env as le  # noqa: E402
+
 REPO = Path(__file__).resolve().parents[3]
+PART1_TMP = REPO / 'tmp/lab2/part1'
+SUBMISSION_GLOB = '*_lab_2_1'
 SUBMISSION = REPO / 'scripts/testing/lab2/submission.py'
 VEHICLE_YAML = REPO / 'src/sim/autosdv_rc_sim/autosdv_rc_sim/vehicle.yaml'
-STUB_CLASS = 'autosdv_waypoint_lab.stub.speed_pid_part1:SpeedPID'
-STUB_PARAMS = REPO / 'src/lab/autosdv_waypoint_lab/config/speed_pid_part1.yaml'
 VARIANTS_FINAL = ('nominal', 'low_batt', 'low_mu')
 METRICS = REPO / 'src/lab/autosdv_waypoint_lab/autosdv_waypoint_lab/part1/metrics.py'
 
@@ -131,19 +142,25 @@ def parse(argv):
     who.add_argument('--class', dest='cls', metavar='PKG.MOD:CLASS',
                      help='a controller by import path')
     ap.add_argument('--params', default=None, help='with --class: its parameters, a YAML mapping')
-    ap.add_argument('--name', default=None, help='output name (default: the submission directory)')
+    ap.add_argument('--name', default=None,
+                    help='a label for the run directory (<date>_<time>_LABEL); not needed')
     ap.add_argument('--variant', default=None,
-                    help='vehicle model variant, one run (default nominal)')
+                    help='TA: one vehicle model variant only (default: the graded set, '
+                         + ', '.join(VARIANTS_FINAL) + ')')
     ap.add_argument('--final', action='store_true',
-                    help='the graded set: ' + ', '.join(VARIANTS_FINAL))
-    ap.add_argument('--out', default=None, help='output directory (default tmp/lab2/part1/<name>)')
+                    help='accepted for old habits: the graded set is the default')
+    ap.add_argument('--out', default=None,
+                    help='output directory, <out>/<variant>/ (default tmp/lab2/part1/<submission>/'
+                         '<date>_<time>/, with a latest link beside it)')
     ap.add_argument('--rviz', dest='rviz', action='store_true', default=True)
     ap.add_argument('--no-rviz', dest='rviz', action='store_false')
     ap.add_argument('--gui', dest='gui', action='store_true', default=True, help='the dashboard')
-    ap.add_argument('--no-gui', dest='gui', action='store_false')
+    ap.add_argument('--no-gui', dest='nogui', action='store_true',
+                    help='no windows at all: neither RViz nor the dashboard (as rviz:=false '
+                         'gui:=false)')
     ap.add_argument('--hold', dest='hold', action='store_true', default=None,
-                    help='after a run, keep the dashboard and RViz open until the dashboard '
-                         'window is closed or Enter is pressed (default: a single run from a '
+                    help='after the last car, keep the dashboard and RViz open until the '
+                         'dashboard window is closed or Enter is pressed (default: from a '
                          'terminal, with the dashboard)')
     ap.add_argument('--no-hold', dest='hold', action='store_false')
     ap.add_argument('--timeout', type=float, default=0.0,
@@ -185,11 +202,71 @@ def parse(argv):
         ap.error('--params needs --class')
     if args.final and args.variant is not None:
         ap.error('--final runs ' + ', '.join(VARIANTS_FINAL) + '; drop variant:=/--variant')
-    if args.variant is None:
-        args.variant = 'nominal'
+    if args.nogui:
+        args.rviz = args.gui = False
+    args.final = args.variant is None          # the graded set, the 25-point mark
     if args.hold is None:
-        args.hold = not args.final and sys.stdin.isatty()
+        args.hold = sys.stdin.isatty()
     return args
+
+
+def variants_of(args):
+    """The cars this run drives: the graded set, or the one variant:= a TA named."""
+    return VARIANTS_FINAL if args.final else (args.variant,)
+
+
+def holds_after(args, variant):
+    """Hold the windows open after this car? Only after the last one, with the dashboard."""
+    return bool(args.hold and args.gui and variant == variants_of(args)[-1])
+
+
+def discover_submission(home):
+    """The single <home>/*_lab_2_1 directory holding lab2_speed/, else UsageError naming
+    what was found and the fix."""
+    home = Path(home)
+    dirs = sorted(p for p in home.glob(SUBMISSION_GLOB) if p.is_dir()) if home.is_dir() else []
+    found = [d for d in dirs if (d / 'lab2_speed').is_dir()]
+    if len(found) == 1:
+        return found[0]
+    if found:
+        raise UsageError(
+            f'several Part 1 submissions in {home}:\n'
+            + ''.join(f'    {d}\n' for d in found)
+            + f'  name one: `just lab2 sim submission:={found[0]}`, or set '
+              f'`part1_submission: {found[0]}` in {home / "lab2.yaml"}, or move the others away')
+    near = ''.join(f'    {d}  (no lab2_speed/ inside)\n' for d in dirs)
+    raise UsageError(
+        f'no Part 1 submission found: no {home}/{SUBMISSION_GLOB}/ directory holding lab2_speed/\n'
+        + near
+        + f'  put yours at {home}/<student_id>_lab_2_1/lab2_speed/, or pass submission:=DIR')
+
+
+def run_dir(base, name, label, now):
+    """base/<submission name>/<YYYY-mm-dd_HH-MM-SS>[_label]: one directory per run."""
+    stamp = now.strftime('%Y-%m-%d_%H-%M-%S')
+    return Path(base) / name / (f'{stamp}_{label}' if label else stamp)
+
+
+def point_latest(run):
+    """<run's parent>/latest -> run (relative, so the tree can move)."""
+    run = Path(run)
+    link = run.parent / 'latest'
+    tmp = run.parent / '.latest.tmp'
+    if tmp.is_symlink() or tmp.exists():
+        tmp.unlink()
+    os.symlink(run.name, tmp)
+    os.replace(tmp, link)
+    return link
+
+
+def out_root_for(args, name, base=PART1_TMP, now=None):
+    """(the run's output root, dated). An explicit --out keeps <out>/<variant>/, for the
+    TA tools (part1_calibrate, part1_tolerance) that read it back."""
+    if args.out:
+        return Path(args.out).expanduser(), False
+    import datetime
+    label = re.sub(r'[^A-Za-z0-9_.-]+', '_', args.name) if args.name else None
+    return run_dir(base, name, label, now or datetime.datetime.now()), True
 
 
 def known_variants():
@@ -203,15 +280,9 @@ def known_variants():
     return ['nominal'] + [n for n in names if n != 'nominal']
 
 
-def yaml_mapping_arg(path):
-    """A YAML file's top-level mapping as one-line `{k: v, ...}`, as submission.py writes it."""
-    data = yaml.safe_load(Path(path).read_text()) or {}
-    return '{' + ', '.join(f'{k}: {str(v).lower() if isinstance(v, bool) else v}'
-                           for k, v in data.items()) + '}'
-
-
 def resolve_controller(args):
-    """(launch args, PYTHONPATH entry or None, name, is_stub) for the chosen controller."""
+    """(launch args, PYTHONPATH entry or None, name) for the chosen controller: --class,
+    submission:= (the command line or part1_submission), else the one in ~/lab2."""
     if args.submission:
         sub = Path(args.submission).expanduser()
         if not sub.exists():
@@ -225,25 +296,26 @@ def resolve_controller(args):
         except subprocess.CalledProcessError as e:
             msg = (e.stderr or e.stdout or '').strip()
             raise UsageError(f'submission {sub}: {msg or "submission.py failed"}') from None
-        name = args.name or sub.resolve().name
-        return [x for x in lines if x.strip()], pkg or None, name, False
+        return [x for x in lines if x.strip()], pkg or None, sub.resolve().name
     if args.cls:
         out = [f'speed_controller_class:={args.cls}']
         if args.params is not None:
             out.append(f'speed_controller_params:={args.params}')
-        name = args.name or re.sub(r'[^A-Za-z0-9_.-]+', '_', args.cls.replace(':', '.'))
-        return out, None, name, False
-    out = [f'speed_controller_class:={STUB_CLASS}']
-    if STUB_PARAMS.is_file():
-        out.append(f'speed_controller_params:={yaml_mapping_arg(STUB_PARAMS)}')
-    return out, None, args.name or 'stub', True
+        name = re.sub(r'[^A-Za-z0-9_.-]+', '_', args.cls.replace(':', '.'))
+        return out, None, name
+    found = discover_submission(le.lab2_home())
+    info(f'submission: {found} (the one {SUBMISSION_GLOB} in {found.parent})')
+    args.submission = str(found)
+    return resolve_controller(args)
 
 
-def check_display(args):
-    if (args.rviz or args.gui) and not (os.environ.get('DISPLAY')
-                                        or os.environ.get('WAYLAND_DISPLAY')):
-        info('warning: no DISPLAY: running without RViz and the dashboard '
-             '(rviz:=false gui:=false)')
+def check_display(args, env=None):
+    """No working X display: headless (no RViz, no dashboard), with one line saying so."""
+    env = os.environ if env is None else env
+    if (args.rviz or args.gui) and not le.display_works(env.get('DISPLAY')):
+        cur = env.get('DISPLAY')
+        info(f'no working X display ({"DISPLAY=" + repr(cur) + " does not answer" if cur else "no DISPLAY"}): '
+             'running headless, no RViz and no dashboard (curves.png is still drawn)')
         args.rviz = args.gui = False
 
 
@@ -462,7 +534,7 @@ def hold_open(proc, out_dir):
 
 
 # ------------------------------------------------------------------ one run
-def run_one(args, variant, ctrl_args, pythonpath, out_root, env):
+def run_one(args, variant, ctrl_args, pythonpath, out_root, env, before_hold=None):
     out_dir = out_root / variant
     out_dir.mkdir(parents=True, exist_ok=True)
     for f in ('marks.json', 'trace.csv', 'run.json'):
@@ -508,9 +580,11 @@ def run_one(args, variant, ctrl_args, pythonpath, out_root, env):
             why = why_stop(args, watch, t0, now, rtf_arg)
             if why:
                 break
-        if marks is not None and args.hold and args.gui:
+        if marks is not None and holds_after(args, variant):
             print_checks(marks)
             printed = True
+            if before_hold is not None:
+                before_hold(marks)       # the final marks and the plots, before the wait
             hold_open(proc, out_dir)
     finally:
         watch.spin(0.5)
@@ -569,60 +643,108 @@ def print_marks(marks, run, table=True):
         f"wall {run['wall_s']} s)")
 
 
-def keep_hint(out_root, chosen):
-    """The closing line: where the outputs are, and how to keep them from the next run."""
-    if chosen:
+def keep_hint(out_root, dated):
+    """The closing line: where the outputs are."""
+    if not dated:
         return f'\noutputs in {out_root}'
-    return (f'\noutputs in {out_root}; the next run with the same name overwrites them; '
-            'add --name LABEL to keep this one')
+    return (f'\noutputs in {out_root}\n  (also {out_root.parent / "latest"}; every run keeps its '
+            'own directory)')
+
+
+def write_plots(out_root, variants):
+    """{variant: curves.png or None}: plot_part1 (Agg) into each variant's directory."""
+    try:
+        import plot_part1
+    except ImportError:
+        return {v: None for v in variants}
+    out = {}
+    for v in variants:
+        d = Path(out_root) / v
+        try:
+            out[v] = plot_part1.plot(d, d / 'curves.png') if (d / 'trace.csv').is_file() else None
+        except (Exception, SystemExit) as e:     # a plot never fails the run
+            info(f'  (no plot for {v}: {e})')
+            out[v] = None
+    return out
+
+
+def summary_table(results, plots):
+    """One line per car: checks passed (or INVALID and why) and its curves.png."""
+    w = max(len(str(m.get('variant'))) for m in results)
+    lines = []
+    for m in results:
+        v = m.get('variant')
+        if m.get('valid'):
+            res = f"{m.get('passed', 0)}/{m.get('total', CHECKS_PER_RUN)} passed"
+        else:
+            res = f"INVALID (scores 0): {m.get('invalid_reason')}"
+        png = plots.get(v)
+        lines.append(f'  {v:<{w}}  {res:<16}  {png if png else "(no plot)"}')
+    return '\n'.join(lines)
+
+
+def final_marks(name, results):
+    passed = sum(int(m.get('passed', 0)) if m.get('valid') else 0 for m in results)
+    total = sum(int(m.get('total', CHECKS_PER_RUN)) if m.get('valid') else CHECKS_PER_RUN
+                for m in results)
+    total = total or CHECKS_PER_RUN * len(results)
+    return {'name': name, 'marks': round(FINAL_POINTS * passed / total, 2),
+            'out_of': FINAL_POINTS, 'passed': passed, 'total': total,
+            'runs': {m.get('variant'): {'valid': bool(m.get('valid')),
+                                        'invalid_reason': m.get('invalid_reason'),
+                                        'passed': m.get('passed', 0),
+                                        'total': m.get('total', CHECKS_PER_RUN)}
+                     for m in results}}
 
 
 def main(argv=None):
     args = parse(sys.argv[1:] if argv is None else argv)
     try:
-        variants = VARIANTS_FINAL if args.final else (args.variant,)
+        variants = variants_of(args)
         known = known_variants()
         bad = [v for v in variants if v not in known]
         if bad:
             raise UsageError(f'unknown variant {bad[0]!r}; the model has {", ".join(known)}')
-        ctrl_args, pythonpath, name, stub = resolve_controller(args)
+        ctrl_args, pythonpath, name = resolve_controller(args)
     except UsageError as e:
         info(f'error: {e}')
         return 2
     env = dict(os.environ)
     env['ROS_DOMAIN_ID'], why_domain = domain_id(env)
     os.environ['ROS_DOMAIN_ID'] = env['ROS_DOMAIN_ID']     # the progress watcher's too
-    check_display(args)
-    out_root = Path(args.out).expanduser() if args.out else REPO / 'tmp/lab2/part1' / name
+    check_display(args, env)
+    out_root, dated = out_root_for(args, name)
     out_root.mkdir(parents=True, exist_ok=True)
+    if dated:
+        point_latest(out_root)
     signal.signal(signal.SIGINT, on_signal)
     signal.signal(signal.SIGTERM, on_signal)
-    if stub:
-        loud('WARNING: no submission given: running the STUB, which holds neutral (the car will '
-             'not move). Pass submission:=DIR, or set `part1_submission:` in ~/lab2/lab2.yaml.')
     dim(f'ROS_DOMAIN_ID {env["ROS_DOMAIN_ID"]} ({why_domain}; export it to watch with ros2), '
         f'web UI {args.web_addr}, controller: {" ".join(ctrl_args)}')
-    results = [run_one(args, v, ctrl_args, pythonpath, out_root, env) for v in variants]
+    info(f'run directory: {out_root}' + (f'  ({out_root.parent / "latest"})' if dated else ''))
 
+    results = []
+    shown = []
+
+    def report(last_marks=None):
+        """The marks table, the plots and (for the graded set) the mark out of 25."""
+        done = results + ([last_marks] if last_marks is not None else [])
+        plots = write_plots(out_root, [m.get('variant') for m in done])
+        info('\n' + summary_table(done, plots))
+        if args.final:
+            final = final_marks(name, done)
+            (out_root / 'final.json').write_text(json.dumps(final, indent=2) + '\n')
+            info(f"\nFINAL  {final['marks']:.2f} / {FINAL_POINTS:g}  "
+                 f"({final['passed']}/{final['total']} checks)  {out_root / 'final.json'}")
+        shown.append(True)
+
+    for v in variants:
+        results.append(run_one(args, v, ctrl_args, pythonpath, out_root, env,
+                               before_hold=report if v == variants[-1] else None))
+    if not shown:
+        report()
     valid = all(m.get('valid', False) for m in results)
-    if args.final:
-        passed = sum(int(m.get('passed', 0)) if m.get('valid') else 0 for m in results)
-        total = sum(int(m.get('total', CHECKS_PER_RUN)) if m.get('valid') else CHECKS_PER_RUN
-                    for m in results)
-        total = total or CHECKS_PER_RUN * len(results)
-        final = {'name': name, 'marks': round(FINAL_POINTS * passed / total, 2),
-                 'out_of': FINAL_POINTS, 'passed': passed, 'total': total,
-                 'runs': {m.get('variant'): {'valid': bool(m.get('valid')),
-                                             'invalid_reason': m.get('invalid_reason'),
-                                             'passed': m.get('passed', 0),
-                                             'total': m.get('total', CHECKS_PER_RUN)}
-                          for m in results}}
-        (out_root / 'final.json').write_text(json.dumps(final, indent=2) + '\n')
-        info(f"\nFINAL  {final['marks']:.2f} / {FINAL_POINTS:g}  ({passed}/{total} checks)  "
-             f"{out_root / 'final.json'}")
-    if stub:
-        loud('(that was the stub: pass submission:=DIR to run your SpeedPID)')
-    info(keep_hint(out_root, chosen=bool(args.name or args.out)))
+    info(keep_hint(out_root, dated))
     return 0 if valid else 1
 
 

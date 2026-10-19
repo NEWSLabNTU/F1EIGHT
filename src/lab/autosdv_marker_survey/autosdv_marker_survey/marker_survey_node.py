@@ -29,6 +29,7 @@ import threading
 import numpy as np
 import rclpy
 from nav_msgs.msg import Odometry
+from rclpy._rclpy_pybind11 import RCLError
 from rclpy.node import Node
 from rclpy.qos import QoSProfile, ReliabilityPolicy, qos_profile_sensor_data
 from rclpy.time import Time
@@ -356,6 +357,12 @@ def main(args=None):
         rclpy.spin(node)
     except (KeyboardInterrupt, rclpy.executors.ExternalShutdownException):
         pass
+    except RCLError:
+        # Ctrl-C invalidates the context while a timer callback may still be
+        # publishing: "publisher's context is invalid". That race is shutdown,
+        # not a failure; save below and exit 0. Anything else is real.
+        if rclpy.ok():
+            raise
     finally:
         if node.save_on_exit and not node.saved:
             ok, msg = node.save()

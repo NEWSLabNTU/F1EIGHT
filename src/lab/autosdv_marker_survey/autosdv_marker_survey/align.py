@@ -59,7 +59,9 @@ import yaml
 # ------------------------------------------------------------ the rules
 MIN_DISTANCE = 1.0              # m: refuse a shorter drive
 RECOMMENDED_DISTANCE = 2.0      # m: warn below this
-MAX_LATERAL = 0.05              # m: refuse a drive that leaves its own line by more
+MAX_LATERAL = 0.10              # m: refuse a drive that leaves its own line by more
+# 5 cm refused every drive on car B (2026-10-16): the fixes were 1.4 cm RMS about the
+# line, but one board set disagreed with another by ~8 cm, a survey error, not a curve.
 MAX_START_YAW_DIFF = math.radians(10.0)   # refuse: the car pointed elsewhere than it drove
 MIN_REST = 0.5                  # s at rest before the drive, at least
 REST_WINDOW = 1.0               # s averaged for the start pose
@@ -710,12 +712,15 @@ def route_template(route: str) -> str:
 
 def solve_main(argv=None) -> int:
     """lab2_survey_align_solve SURVEY_DIR [--route lab2_uturn] [--force]: align again from the
-    recorded drive (SURVEY_DIR/align_poses.csv), without the car."""
+    recorded drive (SURVEY_DIR/align_poses.csv, and the multi-board poses in
+    SURVEY_DIR/align_pnp.csv when it has them, as survey-align used them), without the car."""
     import argparse
     ap = argparse.ArgumentParser(description=solve_main.__doc__)
     ap.add_argument('survey_dir')
     ap.add_argument('--route', default='lab2_uturn')
     ap.add_argument('--poses', default=None, help=f'default SURVEY_DIR/{POSES_FILE}')
+    ap.add_argument('--pnp', default=None, help=f'default SURVEY_DIR/{PNP_FILE} (if it exists)')
+    ap.add_argument('--no-pnp', action='store_true', help='the EKF poses alone')
     ap.add_argument('--force', action='store_true')
     ap.add_argument('--min-distance', type=float, default=MIN_DISTANCE)
     ap.add_argument('--max-lateral', type=float, default=MAX_LATERAL)
@@ -723,6 +728,7 @@ def solve_main(argv=None) -> int:
     d = os.path.abspath(args.survey_dir)
     prepare_stage1(d)
     samples = read_samples(args.poses or os.path.join(d, POSES_FILE))
+    pnp = None if args.no_pnp else (read_pnp(args.pnp or os.path.join(d, PNP_FILE)) or None)
     a, _ = solve_dir(d, route_template(args.route), samples, args.force, args.min_distance,
-                     args.max_lateral)
+                     args.max_lateral, pnp=pnp)
     return 0 if a.ok else 1

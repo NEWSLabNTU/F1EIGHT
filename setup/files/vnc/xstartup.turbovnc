@@ -1,0 +1,27 @@
+#!/bin/sh
+# AutoSDV vehicle: a GNOME desktop in a TurboVNC session, while the same user is
+# also logged in on the car's own display (:1). Installed by the setup step
+# `turbovnc-xstartup` as ~/.vnc/xstartup.turbovnc.
+#
+# TurboVNC's stock xstartup dies at once on the vehicle, with nothing in its log
+# but "Killing Xvnc process ID ...". It runs `gnome-session --session=ubuntu`,
+# which in GNOME 42 starts the session through systemd --user over the session
+# bus. TurboVNC gives the session a private bus, systemd is not on it
+#
+#   Activated service 'org.freedesktop.systemd1' failed: Process
+#   org.freedesktop.systemd1 exited with status 1
+#
+# and gnome-session exits, taking Xvnc with it. `--builtin` uses gnome-session's
+# own session manager instead, which needs no systemd and coexists with the
+# desktop already running on :1.
+#
+# gnome-shell is a compositor and needs OpenGL. Xvnc alone offers only llvmpipe,
+# so the shell renders through VirtualGL on the real X server. That server must
+# stay logged in: stop the desktop on :1 and this session loses its GPU.
+unset SESSION_MANAGER
+unset DBUS_SESSION_BUS_ADDRESS
+export XDG_SESSION_TYPE=x11
+export XDG_CURRENT_DESKTOP=ubuntu:GNOME
+export GNOME_SHELL_SESSION_MODE=ubuntu
+exec dbus-run-session -- vglrun -d "${AUTOSDV_VGL_DISPLAY:-:1}" \
+    gnome-session --session=ubuntu --builtin

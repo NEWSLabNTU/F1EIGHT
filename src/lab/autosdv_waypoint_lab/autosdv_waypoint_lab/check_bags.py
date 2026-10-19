@@ -54,6 +54,7 @@ class Verdict:
     team: Optional[str] = None
     reasons: List[str] = field(default_factory=list)
     warnings: List[str] = field(default_factory=list)
+    test_route: Optional[str] = None     # a route that is not graded (metrics only): its name
 
     @property
     def ok(self) -> bool:
@@ -111,6 +112,11 @@ def check_messages(name: str, topics: Dict[str, list], msgs: Dict[str, list], me
     # metadata and course
     route = bm.route_from_meta(meta)
     v.route = route
+    test = rg.ungraded_course(meta, course_dirs) if meta and route is None else None
+    target = rg.TARGET_SPEED
+    if test is not None:
+        v.test_route = test[0]
+        target = rg.course_v_ref(test[1])
     if not meta:
         v.reasons.append('no metadata (record with `just lab2 record`)')
     else:
@@ -130,7 +136,13 @@ def check_messages(name: str, topics: Dict[str, list], msgs: Dict[str, list], me
                                  'on the car; only --bench (the TA integration test) accepts it')
         if meta.get('git_dirty'):
             v.warnings.append('recorded from a modified git tree')
-        if route is None:
+        if test is not None:
+            v.warnings.append(f'{rg.UNGRADED} (route {test[0]}): never a submission')
+            allowed = [bm.course_hashes(test[1])['route_hash']]
+            if meta.get('route_hash') not in allowed:
+                v.reasons.append(f'modified course: route hash does not match {test[1]} '
+                                 '(path, laps, v_ref or start pose changed)')
+        elif route is None:
             label = bm.route_label(meta)
             v.reasons.append(f'route {label!r} is not graded (graded: {", ".join(bm.ROUTE_BY_NAME)})'
                              if label else 'cannot tell which route this bag drove')
@@ -173,10 +185,15 @@ def check_messages(name: str, topics: Dict[str, list], msgs: Dict[str, list], me
         if route in bm.ROUTES and m.laps_planned and m.laps_planned != rg.LAPS_REQUIRED:
             v.reasons.append(f'course set to {m.laps_planned} lap(s), {rg.LAPS_REQUIRED} required')
         # validity: the localized pose stays on the path
-        if route in bm.ROUTES and msgs.get(g.KINEMATIC) and msgs.get(g.VELOCITY):
-            td = (course_dirs[0] if len(course_dirs) == 1 else None) or rg.template_dir(route)
-            geo = rg.geometry_from_course(td, route) if td else None
-            rm = rg.route_metrics(name, msgs, route, geo)
+        if (route in bm.ROUTES or test) and msgs.get(g.KINEMATIC) and msgs.get(g.VELOCITY):
+            if test:
+                td, label = test[1], test[0]
+            else:
+                td = (course_dirs[0] if len(course_dirs) == 1 else None) or rg.template_dir(route)
+                label = route
+            geo = rg.geometry_from_course(td, label) if td else None
+            rm = rg.ungraded_metrics(name, msgs, label, geo, target) if test and geo else \
+                rg.route_metrics(name, msgs, label, geo, target)
             v.reasons += rg.nonfinite_failures(rm)
             if geo and not math.isnan(rm.path_dev_max):
                 if rm.path_dev_max > rg.PATH_DEV_MAX:
@@ -198,8 +215,8 @@ def check_messages(name: str, topics: Dict[str, list], msgs: Dict[str, list], me
         cmd = sorted(c.longitudinal.velocity for t, c in msgs.get(g.CONTROL, []) if eng.contains(t))
         if cmd:
             top = cmd[int(0.95 * (len(cmd) - 1))]
-            if abs(top - rg.TARGET_SPEED) > SPEED_TOLERANCE:
-                v.reasons.append(f'commanded speed peaks at {top:.2f} m/s, expected {rg.TARGET_SPEED} m/s')
+            if abs(top - target) > SPEED_TOLERANCE:
+                v.reasons.append(f'commanded speed peaks at {top:.2f} m/s, expected {target} m/s')
         # camera
         c = topics.get(bm.CAMERA_TOPIC)
         if c and c[0] > 1:
@@ -262,7 +279,8 @@ def main(argv=None):
     args = ap.parse_args(argv)
     verdicts = [check_bag(b, args.course, args.car, args.team, args.bench) for b in args.bags]
     for v in verdicts:
-        print(f'{"ACCEPT" if v.ok else "REJECT"}  {v.bag}  route={v.route}  car={v.car}  team={v.team}')
+        route = v.route if v.test_route is None else f'{v.test_route} ({rg.UNGRADED})'
+        print(f'{"ACCEPT" if v.ok else "REJECT"}  {v.bag}  route={route}  car={v.car}  team={v.team}')
         for r in v.reasons:
             print(f'    reject: {r}')
         for w in v.warnings:

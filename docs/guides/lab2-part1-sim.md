@@ -16,30 +16,38 @@ Design: `docs/design/lab2-part1-sim-design.md`. The simulator itself: `docs/guid
 ## One command
 
 ```bash
-just lab2 sim submission:=~/lab2/B12345678_lab_2_1            # one run, nominal car, ~1 min
-just lab2 sim submission:=~/lab2/B12345678_lab_2_1 --final    # the graded set, ~2 min
-just lab2 sim submission:=DIR variant:=low_mu                  # one run on another car
-just lab2 sim submission:=DIR rviz:=false gui:=false           # no windows (SSH, batch)
-just lab2 sim                                                  # part1_submission from ~/lab2/lab2.yaml
+just lab2 sim              # the graded set: nominal, low_batt, low_mu; the mark out of 25, ~3 min
+just lab2 sim --no-gui     # the same without windows (SSH, batch)
+just lab2 plot-sim         # redraw the latest run's curves.png (every car)
 ```
 
-One command builds nothing by hand and leaves nothing running. It starts the stack in
-its own process group, opens RViz and the dashboard, engages the car, drives the course,
-grades the run live, prints the marks and stops everything (Ctrl-C included). A single
-run from a terminal first holds the finished run open: the dashboard and RViz stay up with
-the final curves and marks until the dashboard window is closed or Enter is pressed
-(`--no-hold` skips it; `--final` never holds).
+One command builds nothing by hand and leaves nothing running. It finds your submission,
+starts the stack in its own process group, opens RViz and the dashboard, engages the car,
+drives the course, grades the run live, and does that for each of the three cars:
+`nominal`, `low_batt` (weaker battery) and `low_mu` (more slippery floor). Then it draws
+`curves.png` for every car, prints a table of the cars (checks passed, the plot's path)
+and the mark out of 25, and stops everything (Ctrl-C included). From a terminal, the
+windows of the **last** car stay up with its final curves and marks until the dashboard
+window is closed or Enter is pressed (`--no-hold` skips it).
 
-`submission:=DIR` is either `<student_id>_lab_2_1/` holding `lab2_speed/`, or the
-`lab2_speed/` package itself. To stop typing it, put it in `~/lab2/lab2.yaml`:
+**The submission** is found in this order:
 
-```yaml
-part1_submission: ~/lab2/B12345678_lab_2_1
-```
+1. `submission:=DIR` on the command line (TA, or a second copy);
+2. `part1_submission:` in `~/lab2/lab2.yaml`;
+3. the one directory `~/lab2/*_lab_2_1` that holds `lab2_speed/`.
 
-`--final` runs the variants `nominal`, `low_batt` (weaker battery) and `low_mu` (more
-slippery floor) one after the other. Without a submission anywhere the runner starts
-**the stub**, which holds neutral, and prints a loud warning: the car does not move.
+None, or several, and it stops with a list of what it found and how to fix it. `DIR` is
+either `<student_id>_lab_2_1/` holding `lab2_speed/`, or the `lab2_speed/` package
+itself. `LAB2_HOME` moves `~/lab2` (tests; a TA grading from another directory).
+
+**Windows.** `--no-gui` opens none (the same as `rviz:=false gui:=false`). With no
+working X display (an SSH session without X) the run goes headless by itself and says so
+in one line; the run and its marks are the same, and `curves.png` is still drawn.
+
+TA only: `variant:=low_mu` runs one car (no mark out of 25), `--name LABEL` labels the
+run directory, `--out DIR` writes `DIR/<variant>/` (the old layout, which
+`part1_calibrate.py` and `part1_tolerance.py` read back), and `--final` is still
+accepted (it is the default now).
 
 Setup is the repository's standard one: `./setup.sh`, then `just build`.
 
@@ -109,22 +117,26 @@ A car that never moves, or stops early, is a **valid** run whose unreached check
 The grader says so in plain words: *"Your car did not move ... Is your speed_pid.py
 still the stub?"*
 
-**Marks.** An everyday run shows passed/9 on the nominal car. `--final` writes
-`final.json` with `marks = 25 × sum(passed) / sum(total)` over the three runs (27
-checks); an invalid run counts 0 of its 9.
+**Marks.** Each car shows passed/9; the run writes `final.json` with
+`marks = 25 × sum(passed) / sum(total)` over the three cars (27 checks); an invalid run
+counts 0 of its 9.
 
 ## Outputs
 
-`tmp/lab2/part1/<submission name>/<variant>/`:
+A new directory per run, so nothing is overwritten:
+`tmp/lab2/part1/<submission name>/<YYYY-mm-dd_HH-MM-SS>/<variant>/`, and
+`tmp/lab2/part1/<submission name>/latest` points at the newest run. Per car:
 
 - `trace.csv` (100 Hz: `t, s, y, target, measured, speed, pwm, mode, slip_r, kappa_r,
   emergency, segment`);
 - `marks.json` (`variant, valid, invalid_reason, passed, total, checks`);
 - `run.json` (the command, the timings, the `play_log` path);
+- `curves.png` (speed, PWM and every failed check's window; drawn when the run ends, no
+  display needed; `just lab2 plot-sim` redraws it, `--t0/--t1` zoom in);
 - `dashboard.png` (the dashboard as it was when it closed; with the dashboard only);
 - `play_log/` (every node's log).
 
-`--final` adds `final.json` beside them.
+`final.json` (the mark out of 25) sits beside the three car directories.
 
 ## The controller
 
@@ -213,8 +225,9 @@ band, off here, stops the integral charging while the bench holds the wheels.
 
 | Symptom | Cause / remedy |
 |---|---|
-| `warning: no DISPLAY: running without RViz and the dashboard` | an SSH session without X; the run is the same. Use a desktop session or VNC to see the windows. |
-| `WARNING: no submission given: running the STUB` | no `submission:=` and no `part1_submission` in `~/lab2/lab2.yaml` |
+| `no working X display ...: running headless` | an SSH session without X; the run is the same, and `curves.png` is drawn. Use a desktop session or VNC to see the windows. |
+| `error: no Part 1 submission found` | no `~/lab2/<student_id>_lab_2_1/lab2_speed/`: put it there, or pass `submission:=DIR` |
+| `error: several Part 1 submissions` | more than one `~/lab2/*_lab_2_1`: name one with `submission:=DIR` or `part1_submission:` in `~/lab2/lab2.yaml`, or move the others away |
 | `error: submission DIR: submission error: .../speed_pid.yaml: kp is ...` | a key misspelled, out of range, or the wrong type; the message names it |
 | "Your car did not move ... still the stub?" | `update()` returns neutral: the TODOs are not done, or the output never leaves `init_pwm` |
 | invalid: `controller fault: ...` | `update()` raised or returned a non-number; the traceback is in `play_log/` |

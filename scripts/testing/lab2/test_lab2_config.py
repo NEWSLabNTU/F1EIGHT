@@ -17,6 +17,7 @@ def no_real_home(tmp_path, monkeypatch):
     home = tmp_path / 'home'
     home.mkdir()
     monkeypatch.setenv('HOME', str(home))
+    monkeypatch.delenv('LAB2_HOME', raising=False)
     return home
 
 
@@ -240,3 +241,129 @@ def test_sim_reads_part1_submission_not_the_gate_submission(tmp_path):
     f.write_text('submission: /s/gate\n')
     assert lc.plan('sim', [cf])[0] == []           # no part1_submission: the runner's stub
     assert lc.plan('gate', [cf])[0] == ['submission:=/s/gate']
+
+
+# ---- survey reuse: an aligned survey of the U-turn's field serves a straight on that field
+
+def _real_aligned_survey(root, route='lab2_uturn'):
+    """A survey aligned for `route` by the real solver, from a synthetic stage 1 and a
+    synthetic straight drive (as autosdv_marker_survey/test/test_align.py makes them),
+    with surveys/latest pointing at it."""
+    import math
+    import random
+    import numpy as np
+    for pkg in ('autosdv_marker_survey', 'autosdv_waypoint_lab'):
+        p = str(lc.REPO / 'src/lab' / pkg)
+        if p not in sys.path:
+            sys.path.insert(0, p)
+    from autosdv_marker_survey import align as al
+    from autosdv_marker_survey.simulate import stage1_map
+    t = yaml.safe_load((lc.COURSES / 'lab2_uturn' / 'course.yaml').read_text())
+    truth = {m['id']: (m['x'] + 0.03, m['y'] - 0.02, 0.25, m['yaw'] + 0.01, 0.0, 0.0)
+             for m in t['markers']}
+    stage1, T_w_s1 = stage1_map(truth, 24)
+    d = root / 'surveys' / '2026-10-16_10-00-00'
+    d.mkdir(parents=True)
+    (d / 'course.yaml').write_text(yaml.safe_dump(
+        {'path': 'path.csv', 'closed': True, 'laps': 1, 'v_ref': 0.8,
+         'start_pose': {'x': 0.0, 'y': 0.0, 'yaw': 0.0}, 'marker_size': 0.38,
+         'dictionary': 'DICT_5X5_1000', 'survey': {'origin_marker': 24}, 'markers': stage1}))
+    al.prepare_stage1(str(d))
+    T = np.linalg.inv(T_w_s1)
+    x0, y0, yaw0 = T[0, 3], T[1, 3], math.atan2(T[1, 0], T[0, 0])
+    rng = random.Random(1)
+    samples, tt = [], 0.0
+    for k in range(100):            # 2 s at rest, then 3 m at 0.3 m/s, then at rest
+        samples.append(al.Sample(tt, x0 + rng.gauss(0, 0.004), y0 + rng.gauss(0, 0.004), 0.0, yaw0,
+                                 0.0, 0.0, 0.0))
+        tt += 0.02
+    dd = 0.0
+    while dd < 3.0:
+        dd = min(3.0, dd + 0.006)
+        samples.append(al.Sample(tt, x0 + math.cos(yaw0) * dd + rng.gauss(0, 0.004),
+                                 y0 + math.sin(yaw0) * dd + rng.gauss(0, 0.004), 0.0, yaw0, 0.0, 0.0, 0.3))
+        tt += 0.02
+    al.write_samples(str(d / al.POSES_FILE), samples)
+    a, _ = al.solve_dir(str(d), str(lc.COURSES / route), samples, log=lambda *x: None)
+    assert a.ok, a.problems
+    (root / 'surveys' / 'latest').symlink_to(d.name)
+    return d
+
+
+def _tree(d: Path) -> dict:
+    return {str(p.relative_to(d)): p.read_bytes() for p in sorted(d.rglob('*')) if p.is_file()}
+
+
+def test_same_field_follows_the_field_key():
+    assert lc.same_field('lab2_uturn', 'lab2_straight_3m')
+    assert lc.same_field('lab2_straight_2m', 'lab2_straight_3m')
+    assert not lc.same_field('lab2_uturn', 'hall_demo')
+
+
+def test_a_straight_reuses_the_uturn_survey_in_a_sibling(tmp_path, monkeypatch, capsys):
+    monkeypatch.setattr(lc, 'SURVEY_LATEST', tmp_path / 'surveys' / 'latest')
+    d = _real_aligned_survey(tmp_path)
+    before = _tree(d)
+    args, _ = lc.plan('vehicle', ['team_dir:=/t', 'route:=lab2_straight_3m'])
+    sib = tmp_path / 'surveys' / f'{d.name}.lab2_straight_3m'
+    assert args[0] == f'course_dir:={sib}'
+    err = capsys.readouterr().err
+    assert f'survey: {sib}' in err and 're-solved' in err
+    ok, why = lc.aligned_for(sib, 'lab2_straight_3m')
+    assert ok, why
+    # the same drive, the same frame: the boards stand where latest has them
+    mine = yaml.safe_load((sib / 'course.yaml').read_text())['markers']
+    theirs = yaml.safe_load((d / 'course.yaml').read_text())['markers']
+    assert mine == theirs
+    # latest itself is never touched
+    assert _tree(d) == before
+    # cached: the second run re-solves nothing
+    stamp = (sib / 'course.yaml').stat().st_mtime_ns
+    args2, _ = lc.plan('vehicle', ['team_dir:=/t', 'route:=lab2_straight_3m'])
+    assert args2 == args and (sib / 'course.yaml').stat().st_mtime_ns == stamp
+    assert 'cached' in capsys.readouterr().err
+    # the U-turn still runs latest itself
+    assert lc.plan('vehicle', ['team_dir:=/t'])[0][0] == f'course_dir:={d.resolve()}'
+
+
+def test_the_sibling_follows_a_new_alignment_of_latest(tmp_path, monkeypatch, capsys):
+    monkeypatch.setattr(lc, 'SURVEY_LATEST', tmp_path / 'surveys' / 'latest')
+    d = _real_aligned_survey(tmp_path)
+    lc.plan('vehicle', ['team_dir:=/t', 'route:=lab2_straight_2m'])
+    sib = tmp_path / 'surveys' / f'{d.name}.lab2_straight_2m'
+    old = (sib / 'course.yaml').read_text()
+    # survey-align again: another drive (shifted 2 cm) -> other alignment inputs
+    from autosdv_marker_survey import align as al
+    ss = al.read_samples(str(d / al.POSES_FILE))
+    for s in ss:
+        s.y += 0.02
+    al.write_samples(str(d / al.POSES_FILE), ss)
+    capsys.readouterr()
+    lc.plan('vehicle', ['team_dir:=/t', 'route:=lab2_straight_2m'])
+    assert 're-solved' in capsys.readouterr().err
+    assert (sib / 'course.yaml').read_text() != old
+
+
+def test_reuse_falls_back_to_the_packaged_course(tmp_path, monkeypatch, capsys):
+    monkeypatch.setattr(lc, 'SURVEY_LATEST', tmp_path / 'surveys' / 'latest')
+    d = _real_aligned_survey(tmp_path)
+    # another field: never reused
+    assert lc.plan('vehicle', ['team_dir:=/t', 'route:=hall_demo'])[0][0] == 'route:=hall_demo'
+    assert 'PACKAGED' in capsys.readouterr().err
+    # no recorded drive: nothing to re-solve from
+    (d / 'align_poses.csv').unlink()
+    assert lc.plan('vehicle', ['team_dir:=/t', 'route:=lab2_straight_3m'])[0][0] == \
+        'route:=lab2_straight_3m'
+    err = capsys.readouterr().err
+    assert 'PACKAGED' in err and 'align_poses.csv' in err
+    assert not (tmp_path / 'surveys' / f'{d.name}.lab2_straight_3m').exists()
+
+
+def test_lab2_home_moves_the_settings_file_and_the_reference(tmp_path, monkeypatch):
+    home = tmp_path / 'elsewhere'
+    home.mkdir()
+    (home / 'lab2.yaml').write_text('car: C\n')
+    monkeypatch.setenv('LAB2_HOME', str(home))
+    c = lc.Config()
+    assert c.file == home / 'lab2.yaml' and c.get('car') == 'C'
+    assert c.get('reference') == str(home / 'reference' / 'uturn')

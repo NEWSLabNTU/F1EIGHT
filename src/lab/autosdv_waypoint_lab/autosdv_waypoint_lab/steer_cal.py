@@ -28,7 +28,6 @@ INIT_STEER = 489
 SERVO_HALF_RANGE = 50          # min_steer 439 .. max_steer 539 around 489
 SHIPPED_RATIO = -1000.0
 MAX_COMMAND_ANGLE = 0.349      # vehicle_info max_steer_angle: the actuator clamps here
-MARGIN = 0.8                   # the tightest circle may use at most this share of lock
 
 
 def graded_radius() -> float:
@@ -49,6 +48,8 @@ def graded_radius() -> float:
 
 
 R_FIRST_CIRCLE = graded_radius()
+RADIUS_MARGIN = 0.2            # m: the graded circle sits this far outside the car's tightest
+MAX_MIN_RADIUS = R_FIRST_CIRCLE - RADIUS_MARGIN   # the gate: measured min radius at most this
 
 
 def average_wheel_angle(delta: float, wheel_base: float = WHEEL_BASE,
@@ -91,7 +92,7 @@ class SteerFit:
     rms_counts: float            # residual of the fit, in servo counts
     max_angle: float             # rad at +-SERVO_HALF_RANGE counts
     min_radius: float            # m at that lock
-    angle_needed: float          # rad for the tightest circle
+    angle_needed: float          # rad for the tightest circle (information; the gate is the radius)
     margin_ok: bool
     n: int
 
@@ -104,10 +105,11 @@ class SteerFit:
             f'fit residual               {self.rms_counts:.1f} counts rms over {self.n} circles',
             f'max_steer_angle            {self.max_angle:.3f} rad at +-{SERVO_HALF_RANGE} counts'
             f'  (vehicle_info.param.yaml)',
-            f'minimum radius at lock     {self.min_radius:.2f} m',
+            f'minimum radius at lock     {self.min_radius:.2f} m  '
+            f'-> {"PASS" if self.margin_ok else "FAIL"} (at most {MAX_MIN_RADIUS:.2f} m: '
+            f'R {R_FIRST_CIRCLE:g} m less {RADIUS_MARGIN:g} m)',
             f'R {R_FIRST_CIRCLE:g} m needs          {self.angle_needed:.3f} rad = '
-            f'{100 * self.angle_needed / self.max_angle:.0f} % of lock  '
-            f'-> {"PASS" if self.margin_ok else "FAIL"} (limit {100 * MARGIN:.0f} %)',
+            f'{100 * self.angle_needed / self.max_angle:.0f} % of lock',
         ]
         if self.ratio > 0:
             out.append('NOTE: positive ratio: PWM above 489 turned the car LEFT; the shipped '
@@ -145,8 +147,9 @@ def fit(pairs: Sequence[Tuple[float, float]], wheel_base: float = WHEEL_BASE) ->
     rms = math.sqrt(sum((o - (ratio * d + centre)) ** 2 for o, d in pts) / n)
     max_angle = SERVO_HALF_RANGE / abs(ratio)
     needed = math.atan(wheel_base / R_FIRST_CIRCLE)
-    return SteerFit(ratio, centre, rms, max_angle, wheel_base / math.tan(max_angle),
-                    needed, needed <= MARGIN * max_angle, n)
+    min_radius = wheel_base / math.tan(max_angle)
+    return SteerFit(ratio, centre, rms, max_angle, min_radius,
+                    needed, min_radius <= MAX_MIN_RADIUS, n)
 
 
 def radius_at_axle(measured: float, side: str, tread: float = WHEEL_TREAD) -> float:

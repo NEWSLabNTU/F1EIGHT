@@ -8,6 +8,8 @@
 <launch>
   <arg name="course_dir"/>
   <arg name="rviz" default="false"/>
+  <arg name="viewer_display" default="$(env DISPLAY '')"
+       description="the X display RViz opens on; `just lab2 loc-check` passes it, because the launch itself runs without DISPLAY (the ZED cannot have one)"/>
   <arg name="use_sim_time" default="false"/>
   <node pkg="autosdv_waypoint_lab" exec="loc_check" name="loc_check" output="screen">
     <param name="course_dir" value="$(var course_dir)"/>
@@ -17,5 +19,7 @@
        context. GLXBadDrawable"); close the window and it comes back -->
   <node pkg="rviz2" exec="rviz2" name="loc_check_rviz" if="$(var rviz)"
         respawn="true" respawn_delay="2.0"
-        args="-d $(find-pkg-share autosdv_waypoint_lab)/rviz/loc_check.rviz"/>
+        args="-d $(find-pkg-share autosdv_waypoint_lab)/rviz/loc_check.rviz">
+    <env name="DISPLAY" value="$(var viewer_display)"/>
+  </node>
 </launch>
