@@ -7,6 +7,8 @@ sys.path.insert(0, str(Path(__file__).resolve().parent))
 import new_team as nt  # noqa: E402
 
 LAUNCH = '''<launch>
+  <arg name="speed_controller_class" default="autosdv_vehicle_interface.speed_controller:AckermannSpeedPID"
+       description="Inner loop"/>
   <let name="car_param_file"
        value="$(find-pkg-share individual_params)/config/$(var vehicle_id)/autosdv_vehicle/actuator.param.yaml"/>
   <!-- the car's tuning of the default speed controller (gains, ESC dead-band
@@ -32,6 +34,15 @@ FILES = {
     'autosdv_vehicle_interface/resource/autosdv_vehicle_interface': b'',
     'autosdv_vehicle_interface/test/golden.bin': b'\x00\xff',
 }
+STUB_BYTES = b'class SpeedPID:  # TODO\n    pass\n'
+LAB = {nt.STUB: STUB_BYTES,
+       nt.SIM_SEED: b'# sim\nkp: 12.0\nff_gain: 0.1433\n',
+       nt.CAR_SEED: b'# A copy of the Lab 2 handout\'s file\n# Keep equal.\n#\n# car\nkp: 20.0\n'}
+IDS = ('car_a', 'sim')
+
+
+def gen(n, dest, files=FILES):
+    return nt.generate(n, dest, files, 'test', LAB, IDS)
 
 
 @pytest.mark.parametrize('team,model', [(3, 'team3_vehicle'), ('12', 'team12_vehicle')])
@@ -46,12 +57,15 @@ def test_model_name_refuses(bad):
 
 
 def test_generate_renames_packages_and_keeps_the_car_file(tmp_path):
-    root = nt.generate(3, tmp_path, FILES, 'test')
+    root = gen(3, tmp_path)
     launch = (root / 'team3_vehicle_launch/launch/vehicle_interface.launch.xml').read_text()
     # the car's PWM points: the fixed individual_params path, untouched
     assert 'config/$(var vehicle_id)/autosdv_vehicle/actuator.param.yaml' in launch
     # the tuning: the team's own file, not the reference's per-car one
-    assert '$(find-pkg-share team3_vehicle_launch)/config/speed_controller.param.yaml' in launch
+    assert '$(find-pkg-share team3_vehicle_launch)/config/$(var vehicle_id)/speed_controller.param.yaml' in launch
+    # the model's own SpeedPID, the stub, byte for byte
+    assert 'default="team3_vehicle_interface.speed_pid:SpeedPID"' in launch
+    assert (root / 'team3_vehicle_interface/team3_vehicle_interface/speed_pid.py').read_bytes() == STUB_BYTES
     assert 'autosdv_vehicle/speed_controller.param.yaml' not in launch
     assert "the car's tuning of the default speed controller" not in launch
     assert 'pkg="team3_vehicle_interface"' in launch
@@ -63,7 +77,13 @@ def test_generate_renames_packages_and_keeps_the_car_file(tmp_path):
     assert (root / 'team3_vehicle_interface/resource/team3_vehicle_interface').is_file()
     assert (root / 'team3_vehicle_interface/test/golden.bin').read_bytes() == b'\x00\xff'
     assert 'config' in (root / 'team3_vehicle_launch/CMakeLists.txt').read_text()
-    assert (root / 'team3_vehicle_launch/config/speed_controller.param.yaml').is_file()
+    import yaml
+    for vid, kp in (('sim', 12.0), ('car_a', 20.0)):
+        f = root / f'team3_vehicle_launch/config/{vid}/speed_controller.param.yaml'
+        p = yaml.safe_load(f.read_text())['/**']['ros__parameters']['speed_controller_params']
+        assert p['kp'] == kp
+    assert 'ff_gain' in (root / 'team3_vehicle_launch/config/sim/speed_controller.param.yaml').read_text()
+    assert 'Keep equal' not in (root / 'team3_vehicle_launch/config/car_a/speed_controller.param.yaml').read_text()
     desc = (root / 'team3_vehicle_description/CMakeLists.txt').read_text()
     assert 'find_package(autosdv_vehicle_description REQUIRED)' in desc
     assert not (root / 'team3_vehicle_description/config').exists()   # by reference, no copy
@@ -71,9 +91,9 @@ def test_generate_renames_packages_and_keeps_the_car_file(tmp_path):
 
 
 def test_generate_never_overwrites(tmp_path):
-    nt.generate(3, tmp_path, FILES, 'test')
+    gen(3, tmp_path)
     with pytest.raises(nt.NewTeamError, match='exists'):
-        nt.generate(3, tmp_path, FILES, 'test')
+        gen(3, tmp_path)
 
 
 def test_a_reference_without_the_car_file_is_refused(tmp_path):
@@ -81,15 +101,23 @@ def test_a_reference_without_the_car_file_is_refused(tmp_path):
     files['autosdv_vehicle_launch/launch/vehicle_interface.launch.xml'] = \
         LAUNCH.replace('autosdv_vehicle/actuator.param.yaml', 'x.yaml').encode()
     with pytest.raises(nt.NewTeamError, match='individual_params'):
-        nt.generate(3, tmp_path, files, 'test')
+        gen(3, tmp_path, files)
 
 
 def test_the_pinned_reference_generates(tmp_path):
     files, source = nt.read_reference()
-    root = nt.generate(5, tmp_path, files, source)
+    root = nt.generate(5, tmp_path, files, source, nt.read_lab_files(worktree=True),
+                       nt.vehicle_ids())
+    assert {'sim', 'car_a', 'car_b', 'car_c'} <= {p.name for p in
+                                                 (root / 'team5_vehicle_launch/config').iterdir()}
     assert (root / 'team5_vehicle_launch/launch/vehicle_interface.launch.xml').is_file()
     for p in root.rglob('*'):
         if p.is_file() and p.suffix in ('.py', '.xml', '.cfg'):
             text = p.read_text()
             for ref in ('autosdv_vehicle_interface', 'autosdv_vehicle_launch'):
                 assert ref not in text, f'{p}: {ref}'
+
+
+def test_nothing_ta_only_is_read():
+    assert all('reference' not in rel for rel in (nt.STUB, nt.SIM_SEED, nt.CAR_SEED))
+    assert all(not rel.startswith(nt.LAB) for rel in nt.read_reference()[0])

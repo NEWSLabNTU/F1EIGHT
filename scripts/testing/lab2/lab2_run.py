@@ -258,12 +258,8 @@ def resolve_model(o: Options, settings,
 
 
 def _installed(model: str) -> bool:
-    try:
-        from ament_index_python.packages import get_package_share_directory
-        get_package_share_directory(f'{model}_launch')
-        return True
-    except Exception:
-        return False
+    import lab2_ws
+    return lab2_ws.model_installed(model)
 
 
 def gate_verdict(end: Optional['End'], route: str, v_ref: float, laps: int, speeds, laps_done: int,
