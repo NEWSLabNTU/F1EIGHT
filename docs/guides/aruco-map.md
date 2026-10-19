@@ -9,9 +9,9 @@ drives the car. Lab 2 uses it through its own recipes (`just lab2 survey`,
 | command | what it does |
 | --- | --- |
 | `just aruco-map survey ORIGIN_ID [DIR] [key:=value ...]` | scan: drive past every board, Ctrl-C solves the map, in the origin board's frame |
-| `just aruco-map survey ORIGIN_ID [DIR] --route NAME` | the same, then align it to a route's start box (below) |
+| `just aruco-map survey ORIGIN_ID [DIR] --align` | the same, then align it to the start box (below) |
 | `just aruco-map scan ORIGIN_ID [DIR] [key:=value ...]` | the scan alone (`DIR ORIGIN_ID` also works, Lab 2's old order) |
-| `just aruco-map align [DIR] --route NAME [--vehicle-id car_X] [--force]` | optional: put a survey into a route's start-box frame |
+| `just aruco-map align [DIR] [--vehicle-id car_X] [--force]` | optional: put a survey into the start-box frame |
 | `just aruco-map solve [DIR] [--origin ID] [--floor-offset M]` | solve the scan again from `DIR/survey_data.npz`, no car |
 | `just aruco-map save` | solve and write the running scan now, without stopping it |
 | `just aruco-map check [DIR] [vehicle_id:=car_X] [rviz:=false]` | drive by hand and watch where the localizer puts the car |
@@ -34,7 +34,7 @@ All on the command line, as `key:=value`:
 
 Any other `key:=value` goes to the launch file the command runs
 (`marker_survey.launch.xml`, `aruco_loc_check.launch.xml`). `align` takes
-options instead: `--route` (required), `--vehicle-id` (or `vehicle_id:=`),
+options instead: `--vehicle-id` (or `vehicle_id:=`),
 `--force`, `--bench --truth DIR`.
 
 ## The frame
@@ -118,31 +118,36 @@ fix rate, the longest stretch without a fix, how far each fix lands from the
 EKF's odometry, and the distance from the route, every 10 s and into
 `DIR/loc_check_summary.txt`.
 
-## Aligning to a route (optional)
+## Aligning to the start box (optional)
 
-A survey is a complete map for localization. A **route** has its own frame:
-a directory with a `course.yaml` (`path`, `start_pose` (0, 0, 0)) and its
-`path.csv`, taped on the floor with the start box at the origin and the first
-leg along +x. `align` puts the survey into that frame:
+A survey is a complete map for localization. A taped **route** has its own
+frame: the start box at the origin, the first leg along +x (a route's
+`course.yaml` has `start_pose` (0, 0, 0)). `align` puts the survey into that
+START-BOX frame:
 
 ```bash
-just aruco-map align --route lab2_uturn                 # surveys/latest
-just aruco-map align surveys/<dir> --route path/to/route --vehicle-id car_c
-just aruco-map survey 24 --route lab2_uturn   # scan, then align, guided
+just aruco-map align                                  # surveys/latest
+just aruco-map align surveys/<dir> --vehicle-id car_c
+just aruco-map survey 24 --align                      # scan, then align, guided
 ```
 
-`--route` is a directory, or a NAME found as `config/courses/NAME` in an
-installed package (Lab 2 ships `lab2_uturn`, `lab2_straight_2m`, ... in
-`autosdv_waypoint_lab`). Put the car in the taped start box facing along the
-first leg; the tool seeds the EKF from the boards in view and prints READY;
-drive straight along the first leg, 2 m or more, stop, Ctrl-C. The start pose
-becomes the origin, the drive's fitted line +x; the boards keep their heights
-and tilts. `align_report.txt` says how straight the drive was and what that
-means for the heading. `marker_survey_align_solve DIR --route NAME [--force]`
-re-solves a recorded drive without the car.
+No route takes part. Put the car in the taped start box facing along the first
+leg; the tool seeds the EKF from the boards in view and prints READY; drive
+straight along the first leg, 2 m or more, stop, Ctrl-C. The start pose becomes
+the origin, the drive's fitted line +x; the boards keep their heights and
+tilts. `align_report.txt` says how straight the drive was and what that means
+for the heading. `marker_survey_align_solve DIR [--force]` re-solves a recorded
+drive without the car.
 
-Lab 2: `just lab2 survey-align` is this with the lab's route and car, and
-`just lab2 run` reads `surveys/latest` once it is aligned
+The aligned map has no path: every route taped from that start box runs on it.
+`autosdv_marker_survey.align.write_route_course(SURVEY, ROUTE, OUT)` combines
+it with one route (the route's `path.csv` byte for byte, its laps, `v_ref` and
+start pose; the survey's boards and map) into a course directory of its own.
+(`--route NAME`, from when an alignment copied a route in, still works and
+means `--align`, with a note.)
+
+Lab 2: `just lab2 survey-align` is this with the lab's car, and every
+`just lab2 run route:=NAME` combines `surveys/latest` with its route
 (`docs/guides/lab2-waypoint-stack.md`, "On the field").
 
 ## Without the car

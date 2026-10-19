@@ -2,6 +2,7 @@
 import math
 import os
 import random
+import shutil
 
 import numpy as np
 import pytest
@@ -154,32 +155,51 @@ def test_end_to_end_a_misframed_stage1_is_recovered():
         assert m['pitch'] == pytest.approx(pitch, abs=1e-3)
 
 
-def test_written_course_is_the_route_with_the_aligned_boards(tmp_path):
+def test_written_map_has_no_route_and_a_run_adds_one(tmp_path):
     truth = _truth()
     stage1, T_w_s1 = stage1_map(truth, 24)
     d = tmp_path / 'survey'
     d.mkdir()
     (d / 'course.yaml').write_text(yaml.safe_dump(
-        {'path': 'path.csv', 'closed': True, 'laps': 3, 'v_ref': 0.8,
-         'start_pose': {'x': 0.0, 'y': 0.0, 'yaw': 0.0}, 'marker_size': 0.38,
+        {'start_pose': {'x': 0.0, 'y': 0.0, 'yaw': 0.0}, 'marker_size': 0.38,
          'dictionary': 'DICT_5X5_1000', 'survey': {'origin_marker': 24}, 'markers': stage1}))
     assert not al.is_aligned(str(d))
     s1 = al.prepare_stage1(str(d))
     assert os.path.isfile(os.path.join(s1, 'course.yaml'))
     T_s1_w = np.linalg.inv(T_w_s1)
-    a, written = al.solve_dir(str(d), ROUTE, drive(x0=T_s1_w[0, 3], y0=T_s1_w[1, 3],
-                                                   yaw0=math.atan2(T_s1_w[1, 0], T_s1_w[0, 0])),
+    a, written = al.solve_dir(str(d), drive(x0=T_s1_w[0, 3], y0=T_s1_w[1, 3],
+                                            yaw0=math.atan2(T_s1_w[1, 0], T_s1_w[0, 0])),
                               log=lambda *x: None)
     assert a.ok and written
     assert al.is_aligned(str(d))
-    # the route's path, byte for byte, and its keys
-    assert (d / 'path.csv').read_bytes() == open(os.path.join(ROUTE, 'path.csv'), 'rb').read()
+    # the start-box frame, the boards, no route
     from autosdv_aruco_localization.marker_map import load_marker_map
     c = load_marker_map(str(d))
     assert (c.start_pose.x, c.start_pose.y, c.start_pose.yaw) == (0.0, 0.0, 0.0)
     y = yaml.safe_load((d / 'course.yaml').read_text())
-    assert len(c.markers) == len(truth) and y['closed'] is False and y['laps'] == 1
-    assert y['alignment']['route'] == 'test_route'
+    assert len(c.markers) == len(truth)
+    assert 'path' not in y and 'route' not in y['alignment'] and not (d / 'path.csv').exists()
+    # a run combines it with a route: the route's path byte for byte, its keys, the boards
+    run = tmp_path / 'run'
+    al.write_route_course(str(d), ROUTE, str(run))
+    assert (run / 'path.csv').read_bytes() == open(os.path.join(ROUTE, 'path.csv'), 'rb').read()
+    r = yaml.safe_load((run / 'course.yaml').read_text())
+    route = yaml.safe_load(open(os.path.join(ROUTE, 'course.yaml')))
+    assert (r['closed'], r['laps'], r['v_ref']) == (route['closed'], route['laps'], route['v_ref'])
+    assert r['markers'] == y['markers'] and r['marker_size'] == 0.38
+    assert r['alignment']['route'] == 'test_route' and r['alignment']['survey_dir'] == str(d)
+    for name in al.MAP_FILES:
+        assert (run / name).read_bytes() == (d / name).read_bytes()
+    # an unaligned survey, or a route that does not start at the start box, is refused
+    with pytest.raises(ValueError, match='not aligned'):
+        al.write_route_course(s1, ROUTE, str(tmp_path / 'run2'))
+    off = tmp_path / 'off_route'
+    shutil.copytree(ROUTE, off)
+    rc = yaml.safe_load((off / 'course.yaml').read_text())
+    rc['start_pose'] = {'x': 1.0, 'y': 0.0, 'yaw': 0.0}
+    (off / 'course.yaml').write_text(yaml.safe_dump(rc))
+    with pytest.raises(ValueError, match='start_pose'):
+        al.write_route_course(str(d), str(off), str(tmp_path / 'run3'))
     assert (d / 'align_report.txt').read_text().startswith('survey-align ALIGNED')
     # aligned: stage 2 again localizes on the kept stage-1 map, never on its own output
     assert al.prepare_stage1(str(d)) == s1
@@ -262,14 +282,13 @@ def test_solve_main_reuses_the_recorded_multi_board_poses(tmp_path):
     d = tmp_path / 'survey'
     d.mkdir()
     (d / 'course.yaml').write_text(yaml.safe_dump(
-        {'path': 'path.csv', 'closed': False, 'laps': 1, 'v_ref': 0.8,
-         'start_pose': {'x': 0.0, 'y': 0.0, 'yaw': 0.0}, 'marker_size': 0.38,
+        {'start_pose': {'x': 0.0, 'y': 0.0, 'yaw': 0.0}, 'marker_size': 0.38,
          'dictionary': 'DICT_5X5_1000', 'survey': {'origin_marker': 24}, 'markers': stage1}))
     T = np.linalg.inv(T_w_s1)
     ss = drive(x0=T[0, 3], y0=T[1, 3], yaw0=math.atan2(T[1, 0], T[0, 0]))
     al.write_samples(str(d / al.POSES_FILE), ss)
     al.write_pnp(str(d / al.PNP_FILE), [al.PnpSample(s.t, s.x, s.y, s.yaw, 3, 0.4, 0.004) for s in ss])
-    assert al.solve_main([str(d), '--route', ROUTE]) == 0
+    assert al.solve_main([str(d)]) == 0
     assert 'line fitted to   the EKF' not in (d / al.REPORT_FILE).read_text()
-    assert al.solve_main([str(d), '--route', ROUTE, '--no-pnp']) == 0
+    assert al.solve_main([str(d), '--route', ROUTE, '--no-pnp']) == 0   # --route: ignored, noted
     assert 'line fitted to   the EKF' in (d / al.REPORT_FILE).read_text()

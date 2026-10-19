@@ -336,11 +336,9 @@ class MarkerSurveyNode(Node):
                                         'marker_survey_solve can try again.')
                 return False, str(e)
         self.saved = True
-        if not os.path.isfile(os.path.join(self.course_dir, 'path.csv')):
-            self.get_logger().info(
-                f'{self.course_dir} is a marker map in the origin board\'s frame, with no route '
-                '(path.csv). To put it in a route\'s start-box frame: '
-                f'just aruco-map align {self.course_dir} --route NAME')
+        self.get_logger().info(
+            f'{self.course_dir} is a marker map in the origin board\'s frame. To put it in the '
+            f'start-box frame (for any route taped from that box): just aruco-map align {self.course_dir}')
         flagged = [m.id for m in res['markers'] if m.flags]
         return True, (f'{len(res["markers"])} markers written to {self.course_dir}'
                       + (f'; check {flagged}' if flagged else ''))

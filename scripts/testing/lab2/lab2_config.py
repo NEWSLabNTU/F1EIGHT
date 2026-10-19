@@ -32,9 +32,9 @@ Recipes:
                 calibration and IMU bias, which no car has measured yet); every other
                 argument passes through
     survey      the same as loc-check (the survey's URDF is that car's calibration)
-    survey-align  --route ROUTE (`route`) unless --route is given, and vehicle_id:=car_<car>
-                (else sim; --bench: sim) unless --vehicle-id / vehicle_id:= is given; the
-                generic tool (`just aruco-map align`) takes both on its command line only
+    survey-align  vehicle_id:=car_<car> (else sim; --bench: sim) unless --vehicle-id /
+                vehicle_id:= is given; no route (the alignment measures the start box);
+                the generic tool (`just aruco-map align`) takes it on its command line only
     gate        vehicle_model:= (below)
     sim         nothing from the file: Part 1 runs the one simulation model,
                 lab2_sim_vehicle, for everyone (`team` and `vehicle_model` name Part 2's car
@@ -63,21 +63,20 @@ team NUMBER everywhere (team:=3 is team3_vehicle). The team_dir:= and submission
 SpeedPID-only lab are gone from vehicle and gate: the controller lives in the model.
 
 Which course the car runs (`course_dir`): `auto` (the default) is the aligned
-survey surveys/latest when `just lab2 survey-align` aligned it for `route`,
-else the route's packaged course (its PLANNED boards, with a warning); `package`
-is always the packaged course; a directory is that course. The bench
-(`just lab2 run --bench`) takes `auto` as `package`: a survey is of the field.
+survey surveys/latest combined with `route`, else the route's packaged course
+(its PLANNED boards, with a warning); `package` is always the packaged course; a
+directory is that course. The bench (`just lab2 run --bench`) takes `auto` as
+`package`: a survey is of the field.
 
-A survey aligned for one route serves every route on the same FIELD (same start
-box, boards and start-box frame; a route's course.yaml names its field with
-`field: lab2_uturn`, and a route without one is its own field). When `route` is
-not the one surveys/latest is aligned for but shares its field, `auto` builds a
-sibling surveys/<latest dir>.<route>/ once, re-solved for `route` from latest's
-recorded drive (align_poses.csv, align_pnp.csv; the marker_survey_align_solve
-solver), and runs that. surveys/latest itself is never written; the sibling is
-rebuilt when latest's alignment inputs change (a hash in its .reused_from). One
-stderr line names the survey a run uses; on any failure, the packaged course
-with the warning, as before.
+An alignment has no route: `just lab2 survey-align` measures the START BOX, and
+every route taped from it (start_pose (0, 0, 0), first leg along +x) runs on the
+same aligned survey. Each run writes surveys/<latest dir>.<route>/: the route
+template's path (byte for byte), laps, v_ref and start pose with the survey's
+boards, map and alignment (autosdv_marker_survey.align.write_route_course).
+surveys/latest itself is never written. A survey aligned before alignments lost
+their route still serves: its boards are in the start-box frame, and the route
+template replaces the route it was aligned for. One stderr line names the survey
+a run uses; on any failure, the packaged course with the warning.
 """
 import json
 import os
@@ -141,7 +140,7 @@ INIT_KEYS_HINT = (
     '`just lab2 config` shows what every command will use.')
 TEMPLATE_DEFAULTS = [
     ('route', 'the graded course'),
-    ('course_dir', 'auto: surveys/latest once survey-align aligned it, else the route\'s package course'),
+    ('course_dir', 'auto: surveys/latest (aligned) with the route, else the route\'s package course'),
     ('reference', "the car's TA reference bag, for `just lab2 grade`"),
     ('bag_dir', 'where bags are recorded and looked for'),
 ]
@@ -231,153 +230,82 @@ class Config:
 
 # ---- the course -----------------------------------------------------------------------------
 
-def _route_fields(course_dir: Path):
-    d = yaml.safe_load((course_dir / 'course.yaml').read_text()) or {}
-    sp = d.get('start_pose') or {}
-    name = str(d.get('path', 'path.csv'))
-    return (name, (course_dir / name).read_bytes(), bool(d.get('closed', True)), int(d.get('laps', 1)),
-            round(float(d.get('v_ref', 0.8)), 6),
-            tuple(round(float(sp.get(k, 0.0)), 6) for k in ('x', 'y', 'yaw'))), d
-
-
-def aligned_for(course_dir, route: str):
-    """(True, '') if course_dir is a survey that `just lab2 survey-align` aligned for the
-    route `route` (a packaged course name), with that route's path, start pose, laps
-    and v_ref unchanged since; else (False, why)."""
-    course_dir = Path(course_dir)
-    if not (course_dir / 'course.yaml').is_file():
-        return False, f'{course_dir} has no course.yaml'
-    template = Path(route) if '/' in str(route) else COURSES / str(route)
-    try:
-        mine, d = _route_fields(course_dir)
-    except (OSError, ValueError, yaml.YAMLError) as e:
-        return False, f'{course_dir}: {e}'
-    al = d.get('alignment')
-    if not isinstance(al, dict):
-        return False, f'{course_dir} is not aligned (run `just lab2 survey-align`)'
-    if str(al.get('route')) != template.name:
-        return False, f'{course_dir} is aligned for route {al.get("route")!r}, not {template.name!r}'
-    try:
-        theirs, _ = _route_fields(template)
-    except (OSError, ValueError, yaml.YAMLError) as e:
-        return False, f'route {template}: {e}'
-    if mine != theirs:
-        return False, (f'{course_dir} was aligned for an older {template.name} (its path, start pose, '
-                       'laps or v_ref differ): run `just lab2 survey-align` again')
-    return True, ''
-
-
 def _template(route: str) -> Path:
     return Path(route) if '/' in str(route) else COURSES / str(route)
 
 
-def field_of(route: str) -> str:
-    """The field a route stands on: its course.yaml's `field` (a straight test route says
-    `field: lab2_uturn`), else the route itself. Routes on one field share its start box,
-    its boards and its START-BOX frame, so one aligned survey serves them all."""
-    t = _template(route)
+def is_aligned(course_dir) -> Tuple[bool, str]:
+    """(True, '') if course_dir is a survey `just lab2 survey-align` aligned to the start
+    box; else (False, why)."""
+    course_dir = Path(course_dir)
     try:
-        d = yaml.safe_load((t / 'course.yaml').read_text()) or {}
-    except (OSError, yaml.YAMLError):
-        d = {}
-    return str(d.get('field') or t.name)
-
-
-def same_field(a: str, b: str) -> bool:
-    return field_of(a) == field_of(b)
-
-
-REUSE_KEY = '.reused_from'
-
-
-def _reuse_key(latest: Path, route: str) -> str:
-    """What the sibling is derived from: latest's alignment inputs (stage 1, the recorded
-    drive, the multi-board poses, whether it was forced) and the route template."""
-    import hashlib
-    h = hashlib.sha256()
-    t = _template(route)
-    d = yaml.safe_load((latest / 'course.yaml').read_text()) or {}
-    h.update(repr(bool((d.get('alignment') or {}).get('forced'))).encode())
-    for p in (latest / 'stage1' / 'course.yaml', latest / 'align_poses.csv', latest / 'align_pnp.csv',
-              t / 'course.yaml', t / str((yaml.safe_load((t / 'course.yaml').read_text()) or {})
-                                          .get('path', 'path.csv'))):
-        h.update(p.name.encode())
-        h.update(p.read_bytes() if p.is_file() else b'-')
-    return h.hexdigest()
-
-
-def _solve_sibling(sib: Path, route: str, forced: bool) -> Tuple[bool, str]:
-    """Align `sib` (stage1/ and the drive already copied in) for `route`: the solver of
-    `marker_survey_align_solve`, in this process, its report into sib/align_report.txt."""
-    for pkg in ('autosdv_marker_survey', 'autosdv_waypoint_lab'):
-        p = str(REPO / 'src/lab' / pkg)
-        try:
-            __import__(pkg)
-        except ImportError:
-            sys.path.insert(0, p)
-    from autosdv_marker_survey import align as al
-    samples = al.read_samples(str(sib / al.POSES_FILE))
-    pnp_file = sib / al.PNP_FILE
-    pnp = al.read_pnp(str(pnp_file)) if pnp_file.is_file() else None
-    a, _ = al.solve_dir(str(sib), str(_template(route)), samples, force=forced, log=lambda *x: None,
-                        pnp=pnp)
-    return a.ok, '; '.join(a.problems)
-
-
-def reuse_survey(latest: Path, route: str) -> Tuple[Optional[Path], str]:
-    """(surveys/<latest name>.<route>, how) when `latest` is aligned for another route on
-    the same field: a sibling copy re-solved for `route` from latest's recorded drive,
-    built once and rebuilt when latest's alignment inputs change. latest itself is never
-    written. (None, why not) otherwise, or on any failure."""
-    import shutil
-    try:
-        d = yaml.safe_load((latest / 'course.yaml').read_text()) or {}
+        d = yaml.safe_load((course_dir / 'course.yaml').read_text()) or {}
     except (OSError, yaml.YAMLError) as e:
-        return None, str(e)
-    al_ = d.get('alignment')
-    if not isinstance(al_, dict):
-        return None, f'{latest} is not aligned (run `just lab2 survey-align`)'
-    other = str(al_.get('route'))
-    if other == _template(route).name:
-        return None, 'aligned for this route'
-    if not (COURSES / other).is_dir() or not same_field(other, route):
-        return None, (f'{latest} is aligned for route {other!r}, not {_template(route).name!r}, '
-                      'and on another field')
-    if not (latest / 'align_poses.csv').is_file():
-        return None, (f'{latest} is aligned for {other!r} but has no align_poses.csv to re-solve '
-                      f'for {_template(route).name!r} from')
-    if not (latest / 'stage1' / 'course.yaml').is_file():
-        return None, f'{latest} has no stage1/course.yaml'
-    real = latest.resolve()
-    sib = real.parent / f'{real.name}.{_template(route).name}'
+        return False, f'{course_dir}: {e}'
+    if not isinstance(d.get('alignment'), dict):
+        return False, f'{course_dir} is not aligned (run `just lab2 survey-align`)'
+    return True, ''
+
+
+#: marks a directory this module writes (and may rewrite): surveys/<latest>.<route>/;
+#: .reused_from marked the per-route siblings of before, which it replaces
+RUN_COURSE_KEY = '.combined_from'
+OLD_RUN_COURSE_KEYS = (RUN_COURSE_KEY, '.reused_from')
+
+
+def _align_module():
     try:
-        key = _reuse_key(real, route)
-        if (sib / REUSE_KEY).is_file() and (sib / REUSE_KEY).read_text().split('\n')[0] == key \
-                and aligned_for(sib, route)[0]:
-            return sib, f'cached, re-solved from {real.name} (aligned for {other})'
-        if sib.exists():
-            if not (sib / REUSE_KEY).is_file():
-                return None, f'{sib} exists and was not made here; not overwriting it'
-            shutil.rmtree(sib)
-        sib.mkdir()
-        shutil.copytree(real / 'stage1', sib / 'stage1')
-        for name in ('align_poses.csv', 'align_pnp.csv'):
-            if (real / name).is_file():
-                shutil.copy2(real / name, sib / name)
-        shutil.copy2(real / 'stage1' / 'course.yaml', sib / 'course.yaml')
-        ok, why = _solve_sibling(sib, route, bool(al_.get('forced')))
-        if not ok:
-            shutil.rmtree(sib, ignore_errors=True)
-            return None, f're-solving {real.name} for {_template(route).name} refused: {why}'
-        good, why = aligned_for(sib, route)
-        if not good:
-            shutil.rmtree(sib, ignore_errors=True)
-            return None, why
-        (sib / REUSE_KEY).write_text(f'{key}\n{real}\n')
-        return sib, f're-solved from {real.name} (aligned for {other}) for {_template(route).name}'
+        from autosdv_marker_survey import align
+    except ImportError:
+        sys.path.insert(0, str(REPO / 'src/localization/autosdv_marker_survey'))
+        from autosdv_marker_survey import align
+    return align
+
+
+def _tree_bytes(d: Path) -> dict:
+    return {str(p.relative_to(d)): p.read_bytes() for p in sorted(d.rglob('*')) if p.is_file()}
+
+
+def run_course(latest: Path, route: str) -> Tuple[Optional[Path], str]:
+    """(surveys/<latest name>.<route>, how): the aligned survey `latest` combined with the
+    route template. latest itself is never written. (None, why not) when latest is not
+    aligned, the route does not start at the start box, or the directory exists and was
+    not made here.
+
+    A run plans twice (lab2_run, then the `just lab2 vehicle` it starts), and another
+    terminal may plan while a stack is up, so the directory is never torn down under a
+    running path publisher and localizer: the course is written to a temporary sibling,
+    an existing directory with the same contents is left as it is, and a different one is
+    swapped out by renames, not removed and rewritten."""
+    import shutil
+    import tempfile
+    ok, why = is_aligned(latest)
+    if not ok:
+        return None, why
+    real = latest.resolve()
+    t = _template(route)
+    out = real.parent / f'{real.name}.{t.name}'
+    if out.exists() and not any((out / k).is_file() for k in OLD_RUN_COURSE_KEYS):
+        return None, f'{out} exists and was not made here; not overwriting it'
+    tmp = Path(tempfile.mkdtemp(prefix=f'.{out.name}.', dir=str(real.parent)))
+    try:
+        _align_module().write_route_course(str(real), str(t), str(tmp))
+        (tmp / RUN_COURSE_KEY).write_text(f'{real}\n{t}\n')
+        if out.is_dir() and _tree_bytes(out) == _tree_bytes(tmp):
+            shutil.rmtree(tmp)
+            return out, f'{real.name} with route {t.name}'
+        old = None
+        if out.exists():
+            old = Path(tempfile.mkdtemp(prefix=f'.{out.name}.old.', dir=str(real.parent)))
+            os.rmdir(old)
+            os.rename(out, old)
+        os.rename(tmp, out)
+        if old is not None:
+            shutil.rmtree(old, ignore_errors=True)
+        return out, f'{real.name} with route {t.name}'
     except Exception as e:     # anything: the packaged course, with the warning
-        shutil.rmtree(sib, ignore_errors=True)
-        return None, f'reusing {real.name} for {_template(route).name} failed: {e}'
+        shutil.rmtree(tmp, ignore_errors=True)
+        return None, f'combining {real.name} with {t.name} failed: {e}'
 
 
 def course_for(c: 'Config', bench: bool = False):
@@ -392,19 +320,11 @@ def course_for(c: 'Config', bench: bool = False):
     if choice == 'auto' and not bench:
         latest = SURVEY_LATEST
         if latest.is_dir():
-            ok, why = aligned_for(latest, route)
-            if ok:
-                d = str(latest.resolve())
-                print(f'survey: {d} (aligned for {_template(route).name})', file=sys.stderr)
-                return f'course_dir:={d}', ('course_dir', d), ''
-            sib, how = reuse_survey(latest, route)
-            if sib is not None:
-                print(f'survey: {sib} ({how})', file=sys.stderr)
-                return f'course_dir:={sib}', ('course_dir', str(sib)), ''
-            if how != 'aligned for this route' and 'another field' not in how and \
-                    'is not aligned' not in how:
-                why = how
-            warn = (f'surveys/latest not used: {why}. Running the PACKAGED {route}, whose boards are '
+            d, how = run_course(latest, route)
+            if d is not None:
+                print(f'survey: {d} ({how})', file=sys.stderr)
+                return f'course_dir:={d}', ('course_dir', str(d)), ''
+            warn = (f'surveys/latest not used: {how}. Running the PACKAGED {route}, whose boards are '
                     'where the plan put them, not where they stand')
         else:
             warn = (f'no surveys/latest: running the PACKAGED {route}, whose boards are where the plan '
@@ -623,10 +543,6 @@ def plan(recipe, argv, cwd=REPO, bench=False):
             use('vehicle_id', vid)
     elif recipe == 'survey-align':
         out = list(rest)
-        if not _has(rest, '--route'):
-            route = c.require('route', 'the route the survey is aligned for')
-            out += ['--route', route]
-            use('route')
         if not _has(rest, '--vehicle-id'):
             if '--bench' in rest:
                 arg, vid = (None, None) if _has(rest, 'vehicle_id:=') else (None, SIM_VEHICLE_ID)

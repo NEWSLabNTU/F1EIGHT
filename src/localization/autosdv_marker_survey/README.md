@@ -9,10 +9,12 @@ written for you, in the **origin board's frame**, and
 tool is `just aruco-map` (`docs/guides/aruco-map.md`).
 
 That is the survey (Lab 2 calls it stage 1): it fixes where the boards stand
-relative to one another. **Optionally**, `just aruco-map align --route NAME`
-puts the result into a taped route's start-box frame from one straight drive
-along the route's first leg (`autosdv_marker_survey/align.py`). Lab 2 does that
-for its graded route (`just lab2 survey-align`; the field procedure is in
+relative to one another. **Optionally**, `just aruco-map align` puts the
+result into the START-BOX frame from one straight drive along the taped first
+leg (`autosdv_marker_survey/align.py`). No route takes part: every route taped
+from that start box runs on the result, and `align.write_route_course` combines
+it with one route's path for a run. Lab 2 does that for its routes (`just lab2
+survey-align`, then `just lab2 run route:=NAME`; the field procedure is in
 `docs/guides/lab2-waypoint-stack.md`, "On the field").
 
 ```bash

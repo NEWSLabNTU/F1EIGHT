@@ -461,18 +461,23 @@ route.
    a dry run, no tracker: nothing can drive the car), finds the boards in the
    image and seeds the EKF from them, and prints **READY**. Then drive the car
    **straight along the taped first leg** by transmitter or by hand, 2 m or more
-   (under 1 m is refused), stop, Ctrl-C. It writes the aligned course into the
-   survey directory: the route's own `path.csv` (byte for byte, so
-   `check-bags` sees the template's route hash), `start_pose` (0, 0, 0), the
-   boards in the start-box frame, the map, `ar_tag.param.yaml`, and
-   `align_report.txt`. The stage-1 result stays in `stage1/`, the recorded drive
-   in `align_poses.csv` / `align_pnp.csv` (`marker_survey_align_solve DIR --route lab2_uturn [--force]`
+   (under 1 m is refused), stop, Ctrl-C. It writes the aligned map into the
+   survey directory: `start_pose` (0, 0, 0), the boards in the start-box frame,
+   the map, `ar_tag.param.yaml`, and `align_report.txt`, and **no route**: the
+   drive measures the start box, so every route taped from it runs on this one
+   alignment. A route whose `course.yaml` `start_pose` is not (0, 0, 0) does not
+   start in the box and is refused (`write_route_course`); the run then falls
+   back to the packaged course, with the reason in its warning. The stage-1 result stays in `stage1/`, the recorded drive in
+   `align_poses.csv` / `align_pnp.csv` (`marker_survey_align_solve DIR [--force]`
    aligns it again without the car). Surveying into the directory again drops
    the alignment; align again after it.
 5. **`just lab2 loc-check`**: drive the U-turn by hand along the tape; the red
    trail should lie on the white path.
 6. **`just lab2 run`** for each graded run: with `course_dir: auto` (the
-   default) it runs `surveys/latest` once it is aligned for the route.
+   default) it writes `surveys/<latest dir>.<route>/`, the aligned
+   `surveys/latest` with the route's own `path.csv` (byte for byte, so
+   `check-bags` sees the template's route hash), laps and `v_ref`, and runs
+   that. `surveys/latest` itself is never written.
 
 How stage 2 computes the frame (`autosdv_marker_survey/align.py`):
 
@@ -647,18 +652,15 @@ dry run. A straight that brings the nose within 1 m of a board, or leaves a
 stretch with no board, is refused. When the U-turn's boards move, regenerate
 both (`test_straight.py` fails until you do).
 
-**The survey is reused, not redone.** A straight's `course.yaml` says
-`field: lab2_uturn`: routes on one field share its start box, boards and
-frame (a route without the key is its own field). When `route` is a straight
-but `surveys/latest` is aligned for `lab2_uturn`, `course_dir: auto` builds
-`surveys/<latest dir>.lab2_straight_3m/` once, re-solved for the straight from
-the drive survey-align recorded (`align_poses.csv`, `align_pnp.csv`; the
-`marker_survey_align_solve` solver), and runs it; the run prints one
-`survey: ...` line naming it. `surveys/latest` itself is never written, so the
-U-turn and its reference bags keep their survey. A new `survey-align` changes
-latest's alignment inputs and the copy is rebuilt on the next run. If the copy
-cannot be made (no recorded drive, a refused solve), the run uses the packaged
-course with the usual warning.
+**The survey is shared, not redone.** An alignment has no route: it measures
+the start box. A straight starts in the U-turn's box, so `course_dir: auto`
+writes `surveys/<latest dir>.lab2_straight_3m/` (the aligned survey with the
+straight's path) at the start of each run and runs it, exactly as it does for
+the U-turn; the run prints one `survey: ...` line naming it. `surveys/latest`
+itself is never written, and a new `survey-align` reaches every route on the
+next run. If the course cannot be written (latest not aligned, a directory of
+that name not made by a run), the run uses the packaged course with the usual
+warning.
 
 **Bags** are `BAG_DIR/lab2_straight_3m_N` (the stem drops `lab2_`), the logs
 `BAG_DIR/run_logs/lab2_straight_3m_N/`. `check-bags` checks a straight against
