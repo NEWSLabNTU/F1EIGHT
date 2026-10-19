@@ -130,6 +130,7 @@ class RouteMetrics:
     gate_failures: List[str] = field(default_factory=list)
     notes: List[str] = field(default_factory=list)
     ungraded: Optional[str] = None      # a route that is not graded: its name (metrics only)
+    peak_speed: float = math.nan        # m/s, measured, engage on (ungraded routes report it)
 
 
 def finite(*xs) -> bool:
@@ -350,6 +351,25 @@ def route_metrics(name: str, msgs: Dict[str, list], route: str, geo: Optional[Ge
     if not turn:
         m.notes.append('no steady-window sample in the turn')
 
+    _stop_and_path(m, kt, kp, vt, vv, geo, t_rest)
+
+    if m.mrm:
+        m.gate_failures.append(f'{m.mrm} MRM activation(s)')
+    if m.disengages:
+        m.gate_failures.append('left autonomous mode before the finish')
+    if not m.finished:
+        m.gate_failures.append('the run did not finish')
+    if m.loc_jump > LOC_JUMP_MAX:
+        m.gate_failures.append(jump_text(m))
+    if not (m.path_dev_max <= PATH_DEV_MAX):
+        m.gate_failures.append(f'off the path: localized pose {m.path_dev_max:.3f} m from it, '
+                               f'{PATH_DEV_MAX} m allowed')
+    return m
+
+
+def _stop_and_path(m: RouteMetrics, kt, kp, vt, vv, geo: Geometry, t_rest: float) -> None:
+    """The stop error (median pose over SETTLE after rest), the path deviation and the
+    localization jump from engage to rest."""
     # stop: the localized pose keeps settling for a second or two after the car
     # stops (marker fixes pull the EKF), so take the median over a settle window
     pts = [p for t, p in zip(kt, kp) if t_rest + SETTLE[0] <= t <= t_rest + SETTLE[1]]
@@ -366,17 +386,36 @@ def route_metrics(name: str, msgs: Dict[str, list], route: str, geo: Optional[Ge
     m.path_dev_max, m.path_dev_rms = g.max_abs(dev), g.rms(dev)
     m.loc_jump, m.loc_jump_t = loc_jump(kt, kp, vt, vv, m.t_engage, t_rest)
 
-    if m.mrm:
-        m.gate_failures.append(f'{m.mrm} MRM activation(s)')
-    if m.disengages:
-        m.gate_failures.append('left autonomous mode before the finish')
-    if not m.finished:
-        m.gate_failures.append('the run did not finish')
-    if m.loc_jump > LOC_JUMP_MAX:
-        m.gate_failures.append(jump_text(m))
-    if not (m.path_dev_max <= PATH_DEV_MAX):
-        m.gate_failures.append(f'off the path: localized pose {m.path_dev_max:.3f} m from it, '
-                               f'{PATH_DEV_MAX} m allowed')
+
+def ungraded_metrics(name: str, msgs: Dict[str, list], label: str, geo: Geometry,
+                     target: float) -> RouteMetrics:
+    """route_metrics for a route that is not graded, with its notes; without a steady
+    window (a short route the car never gets up to speed on) the stop, the path deviation
+    and the jump are still measured, engage to rest, and the peak speed reported."""
+    m = route_metrics(name, msgs, label, geo, target)
+    m.route, m.ungraded = None, label
+    vt, vv = _series(msgs, g.VELOCITY, lambda x: float(x.longitudinal_velocity))
+    keep = [i for i, v in enumerate(vv) if finite(v)]
+    vt, vv = [vt[i] for i in keep], [vv[i] for i in keep]
+    if m.engaged and vt:
+        after = [(t, v) for t, v in zip(vt, vv) if t >= m.t_engage]
+        if after:
+            t_peak, m.peak_speed = max(after, key=lambda tv: tv[1])
+            if math.isnan(m.t_ramp):
+                t_rest = next((t for t, v in after if t > t_peak and v < STOPPED_SPEED), after[-1][0])
+                kt, kp = _series(msgs, g.KINEMATIC,
+                                 lambda x: (x.pose.pose.position.x, x.pose.pose.position.y))
+                ok = [i for i, p in enumerate(kp) if finite(*p)]
+                kt, kp = [kt[i] for i in ok], [kp[i] for i in ok]
+                if kt:
+                    m.t_rest = t_rest
+                    _stop_and_path(m, kt, kp, vt, vv, geo, t_rest)
+                    m.notes.append(f'no steady window (peak speed {m.peak_speed:.2f} m/s, under '
+                                   f'{START_FRAC * 100:.0f} % of {target} m/s): stop, path deviation '
+                                   'and jump measured from engage to rest')
+    if not geo.turns:
+        m.notes = [n for n in m.notes if 'in the turn' not in n]
+    m.notes.insert(0, UNGRADED)
     return m
 
 
@@ -411,12 +450,7 @@ def read_route_bag(path: str, route: Optional[str] = None, course_dir: Optional[
             label, cdir = test
             geo = geometry_from_course(cdir, label)
             target = float(((meta or {}).get('route') or {}).get('v_ref', course_v_ref(cdir)))
-            m = route_metrics(name, msgs, label, geo, target)
-            m.route, m.ungraded = None, label
-            if not geo.turns:
-                m.notes = [n for n in m.notes if 'in the turn' not in n]
-            m.notes.insert(0, UNGRADED)
-            return m, meta
+            return ungraded_metrics(name, msgs, label, geo, target), meta
     if route not in bm.ROUTES:
         m = RouteMetrics(name)
         label = bm.route_label(meta)
@@ -534,6 +568,7 @@ def format_ungraded(m: RouteMetrics) -> str:
             ('steady window', f(m.window_s, ' s', 1)),
             ('speed RMSE', f(m.speed_rmse, ' m/s')),
             ('overshoot', f(m.overshoot, ' m/s')),
+            ('peak speed', f'{f(m.peak_speed, " m/s")}  (target {m.target:g} m/s)'),
             ('stop error', f'{f(m.stop_error, " m")}  (signed {f(m.stop_signed, " m")}, + = past)'),
             ('path deviation max', f(m.path_dev_max, ' m')),
             ('localization jump', f(m.loc_jump, ' m')),

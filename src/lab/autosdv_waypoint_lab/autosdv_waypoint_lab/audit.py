@@ -388,6 +388,7 @@ def format_audit(a: Audit, m: Optional[rg.RouteMetrics] = None) -> str:
             out.append(f'  {"speed RMSE (steady)":<22}{_f(m.speed_rmse) + " m/s":>12}   '
                        f'window {_f(m.window_s, 1)} s')
             out.append(f'  {"overshoot":<22}{_f(m.overshoot) + " m/s":>12}')
+            out.append(f'  {"peak speed":<22}{_f(m.peak_speed) + " m/s":>12}   target {m.target:g} m/s')
             out.append(f'  {"stop error":<22}{_f(m.stop_error) + " m":>12}')
             out.append(f'  {"path deviation max":<22}{_f(m.path_dev_max) + " m":>12}'
                        f'{"valid <= " + format(rg.PATH_DEV_MAX, ".2f"):>20}')

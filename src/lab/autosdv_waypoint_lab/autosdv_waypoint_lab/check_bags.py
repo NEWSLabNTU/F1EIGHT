@@ -192,7 +192,8 @@ def check_messages(name: str, topics: Dict[str, list], msgs: Dict[str, list], me
                 td = (course_dirs[0] if len(course_dirs) == 1 else None) or rg.template_dir(route)
                 label = route
             geo = rg.geometry_from_course(td, label) if td else None
-            rm = rg.route_metrics(name, msgs, label, geo, target)
+            rm = rg.ungraded_metrics(name, msgs, label, geo, target) if test and geo else \
+                rg.route_metrics(name, msgs, label, geo, target)
             v.reasons += rg.nonfinite_failures(rm)
             if geo and not math.isnan(rm.path_dev_max):
                 if rm.path_dev_max > rg.PATH_DEV_MAX:

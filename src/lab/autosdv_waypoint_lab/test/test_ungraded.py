@@ -107,3 +107,25 @@ def test_grade_score_reports_metrics_only(monkeypatch, capsys):
     assert g.main(['--score', '/x/lab2_straight_3m_1']) == 0
     out = capsys.readouterr().out
     assert 'not a graded route: metrics only' in out and 'stop error' in out
+
+
+def slow_msgs():
+    """The bench car on the 3 m straight: commanded 0.8 m/s, measured never above 0.6."""
+    msgs, meta = straight_msgs()
+    msgs[g.VELOCITY] = [(t, NS(longitudinal_velocity=0.75 * x.longitudinal_velocity))
+                        for t, x in msgs[g.VELOCITY]]
+    return msgs, meta
+
+
+def test_no_steady_window_still_measures_the_stop_and_the_path():
+    msgs, meta = slow_msgs()
+    m, _ = rg.read_route_bag('/x/lab2_straight_3m_1', msgs=msgs)
+    assert m.ungraded == NAME
+    assert m.peak_speed == __import__('pytest').approx(0.6, abs=0.01)
+    assert m.stop_error < 0.05 and m.path_dev_max < 0.05
+    assert any('no steady window' in n for n in m.notes), m.notes
+    v = cb.check_messages('b', topics_all(), msgs, meta)
+    assert v.ok, v.reasons
+    a = au.build_audit('/x/b', v, m, None, au.series_from_messages(msgs, STRAIGHT), meta)
+    assert a.verdict == 'METRICS ONLY'
+    assert 'peak speed' in au.format_audit(a, m)
