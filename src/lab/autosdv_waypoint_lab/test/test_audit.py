@@ -191,3 +191,20 @@ def test_bench_frame_is_the_recorded_size():
     data = bench_frame('12:00:00  frame 1')
     img = cv2.imdecode(np.frombuffer(data, np.uint8), cv2.IMREAD_COLOR)
     assert (img.shape[1], img.shape[0]) == bm.CAMERA_SIZE
+
+
+def test_rows_carry_the_reference_value_and_the_table_shows_it():
+    msgs = msgs_for()
+    m = rg.route_metrics('lab2_uturn_9', msgs, 'uturn', UTURN)
+    ref = rg.route_metrics('ref', msgs, 'uturn', UTURN)
+    sc = rg.score_route(m, ref)
+    s = au.series_from_messages(msgs, UTURN)
+    a = au.build_audit('/x/lab2_uturn_9', verdict(), m, sc, s, {'car_id': 'A'},
+                       reference='/r/uturn', ref_metrics=ref)
+    for r in a.rows:
+        assert r['ref'] == pytest.approx(getattr(ref, r['metric']))
+    text = au.format_audit(a, m)
+    assert 'reference' in text.splitlines()[2] and 'ref' in text.splitlines()[2]
+    _, _, _, plain = run(msgs)                     # no reference bag: the column says so
+    assert all(r['ref'] is None for r in plain.rows)
+    assert ' - ' in au.format_audit(plain, m).splitlines()[3]

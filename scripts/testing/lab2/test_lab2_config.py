@@ -17,6 +17,7 @@ def no_real_home(tmp_path, monkeypatch):
     home = tmp_path / 'home'
     home.mkdir()
     monkeypatch.setenv('HOME', str(home))
+    monkeypatch.delenv('LAB2_HOME', raising=False)
     return home
 
 
@@ -356,3 +357,13 @@ def test_reuse_falls_back_to_the_packaged_course(tmp_path, monkeypatch, capsys):
     err = capsys.readouterr().err
     assert 'PACKAGED' in err and 'align_poses.csv' in err
     assert not (tmp_path / 'surveys' / f'{d.name}.lab2_straight_3m').exists()
+
+
+def test_lab2_home_moves_the_settings_file_and_the_reference(tmp_path, monkeypatch):
+    home = tmp_path / 'elsewhere'
+    home.mkdir()
+    (home / 'lab2.yaml').write_text('car: C\n')
+    monkeypatch.setenv('LAB2_HOME', str(home))
+    c = lc.Config()
+    assert c.file == home / 'lab2.yaml' and c.get('car') == 'C'
+    assert c.get('reference') == str(home / 'reference' / 'uturn')

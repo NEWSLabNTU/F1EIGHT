@@ -64,9 +64,16 @@ from typing import Optional, Tuple
 
 import yaml
 
+sys.path.insert(0, str(Path(__file__).resolve().parent))
+import lab2_env  # noqa: E402
+
 REPO = Path(__file__).resolve().parents[3]
 DEFAULTS = REPO / 'src/lab/autosdv_waypoint_lab/config/lab2_defaults.yaml'
-USER_FILE = Path('~/lab2/lab2.yaml')
+USER_FILE = Path('~/lab2/lab2.yaml')     # ~/lab2 is $LAB2_HOME when that is set
+
+
+def user_file() -> Path:
+    return lab2_env.lab2_home() / 'lab2.yaml'
 KEYS = ('car', 'team', 'team_dir', 'submission', 'part1_submission', 'route', 'course_dir',
         'reference', 'bag_dir')
 PATH_KEYS = ('team_dir', 'submission', 'part1_submission', 'reference', 'bag_dir')
@@ -83,21 +90,20 @@ TEMPLATE_HEAD = """\
 # what every command would use and where each value came from.
 """
 TEMPLATE_KEYS = [
-    ('car', 'A', "on the CAR: your team's car, A, B or C (record, check-bags, audit, run)"),
-    ('team', '3', 'on the CAR: your team number (record, check-bags, audit, run)'),
+    ('car', 'A', "the CAR's letter, A, B or C: the TA sets it once per car (`just lab2 init car:=A`)"),
+    ('team', '3', 'optional: `just lab2 run team:=3` names the team per run (record, audit, ...)'),
     ('team_dir', '~/lab2/team3',
-     'on the CAR, for `just lab2 run`/`vehicle`: the team directory (controller + path_tracker)'),
+     'optional: the team directory, for `just lab2 run` with no team:= (and `vehicle`)'),
     ('submission', '~/lab2/B12345678_lab_2_1',
-     'on a WORKSTATION, for `just lab2 gate`: the <id>_lab_2_1 holding lab2_speed/'),
+     'for `just lab2 gate` (TA): the <id>_lab_2_1 holding lab2_speed/'),
     ('part1_submission', '~/lab2/B12345678_lab_2_1',
-     'any machine, for `just lab2 sim` (Part 1): the <id>_lab_2_1 holding lab2_speed/'),
+     'optional: `just lab2 sim` finds the one ~/lab2/*_lab_2_1 by itself; this picks one'),
 ]
 INIT_KEYS_HINT = (
-    'Fill in (uncomment) the keys for the machine you are on (the Lab 2 handout, §10.5, '
-    'lists them):\n'
-    '  Part 1, any machine    part1_submission          just lab2 sim\n'
-    '  Part 2, workstation    submission                just lab2 gate\n'
-    '  Part 2, on the car     team_dir, car, team       just lab2 run (vehicle, record, ...)\n'
+    'Nothing here is needed for the student commands:\n'
+    '  Part 1, any machine    just lab2 sim             finds ~/lab2/<id>_lab_2_1 itself\n'
+    '  Part 2                 just lab2 run team:=3     ~/lab2/team3; the car or the bench\n'
+    'On a car the TA sets its letter once: `just lab2 init car:=A`.\n'
     '`just lab2 config` shows what every command will use.')
 TEMPLATE_DEFAULTS = [
     ('route', 'the graded course'),
@@ -127,7 +133,10 @@ def _load_yaml(path: Path) -> dict:
 
 
 def _path(value, base: Path) -> str:
-    p = Path(os.path.expanduser(str(value)))
+    v = str(value)
+    if v == '~/lab2' or v.startswith('~/lab2/'):
+        v = str(lab2_env.lab2_home()) + v[len('~/lab2'):]
+    p = Path(os.path.expanduser(v))
     return str(p if p.is_absolute() else (base / p).resolve())
 
 
@@ -137,7 +146,7 @@ class Config:
     def __init__(self, cli=None, config_file=None, defaults_file=DEFAULTS, cwd=REPO):
         cli = dict(cli or {})
         self.explicit_file = config_file is not None
-        self.file = Path(os.path.expanduser(str(config_file or USER_FILE)))
+        self.file = Path(os.path.expanduser(str(config_file or user_file())))
         if not self.file.is_absolute():
             self.file = (Path(cwd) / self.file).resolve()
         self.file_exists = self.file.is_file()
@@ -598,7 +607,7 @@ def init(argv, cwd=REPO) -> str:
     cfg_file, cli, rest = split_args('init', argv)
     if rest:
         raise ConfigError(f'unexpected argument {rest[0]!r}')
-    path = Path(os.path.expanduser(str(cfg_file or USER_FILE)))
+    path = Path(os.path.expanduser(str(cfg_file or user_file())))
     if not path.is_absolute():
         path = (Path(cwd) / path).resolve()
     if path.exists():

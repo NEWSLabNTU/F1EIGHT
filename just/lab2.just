@@ -1,13 +1,26 @@
-# Lab 2, ArUco localization and waypoint following: the vehicle bench and the
-# vehicle.
+# Lab 2, ArUco localization and waypoint following: the simulated car, the vehicle
+# bench and the vehicle.
+#
+# The student commands:
+#
+#   just lab2 sim                  Part 1: your SpeedPID on the three simulated cars, mark / 25,
+#                                  curves.png per car (finds ~/lab2/<id>_lab_2_1 itself)
+#   just lab2 sim --no-gui         the same without windows
+#   just lab2 plot-sim             redraw the latest Part 1 run's plots
+#   just lab2 run team:=3          Part 2: ~/lab2/team3. On the car: stack, preflight, record,
+#                                  engage (asks), stop, grading table, audit.png. On a
+#                                  workstation: the same on the vehicle bench, plus the gate verdict
+#   just lab2 run ~/lab2/team3     the same, by directory
+#
+# Everything below is for the TA, or the step-by-step equivalent.
 #
 # Settings live in ~/lab2/lab2.yaml (`just lab2 init` writes it; config:=FILE picks
-# another): car, team, team_dir, submission, route, reference, bag_dir. Precedence,
-# highest first: key:=value on the command line, that file, the built-in defaults
-# (src/lab/autosdv_waypoint_lab/config/lab2_defaults.yaml). `just lab2 config` shows the
-# result. With the file filled in, a graded run is ONE command on the car (in tmux):
+# another; $LAB2_HOME moves ~/lab2): car, team, team_dir, submission, part1_submission,
+# route, reference, bag_dir. Precedence, highest first: key:=value on the command line,
+# that file, the built-in defaults (src/lab/autosdv_waypoint_lab/config/lab2_defaults.yaml).
+# `just lab2 config` shows the result. The TA sets each car's letter once:
 #
-#   just lab2 run                  stack, preflight, record, engage (asks), stop, audit
+#   just lab2 init car:=A          on the car
 #   just lab2 audit                the latest bag: verdict, metrics, violations, audit.png
 #
 # or, step by step in separate terminals:
@@ -121,19 +134,22 @@ gate *ARGS:
     lab2_apply_submission "${LAB2_ARGS[@]}" || exit 2
     exec python3 scripts/testing/lab2/bench_gate.py "${LAB2_ARGS[@]}"
 
-#   just lab2 sim submission:=~/lab2/B12345678_lab_2_1            one run, nominal car, ~1 min
-#   just lab2 sim submission:=DIR --final                          nominal, low_batt, low_mu: the 25-point mark
-#   just lab2 sim submission:=DIR variant:=low_mu rviz:=false gui:=false
-#   just lab2 sim                                                  `part1_submission` from ~/lab2/lab2.yaml
+#   just lab2 sim                                 the graded set: nominal, low_batt, low_mu; mark / 25
+#   just lab2 sim --no-gui                        no windows (as rviz:=false gui:=false); also automatic
+#                                                 when no X display answers
+# The submission: submission:=DIR, else `part1_submission` from ~/lab2/lab2.yaml, else the one
+# ~/lab2/*_lab_2_1 holding lab2_speed/ (none or several: it stops and lists them).
+# Outputs: tmp/lab2/part1/<submission>/<date>_<time>/<variant>/ (trace.csv, marks.json, run.json,
+# curves.png, play_log), final.json beside them; tmp/lab2/part1/<submission>/latest is the newest.
+# The windows stay up after the last car until Enter or the dashboard is closed (--no-hold: not).
+# TA: submission:=DIR, variant:=low_mu (one car, no mark), --name LABEL (labels the run directory),
+# --out DIR (DIR/<variant>/, the old layout), --final (accepted, the default),
 #   just lab2 sim --class autosdv_waypoint_lab.reference.speed_pid_part1:SpeedPID \
 #       --params "$(...)"                                          TA: a controller by import path
-# No submission anywhere: the STUB runs (it holds neutral), with a warning.
-#   just lab2 sim --name kd_off                                    keep this run: tmp/lab2/part1/kd_off/
-# Outputs: tmp/lab2/part1/<submission name>/<variant>/ (trace.csv, marks.json, run.json, play_log);
-# the next run with the same name overwrites them, so --name LABEL keeps a run.
+# No submission anywhere: an error listing what was found and the fix.
 # ROS_DOMAIN_ID: yours if exported (non-zero), else 1 + uid % 100. Web UI on LAB2_WEB_ADDR
 # (default 127.0.0.1:8081 + uid % 100, per user). scripts/testing/lab2/part1_run.py --help: the rest.
-# Part 1: your SpeedPID on the simulated car, one straight, live; graded, marks printed
+# Part 1: your SpeedPID on the three simulated cars, live; graded (mark / 25), plotted
 [positional-arguments]
 sim *ARGS:
     #!/usr/bin/env bash
@@ -142,10 +158,11 @@ sim *ARGS:
     lab2_config sim "$@" || exit 2
     exec python3 scripts/testing/lab2/part1_run.py "${LAB2_ARGS[@]}"
 
-#   just lab2 plot-sim tmp/lab2/part1/B12345678_lab_2_1/nominal     writes .../nominal/curves.png
+#   just lab2 plot-sim                                                the latest run, every car
+#   just lab2 plot-sim tmp/lab2/part1/B12345678_lab_2_1/latest/nominal one car
 #   just lab2 plot-sim DIR --t0 15 --t1 23 -o tmp/stop.png            zoom into a window
-# No display needed (matplotlib Agg): for runs with rviz:=false gui:=false, which save no dashboard.png.
-# Part 1: draw a run's trace.csv (speed, PWM, failed checks) to a PNG
+# `just lab2 sim` already writes curves.png per car; this redraws. No display needed (Agg).
+# Part 1: redraw a run's curves.png (speed, PWM, failed checks)
 [positional-arguments]
 plot-sim *ARGS:
     #!/usr/bin/env bash
@@ -189,9 +206,18 @@ health *ARGS:
     source scripts/env.sh
     exec python3 scripts/testing/lab2/health.py "$@"
 
-#   just lab2 run                               the car: route, team_dir, car, team from the config
-#   just lab2 run car:=B team_dir:=~/lab2/team3 (team:= here is the team NUMBER, as in record)
-#   just lab2 run --bench [--camera mock]       the same flow on the vehicle bench
+#   just lab2 run team:=3                       ~/lab2/team3; the car on a car, else the vehicle bench
+#   just lab2 run ~/lab2/team3                  the same, by directory (teamN gives the number;
+#                                               another name needs team_number:=N)
+# On the car (a Jetson, /etc/nv_tegra_release, with `car:` set by the TA's `just lab2 init car:=X`):
+# stack, preflight, record, engage (asks), stop, audit. On a workstation: the vehicle bench, engaged
+# without asking, then the gate verdict (as `just lab2 gate`). Afterwards: the grading table (value,
+# the car's reference, marks, validity, total) and audit.png (opened on $DISPLAY or :1 when one
+# answers; the path always printed). Over SSH it re-runs itself inside tmux (`tmux attach -t lab2-run`).
+# TA:
+#   just lab2 run                               team_dir, car, team from the config
+#   just lab2 run team:=3 --bench | --car       force the bench or the car
+#   just lab2 run --bench [--camera mock]       the bench with rendered boards
 #   just lab2 run --bench --yes                 engage without asking (bench only; tests)
 # Stack output goes to <bag_dir>/run_logs/lab2_uturn_N/, not the terminal. It asks before engaging
 # and stops the car (disengage) on an MRM, a disengage, a localization loss or the timeout.
@@ -200,7 +226,7 @@ health *ARGS:
 [positional-arguments]
 run *ARGS:
     #!/usr/bin/env bash
-    unset DISPLAY                       # the ZED cannot have one: scripts/testing/lab2/camera_display.sh
+    # lab2_run.py keeps DISPLAY for audit.png and takes it away from the stack (the ZED)
     source scripts/env.sh
     exec python3 scripts/testing/lab2/lab2_run.py "$@"
 

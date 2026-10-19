@@ -164,3 +164,110 @@ def test_child_stop_sigint_is_enough_for_a_polite_group():
     c = lr.Child('t', ['sleep', '60'], TMP / 'child2.log').start()
     said = []
     assert c.stop(say=said.append) and said == []
+
+
+# ---- the simple command: `just lab2 run team:=3` / `just lab2 run DIR`
+
+def team_dir(home, name='team3', controller='B12345678_lab_2_1'):
+    d = home / name
+    pkg = d / controller / 'lab2_speed'
+    (pkg / 'lab2_speed').mkdir(parents=True)
+    (pkg / 'package.xml').write_text('<package/>')
+    (pkg / 'lab2_speed' / 'speed_pid.py').write_text('class SpeedPID: pass\n')
+    (pkg / 'config').mkdir()
+    (pkg / 'config' / 'speed_pid_car.yaml').write_text('kp: 1.0\n')
+    return d
+
+
+def test_parse_takes_team_number_dir_and_force_flags():
+    o = lr.parse_args(['team:=3'])
+    assert o.team == '3' and o.team_pos is None and o.config_args == ()
+    o = lr.parse_args(['/x/team3', '--car'])
+    assert o.team_pos == '/x/team3' and o.car
+    o = lr.parse_args(['team:=/x/t', 'team_number:=7'])
+    assert o.team == '/x/t' and o.team_number == '7'
+    with pytest.raises(lr.UsageError, match='one team'):
+        lr.parse_args(['team:=3', '/x/team3'])
+    with pytest.raises(lr.UsageError, match='car:=A'):
+        lr.parse_args(['A'])                        # a car letter is car:=, and the TA's
+
+
+def test_team_number_resolves_under_lab2_home(tmp_path):
+    d = team_dir(tmp_path)
+    args, note = lr.resolve_team(lr.parse_args(['team:=3']), {}, tmp_path)
+    assert args == [f'team_dir:={d}', 'team:=3']
+
+
+def test_team_directory_gives_its_number(tmp_path):
+    d = team_dir(tmp_path, 'team12')
+    args, _ = lr.resolve_team(lr.parse_args([str(d)]), {}, tmp_path)
+    assert args == [f'team_dir:={d}', 'team:=12']
+    args, _ = lr.resolve_team(lr.parse_args([f'team:={d}']), {}, tmp_path)
+    assert args == [f'team_dir:={d}', 'team:=12']
+
+
+def test_other_directory_needs_a_team_number(tmp_path):
+    d = team_dir(tmp_path, 'red_team')
+    with pytest.raises(lr.UsageError, match='team_number:='):
+        lr.resolve_team(lr.parse_args([str(d)]), {}, tmp_path)
+    args, _ = lr.resolve_team(lr.parse_args([str(d), 'team_number:=5']), {}, tmp_path)
+    assert args == [f'team_dir:={d}', 'team:=5']
+    args, note = lr.resolve_team(lr.parse_args([str(d)]), {'team': '4'}, tmp_path)
+    assert args == [f'team_dir:={d}', 'team:=4'] and 'settings' in note
+
+
+def test_missing_or_broken_team_directory_is_a_usage_error(tmp_path):
+    with pytest.raises(lr.UsageError, match='team3'):
+        lr.resolve_team(lr.parse_args(['team:=3']), {}, tmp_path)
+    (tmp_path / 'team4').mkdir()                    # no controller inside
+    with pytest.raises(lr.UsageError, match='lab_2_1'):
+        lr.resolve_team(lr.parse_args(['team:=4']), {}, tmp_path)
+
+
+def test_no_team_falls_back_to_the_settings_or_asks(tmp_path):
+    assert lr.resolve_team(lr.parse_args([]), {'team_dir': '/t', 'team': '3'}, tmp_path) == ([], '')
+    with pytest.raises(lr.UsageError, match='just lab2 run team:='):
+        lr.resolve_team(lr.parse_args([]), {}, tmp_path)
+
+
+def test_team_with_an_explicit_controller_is_the_number(tmp_path):
+    """integration-test passes team:=0 beside speed_controller_class:= / submission:=."""
+    for extra in ('speed_controller_class:=a.b:C', 'submission:=/s', 'team_dir:=/t'):
+        o = lr.parse_args(['--bench', 'team:=0', extra])
+        assert lr.resolve_team(o, {}, tmp_path) == ([], '')
+        assert 'team:=0' in o.config_args
+
+
+def test_gate_verdict_passes_a_clean_finish():
+    ok, line = lr.gate_verdict(lr.End('finished', 'stopped'), 'lab2_uturn', 0.8, 1,
+                               [0.0, 0.8, 0.8, 0.79, 0.0], laps_done=1, faults=[],
+                               stalled=False, at_rest=True)
+    assert ok and line.startswith('PASS  lab2_uturn')
+
+
+@pytest.mark.parametrize('end, kw, word', [
+    (lr.End('mrm', 'MRM: operating EMERGENCY_STOP'), {}, 'MRM'),
+    (lr.End('timeout', 'not finished after 60 s'), {}, 'did not finish'),
+    (lr.End('stalled', 'car did not move'), {'stalled': True}, 'did not move'),
+    (lr.End('localization', 'localization lost: x'), {}, 'localization lost'),
+    (lr.End('stack', 'the stack exited'), {}, 'the stack exited'),
+    (lr.End('finished', 'stopped'), {'faults': ['neutral:controller_fault']}, 'SpeedPID fault'),
+    (lr.End('finished', 'stopped'), {'speeds': [2.5] * 20}, 'speed'),
+])
+def test_gate_verdict_fails_with_the_reason(end, kw, word):
+    a = dict(speeds=[0.0, 0.8, 0.8, 0.0], laps_done=1, faults=[], stalled=False, at_rest=True)
+    a.update(kw)
+    ok, line = lr.gate_verdict(end, 'lab2_uturn', 0.8, 1, **a)
+    assert not ok and line.startswith('FAIL') and word in line
+
+
+def test_bench_ends_a_run_that_does_not_move():
+    def snap(now, progress):
+        return lr.Snapshot(now=now, engaged=True, pose_rx=now - 0.1, pose_std=0.08,
+                           monitor={n: (0, 'fine', now) for n in lr.MONITOR_STATUSES},
+                           progress=progress)
+    s = snap(now=121.0, progress=0.2)
+    assert lr.end_reason(s, 100.0, 300.0, stall=True).kind == 'stalled'
+    assert lr.end_reason(s, 100.0, 300.0) is None                 # the car: no such rule
+    assert lr.end_reason(snap(now=121.0, progress=0.6), 100.0, 300.0, stall=True) is None
+    assert lr.end_reason(snap(now=110.0, progress=0.0), 100.0, 300.0, stall=True) is None

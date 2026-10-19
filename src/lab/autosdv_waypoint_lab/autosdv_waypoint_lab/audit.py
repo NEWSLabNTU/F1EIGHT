@@ -313,8 +313,10 @@ class Audit:
 
 
 def build_audit(bag: str, verdict, m: rg.RouteMetrics, sc: Optional[rg.RouteScore], s: Series,
-                meta: Optional[dict], reference: Optional[str] = None) -> Audit:
-    """The verdict and the violation list, from check_bags' Verdict and route_grade's numbers."""
+                meta: Optional[dict], reference: Optional[str] = None,
+                ref_metrics: Optional[rg.RouteMetrics] = None) -> Audit:
+    """The verdict and the violation list, from check_bags' Verdict and route_grade's numbers;
+    ref_metrics (the reference bag's) gives each row the car's reference value."""
     meta = meta or {}
     a = Audit(os.path.basename(os.path.normpath(bag)), car=str(meta.get('car_id') or ''),
               team=str(meta.get('team_id') or ''), bench=bool(meta.get('bench')),
@@ -350,8 +352,10 @@ def build_audit(bag: str, verdict, m: rg.RouteMetrics, sc: Optional[rg.RouteScor
         full, zero = sc.lines[k]
         label, unit = LABELS.get(k, (k, ''))
         val = getattr(m, k)
-        a.rows.append({'metric': k, 'label': label, 'value': val, 'unit': unit, 'full': full,
-                       'zero': zero, 'points': pts, 'max': sc.maximum[k]})
+        refv = getattr(ref_metrics, k) if ref_metrics is not None else None
+        a.rows.append({'metric': k, 'label': label, 'value': val, 'unit': unit,
+                       'ref': None if refv is None or (isinstance(refv, float) and math.isnan(refv))
+                       else refv, 'full': full, 'zero': zero, 'points': pts, 'max': sc.maximum[k]})
         if pts < sc.maximum[k] - 1e-9:
             if val is None or (isinstance(val, float) and math.isnan(val)):
                 a.violations.append(f'{label} not measured (0 / {sc.maximum[k]:g} points)')
@@ -399,9 +403,11 @@ def format_audit(a: Audit, m: Optional[rg.RouteMetrics] = None) -> str:
     out.append(f'  {a.verdict}   check-bags {check}{" (bench mode)" if a.bench else ""}, grade {grade}'
                + ('' if not a.bench else '  -- a bench bag is never a submission'))
     lines = f'reference {a.reference}' if a.reference else 'fixed lines (no reference bag)'
-    out.append(f'  {"metric":<22}{"value":>12}{"full <=":>10}{"zero >=":>10}{"points":>14}   ({lines})')
+    out.append(f'  {"metric":<22}{"value":>12}{"ref":>10}{"full <=":>10}{"zero >=":>10}{"points":>14}'
+               f'   ({lines})')
     for r in a.rows:
-        out.append(f'  {r["label"]:<22}{_f(r["value"]) + " " + r["unit"]:>12}{r["full"]:>10.3f}'
+        ref = _f(r['ref']) if r.get('ref') is not None else '-'
+        out.append(f'  {r["label"]:<22}{_f(r["value"]) + " " + r["unit"]:>12}{ref:>10}{r["full"]:>10.3f}'
                    f'{r["zero"]:>10.3f}{r["points"]:>9.2f} / {r["max"]:g}')
     if m is not None:
         out.append(f'  {"path deviation max":<22}{_f(m.path_dev_max) + " m":>12}'
@@ -687,7 +693,7 @@ def audit_bag(bag: str, car=None, team=None, reference=None, course=None, bench=
         if not cdir or not os.path.isdir(cdir):
             cdir = tdir
     s = series_from_messages(msgs, geo)
-    a = build_audit(bag, verdict, m, sc, s, meta, reference if ref is not None else None)
+    a = build_audit(bag, verdict, m, sc, s, meta, reference if ref is not None else None, ref)
     a.localization = localization_quality(msgs, m.t_engage, m.t_rest)
     if plot:
         png = out_png or os.path.join(bag, PNG)
