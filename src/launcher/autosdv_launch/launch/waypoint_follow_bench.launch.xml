@@ -34,8 +34,8 @@
 <launch>
   <!-- `route` is the name the Lab 2 handout uses (a "course" reads as a class);
        `course` stays, so older commands keep working. -->
-  <arg name="car_profile" default="car_a"
-       description="which car the bench models: autosdv_vehicle_interface/params/cars/CAR_PROFILE.param.yaml, for the dry-run vehicle interface and the plant alike. car_a by default: a bench drives no motor"/>
+  <arg name="vehicle_id" default="car_a"
+       description="which car the bench models: individual_params/config/VEHICLE_ID (autosdv_vehicle/actuator.param.yaml, the IMU bias, the preset), for the dry-run vehicle interface and the plant alike. car_a by default: a bench drives no motor"/>
   <arg name="route" default="hall_demo" description="a directory under autosdv_waypoint_lab/config/courses"/>
   <arg name="course" default="$(var route)" description="old name of route"/>
   <arg name="course_dir" default="$(find-pkg-share autosdv_waypoint_lab)/config/courses/$(var course)"/>
@@ -55,7 +55,6 @@
   <arg name="on_pwm_loss" default="neutral"/>
   <arg name="vehicle_info_param_file"
        default="$(find-pkg-share autosdv_vehicle_description)/config/vehicle_info.param.yaml"/>
-  <arg name="vehicle_id" default="$(env VEHICLE_ID default)"/>
   <arg name="imu_corrector_param_file"
        default="$(find-pkg-share individual_params)/config/$(var vehicle_id)/autosdv_sensor_kit/imu_corrector.param.yaml"/>
   <arg name="gyro_bias_error_z" default="0.0"
@@ -74,6 +73,7 @@
   <arg name="dropout" default="0.1" description="fraction of camera frames with no detection"/>
 
   <include file="$(find-pkg-share autosdv_launch)/launch/waypoint_follow.launch.xml">
+    <arg name="vehicle_id" value="$(var vehicle_id)"/>
     <arg name="course_dir" value="$(var course_dir)"/>
     <arg name="laps" value="$(var laps)"/>
     <arg name="is_simulation" value="true"/>
@@ -94,7 +94,7 @@
   <node pkg="autosdv_coach_lab" exec="vehicle_bench_plant" name="vehicle_bench_plant" output="screen">
     <param from="$(find-pkg-share autosdv_vehicle_interface)/params/actuator.yaml"/>
     <param from="$(var actuator_param_overrides)"/>
-    <param from="$(find-pkg-share autosdv_vehicle_interface)/params/cars/$(var car_profile).param.yaml"/>
+    <param from="$(find-pkg-share individual_params)/config/$(var vehicle_id)/autosdv_vehicle/actuator.param.yaml"/>
     <param from="$(var vehicle_info_param_file)"/>
     <param from="$(find-pkg-share autosdv_vehicle_interface)/params/velocity_report.yaml"/>
     <param from="$(var imu_corrector_param_file)"/>

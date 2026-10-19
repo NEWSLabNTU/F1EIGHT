@@ -9,7 +9,7 @@ default:
     @just --list control
 
 # Launch vehicle control test (basic_control.launch.xml); name the car:
-#   just control basic car_profile:=car_b
+#   just control basic vehicle_id:=car_b
 [positional-arguments]
 basic *ARGS:
     #!/usr/bin/env bash

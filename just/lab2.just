@@ -27,6 +27,7 @@
 #
 #   just lab2 gate                 workstation: the submission's SpeedPID on the graded route
 #   just lab2 vehicle              car: route + team_dir
+#   just lab2 stack car_b          car: the same stack without the lab settings (reference laws)
 #   just lab2 preflight            car, second terminal
 #   just lab2 record               rosbags/lab2_uturn_1, _2, ...
 #   just lab2 engage               (third terminal), then Ctrl-C the recording
@@ -115,6 +116,31 @@ vehicle *ARGS:
     cmd=(play_launch launch --web-addr '{{ web_addr }}'
          autosdv_launch waypoint_follow.launch.xml "${LAB2_ARGS[@]}")
     printf '\033[2m%s\033[0m\n' "${cmd[*]}"
+    exec "${cmd[@]}"
+
+#   just lab2 stack car_b                                the default course (hall_demo), reference laws
+#   just lab2 stack car_a sensor_suite:=vlp16_zed        any preset value overridden
+#   just lab2 stack car_b route:=lab2_uturn rviz:=false  any waypoint_follow.launch.xml argument
+# VEHICLE_ID picks individual_params/config/<id>/ (calibration, actuator PWM, preset); nothing
+# from ~/lab2/lab2.yaml (no team_dir, no submission, no car:=). The ZED gets no DISPLAY
+# (scripts/testing/lab2/camera_display.sh); RViz opens on it when it answers (rviz:= to force).
+# The Lab 2 stack (waypoint planner + ArUco localization) on one car, without the lab's settings
+[positional-arguments]
+stack VEHICLE_ID *ARGS:
+    #!/usr/bin/env bash
+    vid=$1; shift
+    case "$vid" in *:=*|-*) echo "usage: just lab2 stack VEHICLE_ID [KEY:=VALUE ...] (car_a, car_b, car_c)" >&2; exit 2 ;; esac
+    for a in "$@"; do
+        case "$a" in vehicle_id:=*) echo "error: the vehicle_id is the first argument, not $a" >&2; exit 2 ;; esac
+    done
+    # The ZED never gets a DISPLAY (camera_display.sh says why); viewers get it back.
+    source scripts/testing/lab2/camera_display.sh
+    lab2_camera_display
+    rviz=false; [ -n "$VIEWER_DISPLAY" ] && rviz=true
+    cmd=(play_launch launch --web-addr '{{ web_addr }}' autosdv_launch waypoint_follow.launch.xml
+         "vehicle_id:=$vid" "rviz:=$rviz" "viewer_display:=$VIEWER_DISPLAY" "$@")
+    printf '\033[2m%s\033[0m\n' "${cmd[*]}"
+    source scripts/env.sh
     exec "${cmd[@]}"
 
 #   just lab2 gate                     the config's submission
@@ -382,7 +408,7 @@ loc-check *ARGS:
         echo "error: no course directory '$dir': run \`just lab2 survey ORIGIN_ID\` first, or name one" >&2; exit 1
     fi
     dir=$(realpath "$dir")
-    # car (settings file or car:=) -> car_profile:=car_<car>; refuses without one
+    # car (settings file or car:=) -> vehicle_id:=car_<car>; refuses without one
     source scripts/testing/lab2/lab2_config.sh
     lab2_config loc-check "$@" || exit 2
     # The ZED never gets a DISPLAY (camera_display.sh says why); viewers get it back.
@@ -396,10 +422,10 @@ loc-check *ARGS:
     exec "${cmd[@]}"
 
 # --- Steering calibration (car gate): hold a servo offset, fit the ratio from the circles ----
-#   just control basic car_profile:=car_b    terminal 1: actuator on this car's profile; no gate, spotter stops
+#   just control basic vehicle_id:=car_b     terminal 1: actuator on this car's PWM; no gate, spotter stops
 #   just lab2 steer-hold -25                 terminal 2: steer PWM held at init_steer-25, 0.4 m/s
 #   (drive a full circle, measure its radius, Ctrl-C, repeat for +-10 +-25 and the window edge)
-#   just lab2 steer-fit --car-profile car_b -45:+0.9 -25:+1.7 -10:+4.2 10:-4.2 25:-1.7 45:-0.9
+#   just lab2 steer-fit --vehicle-id car_b -45:+0.9 -25:+1.7 -10:+4.2 10:-4.2 25:-1.7 45:-0.9
 # Radius: positive = left turn. steer-hold reads init_steer, min/max_steer and the ratio from
 # the running /autosdv/actuator_node, and refuses offsets the servo window would clamp.
 
@@ -410,7 +436,7 @@ steer-hold OFFSET *ARGS:
     source scripts/env.sh
     exec ros2 run autosdv_waypoint_lab lab2_steer_cal hold "$@"
 
-# Fit tire_angle_to_steer_ratio and the steering lock: --car-profile car_X OFFSET:RADIUS ...
+# Fit tire_angle_to_steer_ratio and the steering lock: --vehicle-id car_X OFFSET:RADIUS ...
 [positional-arguments]
 steer-fit *PAIRS:
     #!/usr/bin/env bash
@@ -443,12 +469,15 @@ survey *ARGS:
     case "$dir" in "$PWD"/surveys/*) target=${dir#"$PWD"/surveys/} ;; *) target=$dir ;; esac
     ln -sfn "$target" surveys/latest
     echo "survey -> $dir (surveys/latest)"
+    # car (settings file or car:=) -> vehicle_id:=car_<car>: the survey's URDF is that car's
+    source scripts/testing/lab2/lab2_config.sh
+    lab2_config survey "$@" || exit 2
     # The ZED never gets a DISPLAY (camera_display.sh says why); viewers get it back.
     source scripts/testing/lab2/camera_display.sh
     lab2_camera_display
     viewer=false; [ -n "$VIEWER_DISPLAY" ] && viewer=true   # the detection video, given a display
     cmd=(play_launch launch --web-addr '{{ web_addr }}' autosdv_marker_survey marker_survey.launch.xml
-         "course_dir:=$dir" "origin_id:=$origin" "viewer:=$viewer" "viewer_display:=$VIEWER_DISPLAY" "$@")
+         "course_dir:=$dir" "origin_id:=$origin" "viewer:=$viewer" "viewer_display:=$VIEWER_DISPLAY" "${LAB2_ARGS[@]}")
     printf '\033[2m%s\033[0m\n' "${cmd[*]}"
     source scripts/env.sh
     exec "${cmd[@]}"
@@ -473,7 +502,7 @@ survey-solve *ARGS:
     source scripts/env.sh
     exec ros2 run autosdv_marker_survey lab2_marker_survey_solve "$dir/survey_data.npz" --course "$dir" "$@"
 
-#   just lab2 survey-align                       surveys/latest; the car in the taped start box
+#   just lab2 survey-align                       surveys/latest, the settings' car (--vehicle-id car_b: another); the car in the taped start box
 #   just lab2 survey-align surveys/<dir> [--route lab2_uturn] [--force]
 #   just lab2 survey-align DIR --bench --truth TRUTH_DIR      the vehicle bench, no car
 # READY, then drive the car STRAIGHT along the taped first leg (2 m or more), stop, Ctrl-C.

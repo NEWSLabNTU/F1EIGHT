@@ -855,10 +855,10 @@ def resolve_prior(recording: Optional[str], prior: Optional[Dict] = None,
       1. an explicit --prior init_pwm
       2. RECORDING/actuator_params.yaml, the running actuator's parameters
          saved by `just coach record-cal`
-      3. --car-profile (car_params: car_profile.load(car)), for older bags
+      3. --vehicle-id (car_params: car_profile.load(vehicle_id)), for older bags
          and CSVs
 
-    and ValueError otherwise. A saved file and --car-profile that disagree on
+    and ValueError otherwise. A saved file and --vehicle-id that disagree on
     init_pwm are an error too: one of them is the wrong car.
     """
     prior = dict(prior or {})
@@ -872,21 +872,22 @@ def resolve_prior(recording: Optional[str], prior: Optional[Dict] = None,
     if 'init_pwm' in prior:
         source = 'init_pwm from --prior'
     elif saved is not None:
-        name = saved.get('car_profile') or '?'
+        # vehicle_id; car_profile in bags recorded before the actuator's rename
+        name = saved.get('vehicle_id') or saved.get('car_profile') or '?'
         if car_params is not None and int(car_params['init_pwm']) != int(saved['init_pwm']):
             raise ValueError(
-                f'--car-profile {car} has init_pwm {car_params["init_pwm"]}, but the bag\'s '
-                f'{ACTUATOR_PARAMS_FILE} says {saved["init_pwm"]} ({name}): drop --car-profile, '
+                f'--vehicle-id {car} has init_pwm {car_params["init_pwm"]}, but the bag\'s '
+                f'{ACTUATOR_PARAMS_FILE} says {saved["init_pwm"]} ({name}): drop --vehicle-id, '
                 f'or force one with --prior \'{{init_pwm: N}}\'')
         prior['init_pwm'] = int(saved['init_pwm'])
-        source = f'init_pwm from {ACTUATOR_PARAMS_FILE} (car_profile {name})'
+        source = f'init_pwm from {ACTUATOR_PARAMS_FILE} (vehicle_id {name})'
     elif car_params is not None:
         prior['init_pwm'] = int(car_params['init_pwm'])
-        source = f'init_pwm from --car-profile {car}'
+        source = f'init_pwm from --vehicle-id {car}'
     else:
         where = (f'{recording} has no {ACTUATOR_PARAMS_FILE} (recorded before `just coach '
                  'record-cal` saved it, or not by record-cal)') if recording else 'no recording'
-        raise ValueError(f'{where}: the neutral PWM is unknown. Pass --car-profile '
+        raise ValueError(f'{where}: the neutral PWM is unknown. Pass --vehicle-id '
                          'car_a|car_b|car_c (the car it was recorded on), or '
                          '--prior \'{init_pwm: N}\'')
     return MotorPlantParams(**prior), source
@@ -921,11 +922,11 @@ def main(argv=None) -> int:
     ap.add_argument('--prior', type=_mapping, default={},
                     help="MotorPlantParams to start from and to hold unidentified "
                          "parameters at, e.g. '{gain: 0.03}'; its init_pwm, if given, "
-                         "wins over the bag's and the car profile's")
+                         "wins over the bag's and the car's")
     from autosdv_vehicle_interface import car_profile
     car_profile.add_argument(
         ap, default=None,
-        help='the car the recording was made on (params/cars/): its init_pwm is the '
+        help='the car the recording was made on (individual_params/config/<vehicle_id>/): its init_pwm is the '
              f'neutral the fit measures from. Needed only when the bag has no '
              f'{ACTUATOR_PARAMS_FILE} (bags from before record-cal saved it, CSVs)')
     ap.add_argument('--deadband-max', type=int, default=15)
@@ -966,8 +967,8 @@ def main(argv=None) -> int:
         rec = rec.window(args.start, args.end)
     try:
         prior, source = resolve_prior(
-            args.recording, args.prior, args.car_profile,
-            car_profile.load(args.car_profile) if args.car_profile else None)
+            args.recording, args.prior, args.vehicle_id,
+            car_profile.load(args.vehicle_id) if args.vehicle_id else None)
     except ValueError as e:
         print(f'lab2_fit_motor: {e}', file=sys.stderr)
         return 2

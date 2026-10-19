@@ -58,7 +58,7 @@
 -->
 <launch>
   <arg name="vehicle_model" default="autosdv_vehicle"/>
-  <arg name="vehicle_id" default="$(env VEHICLE_ID default)"/>
+  <arg name="vehicle_id" description="REQUIRED: the including launch passes it (individual_params instance)"/>
   <arg name="use_sim_time" default="false"/>
   <arg name="check_external_emergency_heartbeat" default="false"/>
   <arg name="launch_trajectory_follower" default="true"

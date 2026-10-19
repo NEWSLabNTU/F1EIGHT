@@ -1,4 +1,19 @@
 launch:
+# Which physical car (Autoware's vehicle_id): individual_params/config/<vehicle_id>/
+# holds its calibration, its actuator PWM and its preset. Required, no environment
+# fallback: the shell sets nothing, and the cars differ in their stop PWM.
+# Instances: car_a, car_b, car_c. Design: docs/design/vehicle-variants-and-instances.md.
+- arg:
+    name: vehicle_id
+    description: "REQUIRED: which car, car_a, car_b or car_c (individual_params/config/<vehicle_id>/)"
+
+# The car's deployment preset: defaults for sensor_model, vehicle_model,
+# sensor_suite and use_gnss. Included BEFORE those arguments are declared, so its
+# defaults win over the ones below and the command line wins over both (the
+# mechanism of the perception and localization presets).
+- include:
+    file: "$(find-pkg-share individual_params)/config/$(var vehicle_id)/autosdv.preset.yaml"
+
 - arg:
     name: is_simulation
     default: "false"
@@ -65,7 +80,7 @@ launch:
 - arg:
     name: sensor_suite
     default: "vlp32c_zed_imu"
-    description: "Predefined sensor suite: robin_zed, robin_zed_mpu, vlp32c_zed, vlp32c_zed_mpu, vlp32c_zed_imu, cube1_usb, custom"
+    description: "Predefined sensor suite (default: the vehicle_id preset): robin_zed, robin_zed_mpu, vlp16_zed, vlp32c_zed, vlp32c_zed_mpu, vlp32c_zed_imu, cube1_usb, custom"
 
 # Individual Sensor Parameters (override suite defaults when sensor_suite=custom)
 - arg:
@@ -258,6 +273,9 @@ launch:
 - include:
     file: "$(find-pkg-share autosdv_launch)/launch/autosdv_autoware.launch.xml"
     arg:
+    -
+      name: vehicle_id
+      value: $(var vehicle_id)
     -
       name: vehicle_model
       value: $(var vehicle_model)

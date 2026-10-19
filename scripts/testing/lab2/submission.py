@@ -83,11 +83,11 @@ PART1_CLASS = 'lab2_speed.speed_pid:SpeedPID'
 CLASS = PART1_CLASS            # Part 2 drives the same class, with the car file
 CAR_YAML = 'speed_pid_car.yaml'
 FF_KEYS = ('ff_deadband', 'ff_gain')
-DEFAULT_CAR_PROFILE = 'car_a'     # where no car is known: the sims and the bench run car A
+DEFAULT_VEHICLE_ID = 'car_a'     # where no car is known: the sims and the bench run car A
 PWM_KEYS = ('init_pwm', 'min_pwm', 'max_pwm')
 
 
-def _car_profile():
+def _instances():
     try:
         from autosdv_vehicle_interface import car_profile
     except ImportError:     # no ROS environment sourced: the source tree
@@ -96,11 +96,12 @@ def _car_profile():
     return car_profile
 
 
-def actuator_pwm(profile: str = None) -> dict:
-    """init_pwm, min_pwm and max_pwm under the car's profile (the limits of the offsets):
-    actuator.yaml with params/cars/<profile>.param.yaml over it. No profile: car_a."""
+def actuator_pwm(vehicle_id: str = None) -> dict:
+    """init_pwm, min_pwm and max_pwm of the car (the limits of the offsets): actuator.yaml
+    with individual_params/config/<vehicle_id>/autosdv_vehicle/actuator.param.yaml over it.
+    No vehicle_id: car_a."""
     try:
-        p = _car_profile().load(profile or DEFAULT_CAR_PROFILE)
+        p = _instances().load(vehicle_id or DEFAULT_VEHICLE_ID)
     except ValueError as e:
         raise SubmissionError(str(e)) from None
     return {k: int(p[k]) for k in PWM_KEYS}
@@ -383,15 +384,15 @@ def main(argv=None) -> int:
                       help='DIR is a Part 2 team directory (controller + path_tracker.param.yaml)')
     mode.add_argument('--part1', action='store_true',
                       help='DIR is a Part 1 submission for the simulated car (lab2_speed/)')
-    ap.add_argument('--car-profile', default=None,
+    ap.add_argument('--vehicle-id', default=None,
                     help='the car whose PWM bounds the offsets: car_a, car_b or car_c (default '
-                    'car_a; `just lab2 vehicle` passes the car_profile:= that `car` picked)')
+                    'car_a; `just lab2 vehicle` passes the vehicle_id:= that `car` picked)')
     what = ap.add_mutually_exclusive_group()
     what.add_argument('--pythonpath', action='store_true', help='print the PYTHONPATH entry only')
     what.add_argument('--launch-args', action='store_true', help='print the launch args, one per line')
     args = ap.parse_args(argv)
     try:
-        pwm = actuator_pwm(args.car_profile)
+        pwm = actuator_pwm(args.vehicle_id)
         resolver = resolve_team if args.team else resolve_part1 if args.part1 else resolve
         pkg, launch_args, warnings = resolver(args.dir, pwm=pwm)
     except SubmissionError as e:

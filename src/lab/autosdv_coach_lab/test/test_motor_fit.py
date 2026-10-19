@@ -128,7 +128,7 @@ def test_window_and_validation():
 DUMP = """/autosdv/actuator_node:
   ros__parameters:
     brake_pwm: 365
-    car_profile: car_b
+    vehicle_id: car_b
     init_pwm: 395
     max_pwm: 470
     min_pwm: 360
@@ -148,7 +148,7 @@ def _bag_dir(tmp_path, dump=DUMP):
 def test_read_actuator_params_from_a_ros2_param_dump(tmp_path):
     bag = _bag_dir(tmp_path)
     p = mf.read_actuator_params(f'{bag}/{mf.ACTUATOR_PARAMS_FILE}')
-    assert p['init_pwm'] == 395 and p['car_profile'] == 'car_b' and p['brake_pwm'] == 365
+    assert p['init_pwm'] == 395 and p['vehicle_id'] == 'car_b' and p['brake_pwm'] == 365
 
 
 def test_prior_from_the_bags_actuator_params(tmp_path):
@@ -157,20 +157,26 @@ def test_prior_from_the_bags_actuator_params(tmp_path):
     assert mf.ACTUATOR_PARAMS_FILE in source and 'car_b' in source
 
 
+def test_prior_from_a_bag_saved_before_the_rename(tmp_path):
+    """bags recorded before the actuator's car_profile -> vehicle_id rename still name the car"""
+    prior, source = mf.resolve_prior(_bag_dir(tmp_path, DUMP.replace('vehicle_id:', 'car_profile:')), {})
+    assert prior.init_pwm == 395 and 'car_b' in source
+
+
 def test_explicit_prior_init_wins(tmp_path):
     prior, source = mf.resolve_prior(_bag_dir(tmp_path), {'init_pwm': 380})
     assert prior.init_pwm == 380 and '--prior' in source
 
 
-def test_old_bag_needs_a_car_profile(tmp_path):
+def test_old_bag_needs_a_vehicle_id(tmp_path):
     bag = _bag_dir(tmp_path, dump=None)
-    with pytest.raises(ValueError, match='--car-profile'):
+    with pytest.raises(ValueError, match='--vehicle-id'):
         mf.resolve_prior(bag, {})
     prior, source = mf.resolve_prior(bag, {}, 'car_b', {'init_pwm': 395})
     assert prior.init_pwm == 395 and 'car_b' in source
 
 
-def test_saved_params_and_car_profile_disagree(tmp_path):
+def test_saved_params_and_vehicle_id_disagree(tmp_path):
     bag = _bag_dir(tmp_path)
     with pytest.raises(ValueError, match='370.*395'):
         mf.resolve_prior(bag, {}, 'car_a', {'init_pwm': 370})
@@ -182,7 +188,7 @@ def test_cli_refuses_a_recording_without_a_neutral(tmp_path, clean, capsys):
     path = str(tmp_path / 'rec.csv')
     mf.write_csv(path, clean[0])
     assert mf.main([path]) == 2
-    assert '--car-profile' in capsys.readouterr().err
+    assert '--vehicle-id' in capsys.readouterr().err
 
 
 def test_car_b_bag_fits_from_its_own_neutral(tmp_path):

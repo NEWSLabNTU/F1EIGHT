@@ -73,7 +73,7 @@
   <let name="rviz_initial_pose_auto_fix_target" value="$(var gnss_initial_pose_auto_fix_target)"/>
 
   <!-- Vehicle -->
-  <arg name="vehicle_id" default="$(env VEHICLE_ID default)" description="vehicle specific ID"/>
+  <arg name="vehicle_id" description="REQUIRED: which car (individual_params/config/VEHICLE_ID); autosdv.launch.yaml and the sims pass it, no environment fallback"/>
   <arg name="launch_vehicle_interface" default="true" description="launch vehicle interface"/>
   <!-- Control -->
   <arg name="check_external_emergency_heartbeat" default="false"/>
@@ -145,6 +145,8 @@
   <arg name="rviz_config_name" default="autoware.rviz" description="rviz config name"/>
   <arg name="rviz_config" default="$(find-pkg-share autoware_launch)/rviz/$(var rviz_config_name)" description="rviz config path"/>
   <arg name="rviz_respawn" default="true"/>
+  <arg name="viewer_display" default="$(env DISPLAY '')"
+       description="the X display RViz opens on. A launch that opens the ZED runs without DISPLAY (scripts/testing/lab2/camera_display.sh) and hands the viewer its display here (just lab2 stack)"/>
   <!-- Perception -->
   <arg name="perception_mode" default="lidar" description="select perception mode. camera_lidar_radar_fusion, camera_lidar_fusion, lidar_radar_fusion, lidar, radar"/>
   <arg name="traffic_light_recognition/enable_fine_detection" default="true" description="enable traffic light fine detection"/>
@@ -314,6 +316,7 @@
       respawn="$(var rviz_respawn)"
     >
       <env name="QT_QPA_PLATFORMTHEME" value="qt5ct"/>
+      <env name="DISPLAY" value="$(var viewer_display)"/>
     </node>
   </group>
 </launch>

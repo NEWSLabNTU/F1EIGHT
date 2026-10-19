@@ -208,42 +208,42 @@ def test_vehicle_and_gate_keep_the_explicit_arguments(tmp_path, monkeypatch):
     cf = 'config:=' + str(f)
     (tmp_path / 'c').mkdir()
     (tmp_path / 'c' / 'course.yaml').write_text('path: path.csv\n')
-    assert lc.plan('vehicle', [cf])[0] == ['route:=lab2_uturn', 'team:=/t/team3', 'car_profile:=car_b']
+    assert lc.plan('vehicle', [cf])[0] == ['route:=lab2_uturn', 'team:=/t/team3', 'vehicle_id:=car_b']
     assert lc.plan('vehicle', [cf, 'route:=hall_demo', 'team:=/o/t'])[0] == \
-        ['route:=hall_demo', 'team:=/o/t', 'car_profile:=car_b']
+        ['route:=hall_demo', 'team:=/o/t', 'vehicle_id:=car_b']
     assert lc.plan('vehicle', [cf, f'course_dir:={tmp_path / "c"}', 'submission:=/x'])[0] == \
-        [f'course_dir:={tmp_path / "c"}', 'submission:=/x', 'car_profile:=car_b']
+        [f'course_dir:={tmp_path / "c"}', 'submission:=/x', 'vehicle_id:=car_b']
     with pytest.raises(lc.ConfigError, match='no course.yaml'):
         lc.plan('vehicle', [cf, 'course_dir:=/nonexistent'])
     assert lc.plan('vehicle', [cf, 'speed_controller_class:=a:B'])[0] == \
-        ['speed_controller_class:=a:B', 'route:=lab2_uturn', 'car_profile:=car_b']
+        ['speed_controller_class:=a:B', 'route:=lab2_uturn', 'vehicle_id:=car_b']
     assert lc.plan('gate', [cf])[0] == ['submission:=/s/sub']
     assert lc.plan('gate', [cf, '--team', '/o/t', '--only', 'hall_demo'])[0] == \
         ['--only', 'hall_demo', 'team:=/o/t']
     assert lc.plan('gate', ['speed_controller_class:=a:B'])[0] == ['speed_controller_class:=a:B']
 
 
-def test_car_picks_the_pwm_profile(tmp_path):
+def test_car_picks_the_vehicle_id(tmp_path):
     f = tmp_path / 'x.yaml'
     f.write_text('car: B\nteam_dir: /t/team3\n')
     cf = 'config:=' + str(f)
     args, line = lc.plan('vehicle', [cf])
-    assert args[-1] == 'car_profile:=car_b' and 'car_profile car_b' in line
+    assert args[-1] == 'vehicle_id:=car_b' and 'vehicle_id car_b' in line
     for car, prof in (('A', 'car_a'), ('c', 'car_c'), ('car_b', 'car_b')):
-        assert lc.plan('vehicle', [cf, f'car:={car}'])[0][-1] == f'car_profile:={prof}'
-    # an explicit car_profile:= that agrees is kept once; one that disagrees is refused
-    args = lc.plan('vehicle', [cf, 'car_profile:=car_b'])[0]
-    assert args.count('car_profile:=car_b') == 1
-    with pytest.raises(lc.ConfigError, match='car_profile:=car_a disagrees with car B'):
-        lc.plan('vehicle', [cf, 'car_profile:=car_a'])
-    with pytest.raises(lc.ConfigError, match='car_profile:=car_z'):
-        lc.plan('vehicle', [cf, 'car_profile:=car_z'])
+        assert lc.plan('vehicle', [cf, f'car:={car}'])[0][-1] == f'vehicle_id:={prof}'
+    # an explicit vehicle_id:= that agrees is kept once; one that disagrees is refused
+    args = lc.plan('vehicle', [cf, 'vehicle_id:=car_b'])[0]
+    assert args.count('vehicle_id:=car_b') == 1
+    with pytest.raises(lc.ConfigError, match='vehicle_id:=car_a disagrees with car B'):
+        lc.plan('vehicle', [cf, 'vehicle_id:=car_a'])
+    with pytest.raises(lc.ConfigError, match='vehicle_id:=car_z'):
+        lc.plan('vehicle', [cf, 'vehicle_id:=car_z'])
     with pytest.raises(lc.ConfigError, match="car 'D'"):
         lc.plan('vehicle', [cf, 'car:=D'])
-    assert lc.plan('loc-check', [cf, 'rviz:=true'])[0] == ['rviz:=true', 'car_profile:=car_b']
+    assert lc.plan('loc-check', [cf, 'rviz:=true'])[0] == ['rviz:=true', 'vehicle_id:=car_b']
     # loc-check passes course_dir:= etc. through, and takes car:= as the setting
     assert lc.plan('loc-check', [cf, 'course_dir:=/d', 'car:=C'])[0] == \
-        ['course_dir:=/d', 'car_profile:=car_c']
+        ['course_dir:=/d', 'vehicle_id:=car_c']
 
 
 def test_no_car_is_refused_on_the_car_not_on_the_bench(no_real_home):
@@ -252,16 +252,23 @@ def test_no_car_is_refused_on_the_car_not_on_the_bench(no_real_home):
     assert 'just lab2 init car:=A|B|C' in str(e.value) and '\n' not in str(e.value)
     with pytest.raises(lc.ConfigError, match='no car set'):
         lc.plan('loc-check', [])
-    # the bench (and the hardware sim) keep the launch default, car_a
+    # the bench keeps its launch default, car_a; the hardware sim is passed car_a
+    # (waypoint_follow.launch.xml requires vehicle_id)
     args = lc.plan('vehicle', ['team_dir:=/t'], bench=True)[0]
-    assert not any(a.startswith('car_profile:=') for a in args)
-    assert not any(a.startswith('car_profile:=')
-                   for a in lc.plan('vehicle', ['team_dir:=/t', 'hardware_sim:=true'])[0])
+    assert not any(a.startswith('vehicle_id:=') for a in args)
+    for sim in ('hardware:=sim', 'hardware_sim:=true'):
+        assert [a for a in lc.plan('vehicle', ['team_dir:=/t', sim])[0]
+                if a.startswith('vehicle_id:=')] == ['vehicle_id:=car_a']
+    # the survey takes the car the same way loc-check does
+    assert lc.plan('survey', ['car:=B', 'marker_size:=0.25'])[0] == \
+        ['marker_size:=0.25', 'vehicle_id:=car_b']
+    with pytest.raises(lc.ConfigError, match='no car set'):
+        lc.plan('survey', [])
     # a car set on the bench is still that car's profile
-    assert lc.plan('vehicle', ['team_dir:=/t', 'car:=B'], bench=True)[0][-1] == 'car_profile:=car_b'
-    # an explicit car_profile:= alone names the car
-    args = lc.plan('vehicle', ['team_dir:=/t', 'car_profile:=car_c'])[0]
-    assert [a for a in args if a.startswith('car_profile:=')] == ['car_profile:=car_c']
+    assert lc.plan('vehicle', ['team_dir:=/t', 'car:=B'], bench=True)[0][-1] == 'vehicle_id:=car_b'
+    # an explicit vehicle_id:= alone names the car
+    args = lc.plan('vehicle', ['team_dir:=/t', 'vehicle_id:=car_c'])[0]
+    assert [a for a in args if a.startswith('vehicle_id:=')] == ['vehicle_id:=car_c']
 
 
 def test_grade_scores_the_latest_bag_against_the_reference(tmp_path):

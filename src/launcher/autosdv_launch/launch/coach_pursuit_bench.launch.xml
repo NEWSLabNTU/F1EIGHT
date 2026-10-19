@@ -34,8 +34,8 @@
 -->
 <launch>
   <!-- the student's law and inner loop, as on the car -->
-  <arg name="car_profile" default="car_a"
-       description="which car the bench models: autosdv_vehicle_interface/params/cars/CAR_PROFILE.param.yaml, for the dry-run vehicle interface and the plant alike. car_a by default: a bench drives no motor"/>
+  <arg name="vehicle_id" default="car_a"
+       description="which car the bench models: individual_params/config/VEHICLE_ID (autosdv_vehicle/actuator.param.yaml, the IMU bias), for the dry-run vehicle interface and the plant alike. car_a by default: a bench drives no motor"/>
   <arg name="controller_class" default="autosdv_coach_lab.reference.cruise_controller:CruiseController"/>
   <arg name="controller_param_file" default=""/>
   <arg name="launch_planner" default="true"/>
@@ -58,7 +58,6 @@
        description="when the actuator stops publishing PWM: neutral (what every actuator exit writes) or hold (a PCA9685 after SIGKILL)"/>
   <arg name="vehicle_info_param_file"
        default="$(find-pkg-share autosdv_vehicle_description)/config/vehicle_info.param.yaml"/>
-  <arg name="vehicle_id" default="$(env VEHICLE_ID default)"/>
   <arg name="imu_corrector_param_file"
        default="$(find-pkg-share individual_params)/config/$(var vehicle_id)/autosdv_sensor_kit/imu_corrector.param.yaml"
        description="the static gyro bias imu_corrector removes; the plant's raw IMU carries it"/>
@@ -66,6 +65,7 @@
        description="[rad/s] gyro bias left after imu_corrector, for a dead-reckoning drift test"/>
 
   <include file="$(find-pkg-share autosdv_launch)/launch/coach_pursuit.launch.xml">
+    <arg name="vehicle_id" value="$(var vehicle_id)"/>
     <arg name="is_simulation" value="true"/>
     <arg name="launch_sensing_driver" value="false"/>
     <arg name="launch_velocity_report" value="false"/>
@@ -85,7 +85,7 @@
        imu_corrector.param.yaml (the gyro bias it removes). -->
   <node pkg="autosdv_coach_lab" exec="vehicle_bench_plant" name="vehicle_bench_plant" output="screen">
     <param from="$(find-pkg-share autosdv_vehicle_interface)/params/actuator.yaml"/>
-    <param from="$(find-pkg-share autosdv_vehicle_interface)/params/cars/$(var car_profile).param.yaml"/>
+    <param from="$(find-pkg-share individual_params)/config/$(var vehicle_id)/autosdv_vehicle/actuator.param.yaml"/>
     <param from="$(var vehicle_info_param_file)"/>
     <param from="$(find-pkg-share autosdv_vehicle_interface)/params/velocity_report.yaml"/>
     <param from="$(var imu_corrector_param_file)"/>

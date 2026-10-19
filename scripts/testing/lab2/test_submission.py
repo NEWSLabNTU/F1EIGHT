@@ -282,8 +282,8 @@ def test_part1_cli_and_shell_helper(tmp_path, capsys):
     assert lines[-1].startswith(f'PP={pkg.resolve()}')
 
 
-def test_offset_limits_follow_the_car_profile(tmp_path):
-    cp = submission._car_profile()
+def test_offset_limits_follow_the_vehicle_id(tmp_path):
+    cp = submission._instances()
     a, b = cp.load('car_a'), cp.load('car_b')
     assert submission.actuator_pwm() == submission.actuator_pwm('car_a') == \
         {k: a[k] for k in ('init_pwm', 'min_pwm', 'max_pwm')}
@@ -292,7 +292,7 @@ def test_offset_limits_follow_the_car_profile(tmp_path):
     keys = submission.part1_keys(pwm_b)
     assert keys['max_pwm_offset'][2] == b['max_pwm'] - b['init_pwm']
     assert keys['max_brake_offset'][2] == b['init_pwm'] - b['min_pwm']
-    with pytest.raises(submission.SubmissionError, match='unknown car profile'):
+    with pytest.raises(submission.SubmissionError, match='unknown vehicle_id'):
         submission.actuator_pwm('car_z')
     # an offset car A has room for, car B has not
     over = b['max_pwm'] - b['init_pwm'] + 1
@@ -303,5 +303,5 @@ def test_offset_limits_follow_the_car_profile(tmp_path):
         submission.resolve(root, pwm=pwm_b)
     cmd = [sys.executable, str(HERE / 'submission.py'), str(root), '--launch-args']
     assert subprocess.run(cmd, capture_output=True).returncode == 0
-    r = subprocess.run(cmd + ['--car-profile', 'car_b'], capture_output=True, text=True)
+    r = subprocess.run(cmd + ['--vehicle-id', 'car_b'], capture_output=True, text=True)
     assert r.returncode == 2 and 'max_pwm_offset' in r.stderr

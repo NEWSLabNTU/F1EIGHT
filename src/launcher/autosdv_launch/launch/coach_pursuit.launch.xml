@@ -54,6 +54,8 @@
 -->
 <launch>
   <!-- the car -->
+  <arg name="vehicle_id"
+       description="REQUIRED: which car, car_a, car_b or car_c: individual_params/config/VEHICLE_ID (calibration, the actuator's PWM, the preset). The bench passes car_a"/>
   <arg name="sensor_suite" default="vlp32c_zed_imu"
        description="autosdv.launch.yaml sensor suite"/>
   <!-- Lab 2 runs on Robin-W cars with the ZED's built-in IMU (decided
@@ -131,6 +133,7 @@
   <let name="launch_gyro_bias_estimator" value="false"/>
 
   <include file="$(find-pkg-share autosdv_launch)/launch/autosdv.launch.yaml">
+    <arg name="vehicle_id" value="$(var vehicle_id)"/>
     <arg name="sensor_suite" value="$(var sensor_suite)"/>
     <arg name="lidar_model" value="$(var lidar_model)"/>
     <arg name="imu_source" value="$(var imu_source)"/>
@@ -164,6 +167,7 @@
   <include file="$(find-pkg-share autosdv_vehicle_launch)/launch/vehicle_interface.launch.xml">
     <arg name="launch_vehicle_interface" value="true"/>
     <arg name="is_simulation" value="$(var is_simulation)"/>
+    <arg name="vehicle_id" value="$(var vehicle_id)"/>
     <arg name="speed_controller_class" value="$(var speed_controller_class)"/>
     <arg name="speed_controller_params" value="$(var speed_controller_params)"/>
     <arg name="speed_controller_dt_source" value="$(var speed_controller_dt_source)"/>
@@ -184,7 +188,9 @@
     <arg name="imu_yaw_sign" value="$(var imu_yaw_sign)"/>
   </include>
 
-  <include file="$(find-pkg-share autosdv_launch)/launch/components/autosdv_pursuit_control_component.launch.xml"/>
+  <include file="$(find-pkg-share autosdv_launch)/launch/components/autosdv_pursuit_control_component.launch.xml">
+    <arg name="vehicle_id" value="$(var vehicle_id)"/>
+  </include>
 
   <include file="$(var detector_launch_file)" if="$(var launch_detector)">
     <arg name="profile" value="$(var detector_profile)"/>

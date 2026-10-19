@@ -32,7 +32,9 @@
   <arg name="rviz" default="true"/>
   <arg name="vehicle_model" default="autosdv_vehicle"/>
   <arg name="sensor_model" default="autosdv_sensor_kit"/>
-  <arg name="vehicle_id" default="$(env VEHICLE_ID default)"/>
+  <!-- pinned, not an argument: the plant models actuator.yaml's car, which is car A
+       (individual_params/config/car_a: its actuator PWM, IMU bias and calibration) -->
+  <let name="vehicle_id" value="car_a"/>
   <arg name="data_path" default="$(env AUTOSDV_DATA_PATH ./data/autoware_data)"/>
 
   <!-- tier4_simulator_component reads this from its including scope (planning_simulator declares it) -->
@@ -42,6 +44,7 @@
 
   <include file="$(find-pkg-share autoware_launch)/launch/autoware.launch.xml">
     <arg name="map_path" value="$(var track_dir)"/>
+    <arg name="vehicle_id" value="$(var vehicle_id)"/>
     <arg name="vehicle_model" value="$(var vehicle_model)"/>
     <arg name="sensor_model" value="$(var sensor_model)"/>
     <arg name="data_path" value="$(var data_path)"/>
@@ -100,8 +103,6 @@
     <arg name="launch_vehicle_interface" value="true"/>
     <arg name="is_simulation" value="false"/>
     <arg name="vehicle_id" value="$(var vehicle_id)"/>
-    <!-- the plant models actuator.yaml's car, which is car A -->
-    <arg name="car_profile" value="car_a"/>
     <arg name="speed_controller_params" value="$(var speed_controller_params)"/>
     <arg name="speed_controller_dt_source" value="loop"/>
     <arg name="actuator_param_overrides"

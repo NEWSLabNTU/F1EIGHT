@@ -7,7 +7,7 @@
 # (scripts/testing/lab2/submission.py) and DIR's package goes on PYTHONPATH.
 # `team:=DIR` (or `--team DIR`) does the same for a Part 2 team directory, and
 # adds tracker_param_file:= for its path_tracker.param.yaml.
-# A car_profile:=CAR (passes through) bounds the PWM offsets by that car's profile;
+# A vehicle_id:=CAR (passes through) bounds the PWM offsets by that car's PWM;
 # without one, car_a's. Every other argument passes through unchanged. Source scripts/env.sh first:
 # it must not run after this, or it would not know about PYTHONPATH.
 #
@@ -27,7 +27,7 @@ lab2_apply_submission() {
             team:=*) sub="${a#team:=}"; mode=(--team) ;;
             --team) skip=1; mode=(--team) ;;
             --team=*) sub="${a#--team=}"; mode=(--team) ;;
-            car_profile:=*) prof=(--car-profile "${a#car_profile:=}"); LAB2_ARGS+=("$a") ;;
+            vehicle_id:=*) prof=(--vehicle-id "${a#vehicle_id:=}"); LAB2_ARGS+=("$a") ;;
             *) LAB2_ARGS+=("$a") ;;
         esac
     done

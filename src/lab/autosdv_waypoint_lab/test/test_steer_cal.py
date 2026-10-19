@@ -140,12 +140,12 @@ def test_servo_half_range_is_the_nearer_limit():
 
 def test_cli_fit_exit_codes(capsys):
     ok = ['-45:+0.9', '-25:+1.7', '-10:+4.2', '10:-4.2', '25:-1.7', '45:-0.9']
-    assert sc.main(['fit', '--car-profile', 'car_b', *ok]) in (0, 1)
+    assert sc.main(['fit', '--vehicle-id', 'car_b', *ok]) in (0, 1)
     out = capsys.readouterr().out
-    assert 'tire_angle_to_steer_ratio' in out and 'params/cars/car_b.param.yaml' in out
+    assert 'tire_angle_to_steer_ratio' in out and 'individual_params/config/car_b/autosdv_vehicle/actuator.param.yaml' in out
     assert 'init_steer 400' in out
-    assert sc.main(['fit', '--car-profile', 'car_b', '10:3', '20:2']) == 2
-    assert sc.main(['fit', '--car-profile', 'car_b', '-50:+0.9', '-25:+1.7', '25:-1.7']) == 2
+    assert sc.main(['fit', '--vehicle-id', 'car_b', '10:3', '20:2']) == 2
+    assert sc.main(['fit', '--vehicle-id', 'car_b', '-50:+0.9', '-25:+1.7', '25:-1.7']) == 2
 
 
 def test_cli_fit_needs_a_car():

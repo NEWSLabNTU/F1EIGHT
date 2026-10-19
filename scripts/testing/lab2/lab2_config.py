@@ -23,9 +23,11 @@ recipes run from the repository root).
 
 Recipes:
 
-    vehicle     course_dir:= (below), team:=TEAM_DIR, unless given, and car_profile:=car_<car>
-                (on the car `car` is required; the bench takes car_a when it is not set)
-    loc-check   car_profile:=car_<car> (`car` required); every other argument passes through
+    vehicle     course_dir:= (below), team:=TEAM_DIR, unless given, and vehicle_id:=car_<car>
+                (on the car `car` is required; the bench takes car_a when it is not set,
+                hardware:=sim passes vehicle_id:=car_a)
+    loc-check   vehicle_id:=car_<car> (`car` required); every other argument passes through
+    survey      the same as loc-check (the survey's URDF is that car's calibration)
     gate        submission:=SUBMISSION, unless a controller is given
     sim         submission:=PART1_SUBMISSION when set (no default: without one the runner
                 warns and runs the stub), unless --class / speed_controller_class:= is given;
@@ -40,9 +42,10 @@ Recipes:
                 only the key:=value keys given (other lines and comments kept), and
                 refuse when none is given
 
-`car` (A, B or C) names the car in the bags AND picks its PWM profile: car:=B passes
-car_profile:=car_b (autosdv_vehicle_interface/params/cars/car_b.param.yaml) to the stack.
-A car_profile:= given on the command line must agree with `car`.
+`car` (A, B or C) names the car in the bags AND picks its instance: car:=B passes
+vehicle_id:=car_b to the stack, which loads individual_params/config/car_b/ (its
+autosdv_vehicle/actuator.param.yaml PWM, its calibration, its autosdv.preset.yaml).
+A vehicle_id:= given on the command line must agree with `car`.
 
 `team:=` means the team DIRECTORY in vehicle and gate (as it always has) and
 the team NUMBER elsewhere.
@@ -78,10 +81,10 @@ import lab2_env  # noqa: E402
 
 REPO = Path(__file__).resolve().parents[3]
 try:
-    from autosdv_vehicle_interface import car_profile as _car_profile
+    from autosdv_vehicle_interface import car_profile as _instances   # vehicle_ids: names(), load()
 except ImportError:     # no ROS environment sourced: the source tree
     sys.path.insert(0, str(REPO / 'src/vehicle/autosdv_vehicle_launch/autosdv_vehicle_interface'))
-    from autosdv_vehicle_interface import car_profile as _car_profile
+    from autosdv_vehicle_interface import car_profile as _instances   # vehicle_ids: names(), load()
 DEFAULTS = REPO / 'src/lab/autosdv_waypoint_lab/config/lab2_defaults.yaml'
 USER_FILE = Path('~/lab2/lab2.yaml')     # ~/lab2 is $LAB2_HOME when that is set
 
@@ -105,7 +108,7 @@ TEMPLATE_HEAD = """\
 """
 TEMPLATE_KEYS = [
     ('car', 'A', "the CAR's letter, A, B or C: the TA sets it once per car (`just lab2 init car:=A`); "
-     "it is the bags' label and picks the car's PWM profile (car_a, car_b, car_c)"),
+     "it is the bags' label and picks the car's vehicle_id (car_a, car_b, car_c)"),
     ('team', '3', 'optional: `just lab2 run team:=3` names the team per run (record, audit, ...)'),
     ('team_dir', '~/lab2/team3',
      'optional: the team directory, for `just lab2 run` with no team:= (and `vehicle`)'),
@@ -389,43 +392,50 @@ def course_for(c: 'Config', bench: bool = False):
     return arg, ('route', route), warn
 
 
-# ---- the car's PWM profile ------------------------------------------------------------------
+# ---- the car's instance (vehicle_id) ----------------------------------------------------
 
-def profile_of(car: str) -> str:
-    """'B' (or 'b', 'car_b') -> 'car_b', one of autosdv_vehicle_interface's params/cars/."""
+#: what hardware:=sim runs when no car is set: the plant models car A
+SIM_VEHICLE_ID = 'car_a'
+
+
+def vehicle_id_of(car: str) -> str:
+    """'B' (or 'b', 'car_b') -> 'car_b', one of individual_params' config/<vehicle_id>/."""
     v = str(car).strip().lower()
     name = v if v.startswith('car_') else f'car_{v}'
-    known = _car_profile.names()
+    known = _instances.names()
     if name not in known:
         raise ConfigError(f'car {car!r}: not a known car; one of '
                           + ', '.join(n[len('car_'):].upper() for n in known))
     return name
 
 
-def car_profile_for(c: 'Config', rest, required: bool):
-    """(the car_profile:= argument to append or None, its profile or None).
+def vehicle_id_for(c: 'Config', rest, required: bool, fallback: Optional[str] = None):
+    """(the vehicle_id:= argument to append or None, the vehicle_id or None).
 
-    `car` picks the profile; a car_profile:= already among `rest` must agree with it (and is
-    then kept, not repeated). required: on the car, where neither is a refusal; elsewhere
-    the launch file's default (car_a) stands."""
-    given = [a.split(':=', 1)[1] for a in rest if a.startswith('car_profile:=')]
+    `car` picks the instance; a vehicle_id:= already among `rest` must agree with it (and
+    is then kept, not repeated). required: on the car, where neither is a refusal;
+    elsewhere `fallback` is passed when given, else the launch file's default (car_a)
+    stands."""
+    given = [a.split(':=', 1)[1] for a in rest if a.startswith('vehicle_id:=')]
     explicit = given[-1] if given else None
-    if explicit is not None and explicit not in _car_profile.names():
-        raise ConfigError(f'car_profile:={explicit}: one of {", ".join(_car_profile.names())}')
+    if explicit is not None and explicit not in _instances.names():
+        raise ConfigError(f'vehicle_id:={explicit}: one of {", ".join(_instances.names())}')
     car = c.get('car')
-    mine = profile_of(car) if car else None
+    mine = vehicle_id_of(car) if car else None
     if explicit and mine and explicit != mine:
-        raise ConfigError(f'car_profile:={explicit} disagrees with car {car} ({c.source("car")}), '
-                          f'which is {mine}: drop car_profile:= or fix car')
+        raise ConfigError(f'vehicle_id:={explicit} disagrees with car {car} ({c.source("car")}), '
+                          f'which is {mine}: drop vehicle_id:= or fix car')
     if explicit:
         return None, explicit
     if mine:
-        return f'car_profile:={mine}', mine
+        return f'vehicle_id:={mine}', mine
     if required:
         raise ConfigError(
-            'no car set (the stack loads that car\'s PWM profile, params/cars/car_<car>; the '
-            f'cars\' neutral PWMs differ): `just lab2 init car:=A|B|C` sets it in {c.file}, '
+            'no car set (the stack loads that car\'s instance, individual_params/config/car_<car>; '
+            f'the cars\' neutral PWMs differ): `just lab2 init car:=A|B|C` sets it in {c.file}, '
             'or pass car:=A|B|C')
+    if fallback:
+        return f'vehicle_id:={fallback}', fallback
     return None, None
 
 
@@ -490,7 +500,7 @@ def split_args(recipe, argv):
             cli['team_dir'] = val
         elif sep and recipe == 'sim' and key == 'submission':
             cli['part1_submission'] = val
-        elif sep and key in KEYS and (recipe != 'loc-check' or key == 'car'):
+        elif sep and key in KEYS and (recipe not in ('loc-check', 'survey') or key == 'car'):
             cli[key] = val
         else:
             rest.append(a)
@@ -543,18 +553,20 @@ def plan(recipe, argv, cwd=REPO, bench=False):
         elif c.source('team_dir') == 'command line' or not _has(rest, 'speed_controller_class:='):
             out.append(f'team:={c.require("team_dir", "the team controller the car drives")}')
             use('team_dir')
-        on_car = not bench and not _has(rest, 'hardware_sim:=true', 'hardware_sim:=True')
-        arg, prof = car_profile_for(c, rest, required=on_car)
+        sim = _has(rest, 'hardware:=sim', 'hardware_sim:=true', 'hardware_sim:=True')
+        on_car = not bench and not sim
+        arg, vid = vehicle_id_for(c, rest, required=on_car,
+                                  fallback=SIM_VEHICLE_ID if sim and not bench else None)
         if arg:
             out.append(arg)
-        if prof:
-            use('car_profile', prof)
-    elif recipe == 'loc-check':
+        if vid:
+            use('vehicle_id', vid)
+    elif recipe in ('loc-check', 'survey'):
         out = list(rest)
-        arg, prof = car_profile_for(c, rest, required=True)
+        arg, vid = vehicle_id_for(c, rest, required=True)
         if arg:
             out.append(arg)
-        use('car_profile', prof)
+        use('vehicle_id', vid)
     elif recipe == 'gate':
         out = list(rest)
         if 'team_dir' in c.sources and c.source('team_dir') == 'command line':

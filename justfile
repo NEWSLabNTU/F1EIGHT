@@ -406,7 +406,9 @@ clean:
 # Launch Commands - Start systems
 # ============================================================================
 
-# Launch AutoSDV system with web UI at http://localhost:8081
+# Launch AutoSDV system with web UI at http://localhost:8081; name the car:
+#   just launch vehicle_id:=car_b               its preset (individual_params/config/car_b)
+#   just launch "vehicle_id:=car_a use_gnss:=true"
 launch ARGS="":
     #!/usr/bin/env bash
     # `just launch ARGS="x:=y"` is a spelling this project documented for years
