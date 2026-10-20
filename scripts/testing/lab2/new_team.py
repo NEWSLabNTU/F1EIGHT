@@ -287,80 +287,90 @@ def read_lab_files(repo: Path = REPO, worktree: bool = False) -> Dict[str, bytes
 
 
 def readme(model: str, n: int, source: str, kind: str = 'car') -> str:
-    if kind == 'sim':
-        use = f'''Part 1: the RC simulator's car, the one package every student completes
-(`just lab2 sim` runs it, as `vehicle_model:={model}`). In AutoSDV's src/lab2_vehicles/:
+    """The package README, written for the student or team who owns the package."""
+    keep = f'''## The rest
 
+The other nodes (the actuator and its safety shell, the velocity report, the gear,
+control-mode and steering nodes) are yours to read; the lab is about the two files above.
+Keep two things as they are:
+
+- the launch file's default `speed_controller_class`,
+  `{model}_interface.speed_pid:SpeedPID`: only your own `SpeedPID` counts;
+- the line in the launch file that loads the car's PWM points from AutoSDV's
+  `individual_params`. Never copy a car's PWM numbers into this package: the cars'
+  neutral points differ, and a copied number drives a car instead of stopping it.
+'''
+    if kind == 'sim':
+        return f'''# {model}: your Part 1 vehicle model
+
+The simulated car's vehicle model for Lab 2 Part 1 (`lab2.pdf`, Part 1). Copy this
+directory into `~/AutoSDV/src/lab2_vehicles/`, then build it and run the graded course:
+
+    cd ~/AutoSDV
     colcon build --base-paths src --symlink-install --cmake-args -DCMAKE_BUILD_TYPE=Release \\
         --packages-up-to {model}_launch
-    just lab2 sim'''
-        tuning = f'''Its parameters are in `{model}_launch/config/sim/speed_controller.param.yaml` under
-`speed_controller_params:`, with the simulated car's calibration (ff_deadband, ff_gain).'''
-        gate = ''
-    else:
-        rename = ('''First give it your team number (here 3): every "teamN" becomes "team3", in
-directory and file names and inside the files, this directory's own name included.
+    source install/setup.bash
+    just lab2 sim
+
+## The two files you edit
+
+- `{model}_interface/{model}_interface/speed_pid.py`: your `SpeedPID`. Until TODOs 1-5
+  are complete it holds the motor in neutral, and the car never moves.
+- `{model}_launch/config/sim/speed_controller.param.yaml`: its parameters on the
+  simulated car, under `speed_controller_params:`.
+
+`python3 selfcheck.py`, in the handout's `lab2_speed/`, checks both.
+
+{keep}'''
+    name = 'team3' if n == 'N' else f'team{n}'
+    team = '3' if n == 'N' else f'{n}'
+    rename = (f'''First give it your team number: the placeholder `N` after `team`, in the directory
+and file names (this directory's own name included) and inside the files, becomes your
+number (`lab2.pdf`, Task 4, "Create the Package"). The commands below are for team 3.
 
 ''' if n == 'N' else '')
-        use = f'''Part 2: the real cars. Select it with `vehicle_model:={model}` (`team:={n}` does).
-{rename}In AutoSDV's src/lab2_vehicles/:
+    return f'''# {model}: your team's Part 2 vehicle model
 
+Your team's vehicle model for the real cars (`lab2.pdf`, Part 2).
+
+{rename}Copy it into `~/AutoSDV/src/lab2_vehicles/`, then build it, check it, and run it
+on the car with the TA:
+
+    cd ~/AutoSDV
     colcon build --base-paths src --symlink-install --cmake-args -DCMAKE_BUILD_TYPE=Release \\
-        --packages-up-to {model}_launch
-    just lab2 gate team:={n}                       the vehicle gate; pass it before any car
-    just lab2 run team:={n}'''
-        tuning = f'''Its parameters are per car, in
-`{model}_launch/config/<car>/speed_controller.param.yaml` (car_a, car_b, car_c) under
-`speed_controller_params:`. Put each car's calibration (ff_deadband, ff_gain) in its own
-file.'''
-        gate = f'''
+        --packages-up-to {name}_vehicle_launch
+    source install/setup.bash
+    python3 selfcheck.py --car X          # in the handout's lab2_speed/, X your car's letter
+    just lab2 run team:={team}                # on the car, with the TA
 
-## The gate
+## The two files your team edits
 
-`just lab2 gate team:={n}` runs the model in the RC simulator against each car's PWM points
-and requires that it
+- `{model}_interface/{model}_interface/speed_pid.py`: the selected member's Part 1
+  `SpeedPID`, ported (change only the package name in its imports).
+- `{model}_launch/config/car_x/speed_controller.param.yaml`, x your car's lower-case
+  letter: your car's gains, and `ff_deadband` and `ff_gain` once you have measured your
+  car's motor (`lab2.pdf`, "Measure Your Car's Motor"). Edit your own car's file only.
 
-- holds the car's neutral PWM at rest and after a stop,
-- stops when `control_cmd` stops arriving, on an MRM, and on an emergency,
-- never pulls the ESC into reverse (a command at or below the car's `reverse_arm_pwm`),
+`config/sim/` is used only for a run on a workstation, never on the car.
 
-and then drives the graded route on the vehicle bench. A model that fails does not go
-on a car.
+{keep}'''
+
+
+def interface_readme(model: str) -> str:
+    return f'''# {model}_interface
+
+The vehicle interface's nodes: the actuator and its safety shell, the speed controller,
+the velocity report, and the gear, control-mode and steering nodes, copied from AutoSDV's
+`autosdv_vehicle_interface`.
+
+`{model}_interface/speed_pid.py` is your `SpeedPID`; the package's own README and
+`lab2.pdf` say what to do with it. The actuator calls `update()` every 10 ms inside its
+safety shell, which clamps the command, brakes to a stop by itself and takes over on a
+timeout or an emergency.
+
+The full developer reference for these nodes is AutoSDV's
+`src/vehicle/autosdv_vehicle_launch/autosdv_vehicle_interface/README.md`.
 '''
-    whose = "Lab 2 Part 1's" if kind == 'sim' else f"team {n}'s"
-    made = 'new_team.py --sim' if kind == 'sim' else (
-        'new_team.py --template' if n == 'N' else f'new_team.py {n}')
-    return f'''# {model}: {whose} Autoware vehicle model
-
-Generated by `{made}` from the reference model, autosdv_vehicle
-({source}). {use}
-
-## What is yours
-
-Everything in `{model}_interface` and `{model}_launch`: the actuator node, its safety
-shell, velocity_report, the gear, control-mode and steering nodes, and the launch file.
-
-The speed controller is `{model}_interface/{model}_interface/speed_pid.py`, the Lab 2
-SpeedPID stub, until you complete it: it holds the motor in neutral. {tuning}
-
-The contract with the rest of the stack is Autoware's vehicle interface:
-
-- in:  `/control/command/control_cmd`, `/control/command/emergency_cmd`,
-       `/system/fail_safe/mrm_state`
-- out: `/vehicle/status/velocity_status`, `steering_status`, `gear_status`,
-       `control_mode`
-
-and two names the lab's tools use: the actuator is `/autosdv/actuator_node`, and the
-bench's car model reads the motor PWM from its `debug/pwm_values`.
-
-## What is not
-
-- `{model}_description` installs autosdv_vehicle_description's files by reference: the
-  wheelbase and steering limit are the car's.
-- The launch file loads the vehicle's PWM points from
-  `individual_params/config/<vehicle_id>/autosdv_vehicle/actuator.param.yaml`. Keep that
-  line: the cars' stop PWMs differ, and a copied number drives a car instead of stopping it.
-{gate}'''
 
 
 KINDS = ('sim', 'car', 'template')
@@ -423,6 +433,7 @@ def generate(n, dest: Path, files: Dict[str, bytes], source: str,
             bench=(vid == SIM_ID and kind != 'sim')).encode()
     out['README.md'] = readme(model, {'car': n, 'template': 'N', 'sim': 0}[kind], source,
                               'sim' if kind == 'sim' else 'car').encode()
+    out[f'{model}_interface/README.md'] = interface_readme(model).encode()
     tmp = root.with_name(root.name + '.tmp')
     shutil.rmtree(tmp, ignore_errors=True)
     for rel, data in sorted(out.items()):
