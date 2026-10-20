@@ -54,7 +54,7 @@ run.log, play_log/):
   6. record 3 s more, disengage if still engaged, stop the recording, stop
      the stack
   7. audit the bag (`lab2_audit`: verdict, every graded metric with its value, the
-     car's reference value (the `reference` bag, ~/lab2/reference/uturn) and its marks,
+     fixed full-marks and zero lines (route_grade.ABSOLUTE) and its marks,
      validity, the total; violations; audit.png, opened when there is a display); on
      the bench, the gate verdict after it
 

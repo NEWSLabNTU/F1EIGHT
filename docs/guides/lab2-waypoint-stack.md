@@ -20,7 +20,7 @@ localized pose and the path) and the `SpeedPID` (the actuator's inner loop).
 | `just lab2 fuzz BAG` | (no stack) | TA: mutated copies of a valid bag through check-bags, grade and audit |
 | `just lab2 record` | (reads the running stack) | the submission bag, `rosbags/lab2_uturn_<next>` |
 | `just lab2 check-bags` | (no stack) | would the grader accept the latest bag? |
-| `just lab2 grade` | (no stack) | score the latest bag against the car's reference bag |
+| `just lab2 grade` | (no stack) | score the latest bag on fixed lines |
 | `just lab2 plot` | (no stack) | the latest bag in PlotJuggler |
 | `just lab2 config` / `init` | (no ROS) | show the settings and their sources / write `~/lab2/lab2.yaml` |
 
@@ -42,7 +42,7 @@ just lab2 preflight               # terminal 2
 just lab2 record                  # terminal 2: rosbags/lab2_uturn_1, then _2, ...
 just lab2 engage                  # terminal 3; Ctrl-C the recording when the car has stopped
 just lab2 check-bags              # the latest bag, with car and team
-just lab2 grade                   # the latest bag against `reference`
+just lab2 grade                   # the latest bag, on fixed lines
 just lab2 plot                    # the latest bag
 ```
 

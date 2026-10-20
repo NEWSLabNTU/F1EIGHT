@@ -45,7 +45,7 @@ twice, one car, one team. Exit 1 on any rejection.
 ## Grade
 
 `just lab2 grade --score BAG [--reference REFBAG]`, or `just lab2 grade` for the
-latest bag against the settings file's `reference`. Definitions, the points
+latest bag. A run is graded on its own curves against fixed lines; a `reference` bag, set in a settings file, is TA tooling only. Definitions, the points
 curve and every constant are in the `route_grade.py` docstring and header.
 Summary: steady window = first 90 % of 0.8 m/s to the start of the stop ramp;
 each window sample is put on the straight legs or in the U-turn by projecting
@@ -66,5 +66,5 @@ scores 0, with the reasons printed, unless it was engaged, finished at the
 stop, raised no MRM, never disengaged, and kept the localized pose within
 0.5 m of the path from engage to rest (`path_dev_max`).
 
-The reference bag is a TA run of `lab2_uturn` on the same car; keep it on that car
-at `~/lab2/reference/uturn`, the path the student spec gives.
+Students are graded on fixed lines only; no reference bag is kept on the cars. A
+`--reference REFBAG` (a TA run of `lab2_uturn` on the same car) remains for TA analysis.
