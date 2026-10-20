@@ -604,7 +604,7 @@ def plan(recipe, argv, cwd=REPO, bench=False):
             if ref and Path(ref, 'metadata.yaml').is_file():
                 out[out.index('--score') + 1:out.index('--score') + 1] = ['--reference', ref]
                 use('reference')
-            else:
+            elif ref:
                 print(f'warning: reference {_home(ref)} ({c.source("reference")}) is not a bag; '
                       'scored against the fixed absolute pass lines', file=sys.stderr)
     elif recipe == 'check-bags':

@@ -11,5 +11,6 @@
 route: lab2_uturn                   # the course `vehicle` drives; also names the bags (uturn_1, ...)
 course_dir: auto                    # auto: surveys/latest once `just lab2 survey-align` aligned it for
                                     # the route, else the route's packaged course; package; or a directory
-reference: ~/lab2/reference/uturn   # the car's TA reference bag that `grade` scores against
+# reference: no default. A run is graded on its own curves against fixed lines; a
+# `reference:` bag set in a settings file (TA use only) switches `grade` to it.
 bag_dir: rosbags                    # where `record` writes and `grade`/`check-bags`/`plot` look

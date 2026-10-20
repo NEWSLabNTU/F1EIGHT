@@ -38,7 +38,7 @@ def test_defaults_then_file_then_command_line(tmp_path):
     assert c.get('route') == 'hall_demo' and c.source('route') == str(f)
     assert c.get('team') == '3'
     assert c.get('bag_dir') == str(lc.REPO / 'rosbags') and c.source('bag_dir') == 'default'
-    assert c.get('reference') == os.path.expanduser('~/lab2/reference/uturn')
+    assert c.get('reference') is None     # graded on fixed lines unless a TA sets one
 
 
 def test_the_user_file_is_read_from_home_by_default(no_real_home):
@@ -523,10 +523,10 @@ def test_a_directory_not_made_here_is_never_overwritten(tmp_path, monkeypatch, c
     assert (old / lc.RUN_COURSE_KEY).is_file() and not (old / '.reused_from').exists()
 
 
-def test_lab2_home_moves_the_settings_file_and_the_reference(tmp_path, monkeypatch):
+def test_lab2_home_moves_the_settings_file_and_a_reference(tmp_path, monkeypatch):
     home = tmp_path / 'elsewhere'
     home.mkdir()
-    (home / 'lab2.yaml').write_text('car: C\n')
+    (home / 'lab2.yaml').write_text('car: C\nreference: ~/lab2/reference/uturn\n')
     monkeypatch.setenv('LAB2_HOME', str(home))
     c = lc.Config()
     assert c.file == home / 'lab2.yaml' and c.get('car') == 'C'
