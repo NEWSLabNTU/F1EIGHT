@@ -1,0 +1,44 @@
+<?xml version="1.0"?>
+<?xml-model href="http://download.ros.org/schema/package_format3.xsd" schematypens="http://www.w3.org/2001/XMLSchema"?>
+<package format="3">
+  <name>autosdv_lab3</name>
+  <version>0.1.0</version>
+  <description>
+    Lab 3, indoor map building and NDT localization: the mapping recorder, GLIM map
+    building and export, the anchor to the reflective board, the downsampler, the
+    lanelet2 loop check with its planning-simulator lap, and the launch files for the
+    mapping drive and the autonomous laps.
+  </description>
+  <maintainer email="jerry73204@gmail.com">aeon</maintainer>
+  <license>Apache-2.0</license>
+
+  <depend>rclpy</depend>
+  <depend>std_msgs</depend>
+  <depend>geometry_msgs</depend>
+  <depend>sensor_msgs</depend>
+  <exec_depend>python3-yaml</exec_depend>
+  <exec_depend>python3-numpy</exec_depend>
+  <exec_depend>rosbag2_py</exec_depend>
+  <exec_depend>autoware_adapi_v1_msgs</exec_depend>
+  <exec_depend>autoware_vehicle_msgs</exec_depend>
+  <exec_depend>tf2_msgs</exec_depend>
+  <exec_depend>nav_msgs</exec_depend>
+  <exec_depend>autoware_planning_msgs</exec_depend>
+  <exec_depend>tier4_system_msgs</exec_depend>
+  <!-- the planning-simulator lap -->
+  <exec_depend>autosdv_rc_sim</exec_depend>
+  <exec_depend>autosdv_vehicle_description</exec_depend>
+  <!-- the board detector, the anchor tool and the board pose initializer -->
+  <exec_depend>reflective_pose_core</exec_depend>
+  <exec_depend>reflective_pose_cli</exec_depend>
+  <exec_depend>reflective_pose_ros</exec_depend>
+  <exec_depend>reflective_pose_autoware</exec_depend>
+  <exec_depend>autosdv_launch</exec_depend>
+  <!-- GLIM is installed by ./setup.sh (step glim), not by rosdep -->
+
+  <test_depend>python3-pytest</test_depend>
+
+  <export>
+    <build_type>ament_python</build_type>
+  </export>
+</package>

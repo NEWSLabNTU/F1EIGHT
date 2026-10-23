@@ -1,0 +1,11 @@
+{
+  "global_mapping": {
+    "randomsampling_rate": 0.15,
+    "submap_voxel_resolution": 0.25,
+    "submap_voxel_resolution_max": 0.5,
+    "submap_voxel_resolution_dmin": 2.0,
+    "submap_voxel_resolution_dmax": 8.0,
+    "max_implicit_loop_distance": 15.0,
+    "min_implicit_loop_overlap": 0.2
+  }
+}

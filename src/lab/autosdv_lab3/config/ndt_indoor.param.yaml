@@ -1,0 +1,168 @@
+# Lab 3: the classroom NDT. A copy of autosdv_launch's ndt_scan_matcher.param.yaml
+# (tuned on the outdoor COSS map) with two values changed for a 10 x 15 m room,
+# both PROVISIONAL until measured on a car in the room:
+#   resolution 2.0 -> 1.0   a 2 m voxel holds a whole desk and a wall corner
+#                           together; 1 m keeps them apart
+#   NVTL gate  2.0 -> 1.3   NVTL scales with the voxel size (see below), so the
+#                           gate moves with the resolution or it tightens by itself
+# Built-in NDT only (pose_source:=ndt): the CUDA matcher reads its own file.
+
+/**:
+  ros__parameters:
+    frame:
+      # Vehicle reference frame
+      base_frame: "base_link"
+
+      # NDT reference frame
+      ndt_base_frame: "ndt_base_link"
+
+      # Map frame
+      map_frame: "map"
+
+
+    sensor_points:
+      # Tolerance of timestamp difference between current time and sensor pointcloud. [sec]
+      timeout_sec: 1.0
+
+      # Required distance of input sensor points. [m]
+      # If the max distance of input sensor points is lower than this value, the scan matching will not be performed.
+      required_distance: 10.0
+
+
+    ndt:
+      # The maximum difference between two consecutive
+      # transformations in order to consider convergence
+      trans_epsilon: 0.01
+
+      # The newton line search maximum step length
+      step_size: 0.1
+
+      # The ND voxel grid resolution
+      #
+      # 2.0, matching the CUDA matcher, because this project measured the
+      # difference rather than reasoning about it. On the COSS map, 4.0 gave 5x
+      # the per-frame position scatter (0.106 m against 0.020 m) and double the
+      # prediction correction: coarser voxels localise less precisely. It looks
+      # better only through NVTL, which scales with voxel size and so buys
+      # margin over the convergence gate without buying accuracy -- which is
+      # why the gate below moved with this value and not after it. The
+      # measurement is recorded beside the same parameter in
+      # cuda_ndt_matcher_launch/config/cuda_scan_matcher.param.yaml.
+      #
+      # This path shipped 4.0 until 2026-09-22, so `pose_source:=ndt` and
+      # `pose_source:=cuda_ndt` silently localised at different resolutions.
+      # Finer voxels cost CPU; this is the fallback path, and correctness wins.
+      resolution: 1.0  # Lab 3, provisional (outdoor 2.0)
+
+      # The number of iterations required to calculate alignment
+      max_iterations: 30
+
+      # Number of threads used for parallel computing
+      num_threads: 4
+
+      regularization:
+        enable: false
+
+        # Regularization scale factor
+        scale_factor: 0.01
+
+
+    initial_pose_estimation:
+      # The number of particles to estimate initial pose
+      particles_num: 200
+
+      # The number of initial random trials in the TPE (Tree-Structured Parzen Estimator).
+      # This value should be equal to or less than 'initial_estimate_particles_num' and more than 0.
+      # If it is equal to 'initial_estimate_particles_num', the search will be the same as a full random search.
+      n_startup_trials: 100
+
+
+    validation:
+      # Tolerance of timestamp difference between initial_pose and sensor pointcloud. [sec]
+      initial_pose_timeout_sec: 1.0
+
+      # Tolerance of distance difference between two initial poses used for linear interpolation. [m]
+      initial_pose_distance_tolerance_m: 10.0
+
+      # Tolerance of distance difference from initial pose to result pose. [m]
+      initial_to_result_distance_tolerance_m: 3.0
+
+      # The execution time which means probably NDT cannot matches scans properly. [ms]
+      critical_upper_bound_exe_time_ms: 100.0
+
+      # Tolerance for the number of times rejected estimation results consecutively
+      skipping_publish_num: 5
+
+
+    score_estimation:
+      # Converged param type
+      # 0=TRANSFORM_PROBABILITY, 1=NEAREST_VOXEL_TRANSFORMATION_LIKELIHOOD
+      converged_param_type: 1
+
+      # If converged_param_type is 0
+      # Threshold for deciding whether to trust the estimation result
+      converged_param_transform_probability: 3.0
+
+      # If converged_param_type is 1
+      # Threshold for deciding whether to trust the estimation result
+      #
+      # 2.0, matching the CUDA matcher, and it had to move WITH the resolution
+      # above: NVTL scales with voxel size (4.84 at resolution 4.0 against 2.90
+      # at 2.0 on the same recording), so keeping 2.2 while halving the
+      # resolution would have tightened this gate rather than left it alone,
+      # and frames that used to converge would simply stop publishing a pose.
+      converged_param_nearest_voxel_transformation_likelihood: 1.3  # Lab 3, provisional (outdoor 2.0)
+
+      # Scan matching score based on no ground LiDAR scan
+      no_ground_points:
+        # AutoSDV: Ground filtering configuration
+        # Disabled to preserve point count for NDT matching
+        # Excessive filtering can cause insufficient points and yaw drift
+        # Use crop_box filtering as primary point reduction method
+        enable: false
+
+        # If lidar_point.z - base_link.z <= this threshold , the point will be removed
+        # Not used when enable: false
+        z_margin_for_ground_removal: 0.8
+
+
+    covariance:
+      # The covariance of output pose
+      # Note that this covariance matrix is empirically derived
+      output_pose_covariance:
+        [
+          0.0225, 0.0,   0.0,   0.0,      0.0,      0.0,
+          0.0,   0.0225, 0.0,   0.0,      0.0,      0.0,
+          0.0,   0.0,   0.0225, 0.0,      0.0,      0.0,
+          0.0,   0.0,   0.0,   0.000625, 0.0,      0.0,
+          0.0,   0.0,   0.0,   0.0,      0.000625, 0.0,
+          0.0,   0.0,   0.0,   0.0,      0.0,      0.000625,
+        ]
+
+      # 2D Real-time covariance estimation with multiple searches (output_pose_covariance is the minimum value)
+      covariance_estimation:
+        # Covariance estimation type
+        # 0=FIXED_VALUE, 1=LAPLACE_APPROXIMATION, 2=MULTI_NDT, 3=MULTI_NDT_SCORE
+        covariance_estimation_type: 0
+
+        # Offset arrangement in covariance estimation [m]
+        # initial_pose_offset_model_x & initial_pose_offset_model_y must have the same number of elements.
+        initial_pose_offset_model_x: [0.0, 0.0, 0.5, -0.5, 1.0, -1.0]
+        initial_pose_offset_model_y: [0.5, -0.5, 0.0, 0.0, 0.0, 0.0]
+
+        # In MULTI_NDT_SCORE, the parameter that adjusts the estimated 2D covariance
+        temperature: 0.05
+
+        # Scale value for adjusting the estimated covariance by a constant multiplication
+        scale_factor: 1.0
+
+
+    dynamic_map_loading:
+      # Dynamic map loading distance
+      update_distance: 20.0
+
+      # Dynamic map loading loading radius
+      map_radius: 150.0
+
+      # Radius of input LiDAR range (used for diagnostics of dynamic map loading)
+      lidar_radius: 100.0

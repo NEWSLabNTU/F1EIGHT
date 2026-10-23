@@ -1,0 +1,8 @@
+{
+  "sensors": {
+    "global_shutter_lidar": false,
+    "intensity_field": "intensity",
+    "ring_field": "",
+    "autoconf_perpoint_times": true
+  }
+}

@@ -29,6 +29,8 @@ mod sim 'just/sim.just'
 mod tool 'just/tool.just'
 # Lab 2, ArUco localization and waypoint following: bench, vehicle, grading
 mod lab2 'just/lab2.just'
+# Lab 3, indoor map building and NDT localization: GLIM, board anchor, lanelet loop, laps
+mod lab3 'just/lab3.just'
 # ArUco map: survey the boards into a marker map, check the ArUco localization on it
 mod aruco-map 'just/aruco_map.just'
 # The coach-board pursuit stack (Lab 2 before 2026-10-13), and the field

@@ -1,0 +1,49 @@
+<?xml version="1.0"?>
+<!--
+  Lab 3, week 2: the full stack on the team's own map (`just lab3 run team:=N`).
+
+  NDT localizes against map_path/pointcloud_map.pcd with the classroom parameters,
+  and the board pose initializer sets the start pose: it waits for the car to stand
+  still, finds the board, and calls /localization/initialize with the pose that puts
+  the board where the map says it is; NDT refines from there. No pose is given in RViz.
+  It loads the board profile the anchor used (map_path/board_profile.yaml), so the
+  board is where the map was built to have it.
+
+  Planning and control run as on any drive; `just lab3 route` sets the clockwise loop
+  and engages.
+-->
+<launch>
+  <arg name="vehicle_id"
+       description="REQUIRED: car_a, car_b or car_c (individual_params/config/VEHICLE_ID)"/>
+  <arg name="map_path" description="REQUIRED: the team's map folder"/>
+  <arg name="sensor" default="$(eval &quot;'vlp16' if '$(var vehicle_id)' == 'car_a' else 'robin_w'&quot;)"
+       description="the LiDAR family: vlp16 (car A) or robin_w (cars B and C, and sim)"/>
+  <arg name="board_config" default="$(var map_path)/board_profile.yaml"
+       description="the board profile; default the copy the anchor wrote beside the map"/>
+  <arg name="pose_source" default="ndt"
+       description="ndt (default: reads ndt_param_file) or cuda_ndt (its own parameters)"/>
+  <arg name="ndt_param_file" default="$(find-pkg-share autosdv_lab3)/config/ndt_indoor.param.yaml"/>
+  <arg name="pose_initializer" default="board" description="board, or none to set the pose in RViz"/>
+  <arg name="is_simulation" default="false"/>
+  <arg name="rviz" default="false"/>
+
+  <let name="lidar_topic" value="$(eval &quot;'/sensing/lidar/velodyne_points' if '$(var sensor)' == 'vlp16' else '/sensing/lidar/iv_points'&quot;)"/>
+
+  <include file="$(find-pkg-share autosdv_launch)/launch/autosdv.launch.yaml">
+    <arg name="vehicle_id" value="$(var vehicle_id)"/>
+    <arg name="map_path" value="$(var map_path)"/>
+    <arg name="pose_source" value="$(var pose_source)"/>
+    <arg name="ndt_param_file" value="$(var ndt_param_file)"/>
+    <arg name="use_gnss" value="false"/>
+    <arg name="use_ntrip" value="false"/>
+    <arg name="is_simulation" value="$(var is_simulation)"/>
+    <arg name="rviz" value="$(var rviz)"/>
+  </include>
+
+  <include file="$(find-pkg-share reflective_pose_autoware)/launch/board_pose_initializer.launch.xml"
+           if="$(eval &quot;'$(var pose_initializer)' == 'board'&quot;)">
+    <arg name="config_file" value="$(var board_config)"/>
+    <arg name="detector_params_file" value="$(find-pkg-share autosdv_lab3)/config/board/detector_$(var sensor).param.yaml"/>
+    <arg name="input_topic" value="$(var lidar_topic)"/>
+  </include>
+</launch>

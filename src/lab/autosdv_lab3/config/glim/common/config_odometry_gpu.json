@@ -1,0 +1,9 @@
+{
+  "odometry_estimation": {
+    "voxel_resolution": 0.2,
+    "voxel_resolution_max": 0.5,
+    "voxel_resolution_dmin": 2.0,
+    "voxel_resolution_dmax": 8.0,
+    "num_threads": 4
+  }
+}

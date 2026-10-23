@@ -1,0 +1,63 @@
+<?xml version="1.0"?>
+<!--
+  Lab 3, week 1: the stack for the mapping drive (`just lab3 stack car_b`).
+
+  The sensors as on any drive (LiDAR, ZED with its IMU, the IMU corrector, wheel
+  speed), the vehicle description's TF, and the board detector, so the recorder in
+  the second terminal can see that the board is detected at the start and the end.
+  No map, no localization, no planning: there is no map yet. The actuator is a dry
+  run (it never writes the PCA9685): drive with the transmitter, the selector switch
+  on the joystick.
+-->
+<launch>
+  <arg name="vehicle_id"
+       description="REQUIRED: car_a, car_b or car_c (individual_params/config/VEHICLE_ID)"/>
+  <arg name="sensor" default="$(eval &quot;'vlp16' if '$(var vehicle_id)' == 'car_a' else 'robin_w'&quot;)"
+       description="the LiDAR family: vlp16 (car A) or robin_w (cars B and C, and sim)"/>
+  <arg name="board_config" default="$(find-pkg-share autosdv_lab3)/config/board/lab3_$(var sensor).yaml"
+       description="the board profile: board, gates, covariance"/>
+  <arg name="rviz" default="false"/>
+
+  <let name="lidar_topic" value="$(eval &quot;'/sensing/lidar/velodyne_points' if '$(var sensor)' == 'vlp16' else '/sensing/lidar/iv_points'&quot;)"/>
+  <let name="launch_vehicle_interface" value="false"/>
+  <let name="launch_pointcloud_preprocessor" value="false"/>
+  <let name="launch_gyro_bias_estimator" value="false"/>
+
+  <group scoped="true">
+    <let name="rviz" value="false"/>
+    <include file="$(find-pkg-share autosdv_launch)/launch/autosdv.launch.yaml">
+      <arg name="vehicle_id" value="$(var vehicle_id)"/>
+      <arg name="use_gnss" value="false"/>
+      <arg name="use_ntrip" value="false"/>
+      <arg name="launch_map" value="false"/>
+      <arg name="launch_localization" value="false"/>
+      <arg name="launch_perception" value="false"/>
+      <arg name="launch_planning" value="false"/>
+      <arg name="launch_control" value="false"/>
+      <arg name="launch_system_monitor" value="false"/>
+      <arg name="launch_system" value="false"/>
+      <arg name="launch_api" value="false"/>
+      <arg name="launch_shared_pointcloud_container" value="false"/>
+      <arg name="launch_empty_objects_publisher" value="false"/>
+      <arg name="is_simulation" value="true"/>
+    </include>
+  </group>
+
+  <!-- wheel speed (the detector's motion guard and the bag's speed check); the
+       actuator as a dry run, never driving -->
+  <include file="$(find-pkg-share autosdv_vehicle_launch)/launch/vehicle_interface.launch.xml">
+    <arg name="launch_vehicle_interface" value="true"/>
+    <arg name="is_simulation" value="true"/>
+    <arg name="launch_signal_manager" value="false"/>
+    <arg name="vehicle_id" value="$(var vehicle_id)"/>
+  </include>
+
+  <group>
+    <push-ros-namespace namespace="lab3"/>
+    <include file="$(find-pkg-share reflective_pose_ros)/launch/board_detector.launch.xml">
+      <arg name="config_file" value="$(var board_config)"/>
+      <arg name="params_file" value="$(find-pkg-share autosdv_lab3)/config/board/detector_$(var sensor).param.yaml"/>
+      <arg name="input_topic" value="$(var lidar_topic)"/>
+    </include>
+  </group>
+</launch>

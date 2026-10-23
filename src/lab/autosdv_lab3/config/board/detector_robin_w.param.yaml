@@ -1,0 +1,12 @@
+# board_detector_node wiring for Lab 3, Robin-W (cars B and C). The gates are in lab3_robin_w.yaml.
+/**:
+  ros__parameters:
+    # the driver's frame_id (lidar.launch.xml, robin_w)
+    sensor_frame: robin_w
+    base_frame: base_link
+    # Scans stacked per attempt while standing still. Three: 192 lines already cover the board.
+    accumulate_scans: 3
+    # The motion guard: stacking a rolling car's scans smears the board.
+    twist_topic: /sensing/vehicle_velocity_converter/twist_with_covariance
+    twist_type: geometry_msgs/msg/TwistWithCovarianceStamped
+    max_speed_for_accumulation: 0.05

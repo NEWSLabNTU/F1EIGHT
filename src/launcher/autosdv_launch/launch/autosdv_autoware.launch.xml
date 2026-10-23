@@ -48,6 +48,7 @@
        explicitly to the localization component below. -->
   <arg name="pointcloud_backend" default="cpu" description="cpu or cuda: sensing-side point cloud preprocessing"/>
   <arg name="localization_pointcloud_backend" default="cpu" description="cpu or cuda: the NDT input preprocessing chain"/>
+  <arg name="ndt_param_file" default="$(find-pkg-share autosdv_launch)/config/localization/ndt_scan_matcher/ndt_scan_matcher.param.yaml" description="built-in NDT's parameter file (pose_source:=ndt)"/>
 
   <!-- AutoSDV: retarget map_height_fitter (used by autoware_pose_initializer
        for GNSS auto-init, and by the RViz initial-pose adaptor for "2D Pose
@@ -236,6 +237,7 @@
       <arg name="use_sim_time" value="$(var use_sim_time)"/>
       <arg name="use_gnss" value="$(var use_gnss)"/>
       <arg name="localization_pointcloud_backend" value="$(var localization_pointcloud_backend)"/>
+      <arg name="ndt_param_file" value="$(var ndt_param_file)"/>
     </include>
   </group>
 

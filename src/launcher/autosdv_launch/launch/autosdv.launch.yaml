@@ -155,6 +155,11 @@ launch:
     description: "Pose estimation source: cuda_ndt (default, CUDA NDT), ndt (built-in Autoware CPU NDT), mcl (2-D Monte Carlo against an occupancy grid)"
 
 - arg:
+    name: ndt_param_file
+    default: "$(find-pkg-share autosdv_launch)/config/localization/ndt_scan_matcher/ndt_scan_matcher.param.yaml"
+    description: "Built-in NDT's parameter file (pose_source:=ndt); the CUDA matcher reads its own. Lab 3 passes autosdv_lab3's ndt_indoor.param.yaml"
+
+- arg:
     name: pose_source_package
     default: "auto"
     description: "Package providing launch/pose_estimator.launch.xml. 'auto' derives it from pose_source (cuda_ndt -> cuda_ndt_matcher_launch, anything else -> built-in Autoware NDT). Set explicitly only to plug in a third-party estimator; use pose_source:=ndt for built-in NDT (ros2 launch rejects an empty value)"
@@ -369,6 +374,9 @@ launch:
     -
       name: localization_pointcloud_backend
       value: $(var localization_pointcloud_backend)
+    -
+      name: ndt_param_file
+      value: $(var ndt_param_file)
     -
       name: pointcloud_backend
       value: $(var pointcloud_backend)

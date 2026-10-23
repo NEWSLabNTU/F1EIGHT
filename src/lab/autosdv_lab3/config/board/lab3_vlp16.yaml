@@ -1,0 +1,78 @@
+# Lab 3 board profile: AutoSDV with a Velodyne VLP-16 (car A),
+# the 0.6 m board mounted LOW on a classroom wall.
+#
+# Used by both halves of the lab: `just lab3 anchor` (the map section) and the board
+# pose initializer in week 2 (the runtime section). The board is low on purpose: its
+# centre at about 0.4 m is near the LiDAR's own height, so the beams meet it from about
+# 1 m out. At the golf cart's 1.3 m it is above the VLP-16's +15 deg up to 4-5 m away.
+#
+# PROVISIONAL. The geometry follows the mounting in lab3-plan.md (bottom edge 0.1 m,
+# centre 0.4 m). The values marked UNMEASURED need a bag of the board on the car.
+# 16 rings 2 deg apart: at 5 m the 0.6 m board spans about 3 rings, at 10 m one or two, so the range is capped at 9 m.
+
+board:
+  # The map frame: origin on the floor below the board centre, x out of the wall
+  # along the board normal, z up. Measure the real centre height when the board is
+  # mounted and put it here: the anchor places the board at exactly this pose.
+  pose_in_map: [0.0, 0.0, 0.40, 0.0, 0.0, 0.0]
+  width: 0.6
+  height: 0.6
+
+detector:
+  sensor: vlp16
+  # UNMEASURED: the Velodyne convention (above 100 retroreflective). The first
+  # number to change if the board does not cluster, or white walls do.
+  intensity_threshold: 100.0
+  min_confidence: 0.6
+
+  runtime:
+    # UNMEASURED: the LiDAR's optical centre above the ground, standing in for
+    # base_link's height while sensor_kit_calibration puts the LiDAR at z = 0.
+    # The two must add up to the real sensor height.
+    base_link_height_above_ground: 0.30
+    range_min: 1.0
+    range_max: 9.0
+    # Ground-relative band around the board (0.1 to 0.7 m), with margin. The floor
+    # itself is excluded by the intensity gate, not by height.
+    height_min: 0.03
+    height_max: 0.90
+    cluster_tolerance: 0.25
+    cluster_min_points: 15
+    board_centre_height: 0.40
+    centre_height_tolerance: 0.20
+    extent_tolerance: [0.8, 1.5]
+    extent_sampling_slack: true
+    planarity_max_thickness: 0.08
+    # Wall-mounted, so vertical: 0.25 is about 14 deg.
+    verticality_max_dot: 0.25
+    density_max_ratio: 1.4
+    density_check_enabled: false
+
+  map:
+    # The levelled map (floor at z = 0). The AABB is the only height filter here;
+    # x and y are open because the board's place in the SLAM frame is unknown.
+    aabb:
+      min: [-.inf, -.inf, 0.03]
+      max: [.inf, .inf, 0.90]
+    range_min: 0.0
+    range_max: .inf
+    # A GLIM export is far denser than one scan; 0.10 m joins the board's points
+    # without reaching the wall's other reflectors.
+    cluster_tolerance: 0.10
+    cluster_min_points: 50
+    board_centre_height: 0.40
+    centre_height_tolerance: 0.20
+    extent_tolerance: [0.8, 1.5]
+    planarity_max_thickness: 0.08
+    verticality_max_dot: 0.25
+    density_max_ratio: 1.4
+    density_check_enabled: false
+
+covariance:
+  sigma_xy_base: 0.15
+  sigma_xy_per_metre: 0.03
+  sigma_z: 0.10
+  sigma_yaw_base: 0.05
+  sigma_roll_pitch: 0.02
+  safety_factor: 2.0
+  unconstrained_axis_sigma: 1.0

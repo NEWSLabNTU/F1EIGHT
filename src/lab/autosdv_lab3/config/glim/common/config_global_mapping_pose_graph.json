@@ -1,0 +1,8 @@
+{
+  "global_mapping": {
+    "min_travel_dist": 5.0,
+    "max_neighbor_dist": 3.0,
+    "vgicp_voxel_resolution": 0.5,
+    "gicp_max_correspondence_dist": 1.0
+  }
+}

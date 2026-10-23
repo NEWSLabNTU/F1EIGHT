@@ -600,6 +600,26 @@ STEPS: list[Step] = [
         note="Rebuild this after changing the range_libc submodule pin.",
     ),
     Step(
+        id="glim",
+        label="GLIM (LiDAR-IMU mapping, for Lab 3)",
+        why="`just lab3 map` builds the classroom point cloud map with it. "
+            "Not a rosdep key: it comes from koide3's PPA, as the CUDA 12.6 "
+            "build where there is an NVIDIA GPU and the CPU build elsewhere.",
+        group="Libraries",
+        run=[_S("install-glim.sh")],
+        # No hardware="cuda": the script falls back to the CPU build, so the
+        # step applies everywhere.
+        requires=Requires(sudo=True),
+        after=("ros2",),
+        # Not ci: nothing in the build links against it, and the PPA is one
+        # more third-party source a CI image does not need.
+        profiles=_on(*DEV),
+        verify=["bash", "-c",
+                "source /opt/ros/humble/setup.bash >/dev/null 2>&1 && "
+                "ros2 pkg prefix glim_ros >/dev/null 2>&1"],
+        note="AUTOSDV_GLIM_VARIANT=cpu|cuda overrides the GPU detection.",
+    ),
+    Step(
         id="blickfeld",
         label="Blickfeld Scanner Library",
         why="The Cube1 LiDAR driver. Selecting it accepts the library's "

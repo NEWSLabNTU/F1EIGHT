@@ -249,7 +249,7 @@ just --list             # Show all available commands
 ```
 
 Grouped commands live in justfile modules under `just/`, so the top-level list
-stays short: `arbiter`, `aruco-map`, `bag`, `coach`, `control`, `coss`, `lab2`, `map`,
+stays short: `arbiter`, `aruco-map`, `bag`, `coach`, `control`, `coss`, `lab2`, `lab3`, `map`,
 `sim`, `tool`, plus `demo` in `demo/`.
 `just <module>` lists that module's recipes, and both spellings work —
 `just bag play` and `just bag::play`.
@@ -359,6 +359,8 @@ just lab2 stack car_b                     # the Lab 2 stack (waypoints + ArUco) 
 ```
 The RC simulator's vehicle model, grader and limits: `docs/guides/rc-sim.md`.
 Lab 2 Part 1 (the course, the 9 checks, the controller and its physics): `docs/guides/lab2-part1-sim.md`.
+Lab 3 (indoor GLIM map, anchor to the reflective board, lanelet2 loop, NDT laps):
+`docs/guides/lab3.md`; package `src/lab/autosdv_lab3`, recipes `just lab3`.
 Part 1 runs ONE simulation model for everyone, `lab2_sim_vehicle`
 (`vehicle_model:=lab2_sim_vehicle vehicle_id:=sim`; the car models `teamN_vehicle` are Part
 2's), resolved from this repository's install: the handout's `lab2_sim_vehicle_launch/`

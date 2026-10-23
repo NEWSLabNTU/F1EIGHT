@@ -1,0 +1,12 @@
+# board_detector_node wiring for Lab 3, VLP-16 (car A). The gates are in lab3_vlp16.yaml.
+/**:
+  ros__parameters:
+    # the driver's frame_id (config/VLP16.param.yaml)
+    sensor_frame: vlp16
+    base_frame: base_link
+    # Scans stacked per attempt while standing still. Ten, because 16 rings put only two or three on the board at 5 m.
+    accumulate_scans: 10
+    # The motion guard: stacking a rolling car's scans smears the board.
+    twist_topic: /sensing/vehicle_velocity_converter/twist_with_covariance
+    twist_type: geometry_msgs/msg/TwistWithCovarianceStamped
+    max_speed_for_accumulation: 0.05

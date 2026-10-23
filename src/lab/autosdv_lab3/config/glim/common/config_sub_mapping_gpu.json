@@ -1,0 +1,14 @@
+{
+  "sub_mapping": {
+    "keyframe_update_strategy": "DISPLACEMENT",
+    "keyframe_update_interval_trans": 0.15,
+    "keyframe_update_interval_rot": 0.2,
+    "max_num_keyframes": 40,
+    "registration_error_factor_type": "VGICP_GPU",
+    "keyframe_randomsampling_rate": 1.0,
+    "keyframe_voxel_resolution": 0.15,
+    "submap_downsample_resolution": 0.03,
+    "submap_target_num_points": -1,
+    "submap_voxel_resolution": 0.25
+  }
+}
