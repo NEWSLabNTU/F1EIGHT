@@ -155,6 +155,11 @@ launch:
     description: "Pose estimation source: cuda_ndt (default, CUDA NDT), ndt (built-in Autoware CPU NDT), mcl (2-D Monte Carlo against an occupancy grid)"
 
 - arg:
+    name: planning_profile
+    default: "stock"
+    description: "stock (autoware_launch's planning files) or rc (config/planning_rc/: no reversing pull-outs, finer path, the car's curvature). Lab 3 drives with rc"
+
+- arg:
     name: ndt_param_file
     default: "$(find-pkg-share autosdv_launch)/config/localization/ndt_scan_matcher/ndt_scan_matcher.param.yaml"
     description: "Built-in NDT's parameter file (pose_source:=ndt); the CUDA matcher reads its own. Lab 3 passes autosdv_lab3's ndt_indoor.param.yaml"
@@ -377,6 +382,9 @@ launch:
     -
       name: ndt_param_file
       value: $(var ndt_param_file)
+    -
+      name: planning_profile
+      value: $(var planning_profile)
     -
       name: pointcloud_backend
       value: $(var pointcloud_backend)

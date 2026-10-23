@@ -556,8 +556,12 @@ def main(argv=None) -> int:
             print('error: no /localization/kinematic_state: is the stack running and localized?',
                   file=sys.stderr)
             return 1
+        # One route, planned from where the car starts, for every lap: each lap ends at
+        # the same goal, on the same legs. Re-planning from where the last lap stopped
+        # moves every goal 2.5 m further back each lap, until goals land in corners and
+        # the car stops there unable to pull out (measured: lap 2 in the RC simulator).
+        route = loop_route(loop, start=api.pose())
         for lap in range(1, args.laps + 1):
-            route = loop_route(loop, start=api.pose())
             print(f'lap {lap}/{args.laps}: ' + describe(route))
             for i, leg in enumerate(route.legs):
                 ok, msg = api.set_route(leg)

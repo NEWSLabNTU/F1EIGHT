@@ -79,14 +79,19 @@ None of these has been measured on a car; each says so in its file.
   curves tighter than 1 m; in the RC simulator 1.2 m corners stalled and 1.6 m ones
   drove. `check-lanelet` requires 1.5 m (`PLANNER_MIN_RADIUS`, provisional).
 - **A lap is two legs.** The mission planner refuses a route that enters a lanelet
-  twice, so `route.py` drives a lap as two routes with a stop between.
-- **The second lap stalls in the simulator.** The car stops lap 1 about 13 deg off the
-  lane, and Autoware's start planner then plans a back-out; the car cannot reverse.
-  Moving goals onto straights did not fix it. Both the car and the RC simulator plan
-  with `autoware_launch`'s stock planning files (`autosdv_launch/config/planning` is
-  an unused, pre-1.5.0 copy), so the fix is a planning override for the RC scale
-  (start planner `enable_back` off, path interval, validator curvature), not yet made.
-  One lap per `just lab3 route` call works.
+  twice, so `route.py` drives a lap as two routes with a stop between. Every lap reuses
+  the first lap's goals: re-planning from where the car stopped crept the goals 2.5 m
+  back per lap, into the corners.
+- **Planning runs with `planning_profile:=rc`** (`lab3_run.launch.xml`, the simulator
+  lap). Autoware's stock planning left the car parked at the start of lap 2: from a
+  stop about 10 deg off the lane the start planner either planned a back-out the car
+  cannot drive or, with reversing off, found no forward path and held it. The profile
+  drops the start planner and the reversing manoeuvres, halves the path interval and
+  allows the car's own curvature; `autosdv_launch/config/planning_rc/README.md` lists
+  each change. Measured in the RC simulator: 5 of 5 runs of three laps (15 laps, 30
+  route changes). Before the goal planner's reversing modes were off, one run in three
+  lost the behavior planning container to an rclcpp crash on a route change; not seen
+  since, but not ruled out.
 - **A counter-clockwise loop routes but does not drive** in the simulator (validator
   curvature), even where its clockwise mirror does. The check fails it on requirement
   3 regardless.

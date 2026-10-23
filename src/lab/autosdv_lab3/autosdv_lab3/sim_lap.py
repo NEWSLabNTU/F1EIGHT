@@ -111,7 +111,8 @@ def run_lap(map_dir: str, timeout: Optional[float] = None, keep_log: bool = Fals
     track = prepare_run_dir(map_dir, route, run_dir)
     log_path = run_dir / 'stack.log'
     cmd = ['play_launch', 'launch', '--web-addr', web_addr, '--log-dir', str(run_dir / 'play_log'),
-           'autosdv_rc_sim', 'rc_sim.launch.xml', 'rviz:=false', f'track_dir:={track}']
+           'autosdv_rc_sim', 'rc_sim.launch.xml', 'rviz:=false', f'track_dir:={track}',
+           'planning_profile:=rc']   # Lab 3 drives with the RC planning profile
     log(f'sim lap: {loop.length:.1f} m loop, {len(route.legs)} route(s), '
         f'{len(route.waypoints)} waypoints, lap timeout {lap_timeout:.0f} s; log {log_path}')
     cwd = _repo_tmp().parent if (_repo_tmp().parent / 'versions.yaml').is_file() else run_dir

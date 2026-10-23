@@ -29,6 +29,8 @@
   <exec_depend>autosdv_vehicle_description</exec_depend>
   <exec_depend>autosdv_coach_lab</exec_depend>          <!-- sim_pose_init -->
   <exec_depend>autoware_launch</exec_depend>
+  <!-- autosdv_launch (the planning component) is needed at run time but not declared:
+       autosdv_launch already exec_depends on this package, and colcon refuses the cycle -->
   <exec_depend>autoware_imu_corrector</exec_depend>
   <exec_depend>individual_params</exec_depend>
 

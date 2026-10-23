@@ -9,8 +9,8 @@
   It loads the board profile the anchor used (map_path/board_profile.yaml), so the
   board is where the map was built to have it.
 
-  Planning and control run as on any drive; `just lab3 route` sets the clockwise loop
-  and engages.
+  Planning runs with planning_profile:=rc (no reversing pull-outs, a finer path, the
+  car's own curvature limit); `just lab3 route` sets the clockwise loop and engages.
 -->
 <launch>
   <arg name="vehicle_id"
@@ -34,6 +34,7 @@
     <arg name="map_path" value="$(var map_path)"/>
     <arg name="pose_source" value="$(var pose_source)"/>
     <arg name="ndt_param_file" value="$(var ndt_param_file)"/>
+    <arg name="planning_profile" value="rc"/>
     <arg name="use_gnss" value="false"/>
     <arg name="use_ntrip" value="false"/>
     <arg name="is_simulation" value="$(var is_simulation)"/>

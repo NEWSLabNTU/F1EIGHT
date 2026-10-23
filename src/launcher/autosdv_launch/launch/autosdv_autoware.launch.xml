@@ -48,6 +48,7 @@
        explicitly to the localization component below. -->
   <arg name="pointcloud_backend" default="cpu" description="cpu or cuda: sensing-side point cloud preprocessing"/>
   <arg name="localization_pointcloud_backend" default="cpu" description="cpu or cuda: the NDT input preprocessing chain"/>
+  <arg name="planning_profile" default="stock" description="stock (autoware_launch's planning files) or rc (config/planning_rc/: no reversing pull-outs, finer path, the car's curvature)"/>
   <arg name="ndt_param_file" default="$(find-pkg-share autosdv_launch)/config/localization/ndt_scan_matcher/ndt_scan_matcher.param.yaml" description="built-in NDT's parameter file (pose_source:=ndt)"/>
 
   <!-- AutoSDV: retarget map_height_fitter (used by autoware_pose_initializer
@@ -272,7 +273,8 @@
 
   <!-- Planning -->
   <group if="$(var launch_planning)">
-    <include file="$(find-pkg-share autoware_launch)/launch/components/tier4_planning_component.launch.xml">
+    <include file="$(find-pkg-share autosdv_launch)/launch/components/autosdv_planning_component.launch.xml">
+      <arg name="planning_profile" value="$(var planning_profile)"/>
       <arg name="module_preset" value="$(var planning_module_preset)"/>
       <arg name="enable_all_modules_auto_mode" value="$(var enable_all_modules_auto_mode)"/>
       <arg name="is_simulation" value="$(var is_simulation)"/>

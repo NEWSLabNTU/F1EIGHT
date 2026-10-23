@@ -1,18 +1,26 @@
 <?xml version="1.0"?>
 <launch>
   <!-- COPY of autoware_launch/launch/components/tier4_planning_component.launch.xml
-       (Autoware 1.5.0) with ONE change: common_param_path points at this package's
-       config/common.param.yaml (raised speed/accel caps for the 11 m/s lab profile).
-       autoware.launch.xml exposes no argument for it, and /opt is never patched.
+       (Autoware 1.5.0). autoware.launch.xml exposes no argument for these files and /opt
+       is never patched, so AutoSDV composes planning itself. Two changes from upstream:
+
+         common_param_path   an argument (the RC simulator raises the speed caps with it)
+         planning_profile    stock (default): upstream's files, unchanged.
+                             rc: config/planning_rc/ for the files the RC car needs
+                             changed, and no start planner module (README.md there
+                             says what and why)
+
        Re-diff against upstream after an Autoware upgrade. -->
+  <arg name="planning_profile" default="stock" description="stock or rc (config/planning_rc/)"/>
+  <arg name="common_param_path" default="$(find-pkg-share autoware_launch)/config/planning/scenario_planning/common/common.param.yaml"/>
+  <!-- upstream declares this in autoware.launch.xml and the component inherits it by scope -->
+  <arg name="pointcloud_container_name" default="pointcloud_container"/>
   <!-- NOTE: optional parameters are written here -->
   <arg name="module_preset" default="default"/>
   <arg name="enable_all_modules_auto_mode" default="false"/>
   <arg name="is_simulation" default="false"/>
   <arg name="use_sim_time" default="false"/>
   <arg name="vehicle_model" default="sample_vehicle"/>
-  <!-- upstream declares this in autoware.launch.xml and the component inherits it by scope -->
-  <arg name="pointcloud_container_name" default="pointcloud_container"/>
 
   <!-- Input topic parameters for planning modules -->
   <arg name="planning_input_objects_topic_name" default="/perception/object_recognition/objects"/>
@@ -27,6 +35,11 @@
   </group>
 
   <include file="$(find-pkg-share autoware_launch)/config/planning/preset/$(var module_preset)_preset.yaml"/>
+  <!-- AutoSDV rc: no start planner. Its pull-outs from a stop a few degrees off the lane
+       either reverse (the car cannot) or, with reversing off, find no forward path and hold
+       the car where it is; a loop has no parking spot to pull out of, and lane following
+       starts from the centreline and steers the offset out (Lab 3: lap 2 in the RC sim). -->
+  <let name="launch_start_planner_module" value="false" if="$(eval &quot;'$(var planning_profile)' == 'rc'&quot;)"/>
 
   <include file="$(find-pkg-share tier4_planning_launch)/launch/planning.launch.xml">
     <arg name="vehicle_param_file" value="$(find-pkg-share $(var vehicle_model)_description)/config/vehicle_info.param.yaml"/>
@@ -40,7 +53,7 @@
 
     <!-- common -->
     <arg name="common_config_path" value="$(find-pkg-share autoware_launch)/config/planning/scenario_planning/common"/>
-    <arg name="common_param_path" value="$(find-pkg-share autosdv_rc_sim)/config/common.param.yaml"/>
+    <arg name="common_param_path" value="$(var common_param_path)"/>
     <arg name="nearest_search_param_path" value="$(var common_config_path)/nearest_search.param.yaml"/>
     <arg name="costmap_generator_param_path" value="$(var common_config_path)/costmap_generator.param.yaml"/>
 
@@ -49,7 +62,7 @@
 
     <!-- behavior path planner -->
     <arg name="behavior_path_config_path" value="$(find-pkg-share autoware_launch)/config/planning/scenario_planning/lane_driving/behavior_planning/behavior_path_planner"/>
-    <arg name="behavior_path_planner_common_param_path" value="$(var behavior_path_config_path)/behavior_path_planner.param.yaml"/>
+    <arg name="behavior_path_planner_common_param_path" value="$(eval &quot;'$(find-pkg-share autosdv_launch)/config/planning_rc/behavior_path_planner.param.yaml' if '$(var planning_profile)' == 'rc' else '$(var behavior_path_config_path)/behavior_path_planner.param.yaml'&quot;)"/>
     <arg name="behavior_path_planner_scene_module_manager_param_path" value="$(var behavior_path_config_path)/scene_module_manager.param.yaml"/>
     <arg name="behavior_path_planner_side_shift_module_param_path" value="$(var behavior_path_config_path)/side_shift/side_shift.param.yaml"/>
     <arg
@@ -63,8 +76,8 @@
       value="$(var behavior_path_config_path)/autoware_behavior_path_dynamic_obstacle_avoidance_module/dynamic_obstacle_avoidance.param.yaml"
     />
     <arg name="behavior_path_planner_lane_change_module_param_path" value="$(var behavior_path_config_path)/lane_change/lane_change.param.yaml"/>
-    <arg name="behavior_path_planner_goal_planner_module_param_path" value="$(var behavior_path_config_path)/goal_planner/goal_planner.param.yaml"/>
-    <arg name="behavior_path_planner_start_planner_module_param_path" value="$(var behavior_path_config_path)/start_planner/start_planner.param.yaml"/>
+    <arg name="behavior_path_planner_goal_planner_module_param_path" value="$(eval &quot;'$(find-pkg-share autosdv_launch)/config/planning_rc/goal_planner.param.yaml' if '$(var planning_profile)' == 'rc' else '$(var behavior_path_config_path)/goal_planner/goal_planner.param.yaml'&quot;)"/>
+    <arg name="behavior_path_planner_start_planner_module_param_path" value="$(eval &quot;'$(find-pkg-share autosdv_launch)/config/planning_rc/start_planner.param.yaml' if '$(var planning_profile)' == 'rc' else '$(var behavior_path_config_path)/start_planner/start_planner.param.yaml'&quot;)"/>
     <arg name="behavior_path_bidirectional_traffic_module_param_path" value="$(var behavior_path_config_path)/autoware_behavior_path_bidirectional_traffic_module/bidirectional_traffic.param.yaml"/>
     <arg name="behavior_path_planner_drivable_area_expansion_param_path" value="$(var behavior_path_config_path)/drivable_area_expansion.param.yaml"/>
 
@@ -125,7 +138,7 @@
     <!-- planning validator -->
     <arg name="planning_validator_param_path" value="$(var common_config_path)/planning_validator/planning_validator.param.yaml"/>
     <arg name="planning_validator_latency_checker_param_path" value="$(var common_config_path)/planning_validator/latency_checker.param.yaml"/>
-    <arg name="planning_validator_trajectory_checker_param_path" value="$(var common_config_path)/planning_validator/trajectory_checker.param.yaml"/>
+    <arg name="planning_validator_trajectory_checker_param_path" value="$(eval &quot;'$(find-pkg-share autosdv_launch)/config/planning_rc/trajectory_checker.param.yaml' if '$(var planning_profile)' == 'rc' else '$(var common_config_path)/planning_validator/trajectory_checker.param.yaml'&quot;)"/>
     <arg name="planning_validator_intersection_collision_checker_param_path" value="$(var common_config_path)/planning_validator/intersection_collision_checker.param.yaml"/>
     <arg name="planning_validator_rear_collision_checker_param_path" value="$(var common_config_path)/planning_validator/rear_collision_checker.param.yaml"/>
   </include>

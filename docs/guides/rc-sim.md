@@ -106,14 +106,19 @@ Engage. Autoware's velocity planner decides the speeds, as on the car, but
 with the planning caps raised for this run only: `max_vel` 4.17 -> 11.5 m/s and
 acceleration 1.0 -> 2.5 m/s^2 and normal deceleration 1.0 -> 1.5 m/s^2 (jerk 1.0 -> 5.0), from the package's
 `config/common.param.yaml`, a copy of upstream's `common.param.yaml`.
-`rc_sim.launch.xml` composes planning through `rc_sim_planning_component.launch.xml`
-(upstream's component with that one path changed), because `autoware.launch.xml`
-exposes no argument for it; the car's own launch keeps 4.17 and 1.0. So the run
+`rc_sim.launch.xml` composes planning through autosdv_launch's `components/autosdv_planning_component.launch.xml`
+(upstream's component, copied, with `common_param_path` an argument), because
+`autoware.launch.xml` exposes no argument for it; the car loads the same component with
+upstream's `common.param.yaml`, so it keeps 4.17 and 1.0. So the run
 reproduces the lab's 11 m/s straight (the smoke test requires a peak of at least
 9 m/s and a stop within 1 m of the stop line; measured 0.02-0.07 m short before
 the clock handshake, 0.03-0.05 m past with it). The speed loop runs in lockstep with the clock (below); the rest of
 Autoware still races within a tick, so results are close to, but not exactly,
 the graded run.
+
+`planning_profile:=rc` swaps in the RC-scale planning files (no start planner, no
+reversing manoeuvres, a 0.5 m path interval, the car's curvature); the default `stock`
+is upstream's. See `autosdv_launch/config/planning_rc/README.md`.
 
 ### Clock handshake (lockstep)
 

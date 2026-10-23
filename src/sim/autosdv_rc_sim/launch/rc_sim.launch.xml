@@ -40,6 +40,7 @@
 
   <!-- tier4_simulator_component reads this from its including scope (planning_simulator declares it) -->
   <arg name="scenario_simulation" default="false"/>
+  <arg name="planning_profile" default="stock" description="stock, or rc: autosdv_launch config/planning_rc/ (Lab 3)"/>
 
   <set_parameter name="use_sim_time" value="true"/>
 
@@ -64,8 +65,12 @@
     <arg name="rviz" value="$(var rviz)"/>
   </include>
 
-  <!-- planning: upstream's component with common.param.yaml swapped (max_vel 4.17 -> 11.5, acc 1.0 -> 2.5) -->
-  <include file="$(find-pkg-share autosdv_rc_sim)/launch/rc_sim_planning_component.launch.xml">
+  <!-- planning: AutoSDV's component (upstream's, copied) with this package's common.param.yaml
+       (max_vel 4.17 -> 11.5, acc 1.0 -> 2.5), and the planning profile: stock, or rc for the
+       RC-scale overrides Lab 3 drives with (autosdv_launch config/planning_rc/README.md) -->
+  <include file="$(find-pkg-share autosdv_launch)/launch/components/autosdv_planning_component.launch.xml">
+    <arg name="common_param_path" value="$(find-pkg-share autosdv_rc_sim)/config/common.param.yaml"/>
+    <arg name="planning_profile" value="$(var planning_profile)"/>
     <arg name="module_preset" value="default"/>
     <arg name="enable_all_modules_auto_mode" value="false"/>
     <arg name="is_simulation" value="true"/>
