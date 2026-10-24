@@ -14,5 +14,5 @@ Each file here is a copy of upstream's (Autoware 1.5.0) with the changed lines m
 | (module preset) | `launch_start_planner_module` false | from a stop a few degrees off the lane its pull-outs reverse, or with reversing off find no forward path and hold the car; a loop has nothing to pull out of. Set in the component, not a file |
 | `trajectory_checker.param.yaml` | curvature 1.0 -> 1.2 | the car turns at 0.88 m radius (curvature 1.14); 1.0 rejects curves it can drive |
 
-Used by Lab 3 (`lab3_run.launch.xml`, `lab3_sim_lap`). `autosdv_launch/config/planning/`
-is an older, unused copy of upstream's tree: nothing loads it.
+Used by Lab 3 (`lab3_run.launch.xml`, `lab3_sim_lap`). Every other planning file
+comes from `autoware_launch` unchanged.
