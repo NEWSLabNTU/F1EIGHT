@@ -137,3 +137,12 @@ route MAP_DIR *ARGS:
     map=$1; shift
     source scripts/env.sh
     exec ros2 run autosdv_lab3 lab3_route --map "$map" "$@"
+
+#   just lab3 grade --map TEAM_MAP --run RUN_BAG --checkpoints CP_BAG --marks marks.yaml --sheet sheet.yaml
+#   just lab3 grade ... --fallback-map ~/lab3/ta_map_robin_w -o report.yaml
+# TA: the week-2 field marks from a team's bags (board init, checkpoints, legs, localization)
+[positional-arguments]
+grade *ARGS:
+    #!/usr/bin/env bash
+    source scripts/env.sh
+    exec ros2 run autosdv_lab3 lab3_grade "$@"

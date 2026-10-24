@@ -41,6 +41,13 @@
     <arg name="rviz" value="$(var rviz)"/>
   </include>
 
+  <!-- latched /lab3/run_meta: launch time and the hash of the map loaded, for grading -->
+  <node pkg="autosdv_lab3" exec="lab3_run_meta" name="lab3_run_meta" output="log">
+    <param name="map_path" value="$(var map_path)"/>
+    <param name="vehicle_id" value="$(var vehicle_id)"/>
+    <param name="use_sim_time" value="$(var is_simulation)"/>
+  </node>
+
   <include file="$(find-pkg-share reflective_pose_autoware)/launch/board_pose_initializer.launch.xml"
            if="$(eval &quot;'$(var pose_initializer)' == 'board'&quot;)">
     <arg name="config_file" value="$(var board_config)"/>

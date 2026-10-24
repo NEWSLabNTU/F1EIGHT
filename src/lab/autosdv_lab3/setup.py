@@ -42,6 +42,8 @@ setup(
             'lab3_check_lanelet = autosdv_lab3.lanelet_check:main',
             'lab3_sim_lap = autosdv_lab3.sim_lap:main',
             'lab3_route = autosdv_lab3.route:main',
+            'lab3_run_meta = autosdv_lab3.run_meta:main',
+            'lab3_grade = autosdv_lab3.grade:main',
         ],
     },
 )

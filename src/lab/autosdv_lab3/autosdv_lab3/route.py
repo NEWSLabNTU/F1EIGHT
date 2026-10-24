@@ -29,6 +29,10 @@ autoware/adapi_specs of Autoware 1.5.0): /api/routing/clear_route (ClearRoute),
 /api/routing/set_route_points (SetRoutePoints), /api/routing/state (RouteState,
 transient local), /api/operation_mode/change_to_autonomous (ChangeOperationMode),
 /api/operation_mode/state, /api/localization/initialize (InitializeLocalization).
+
+Each leg set, and each arrival, is announced on /lab3/route_events (std_msgs/String,
+JSON: event, run, lap, leg, legs, goal), so the week-2 grader can tell the legs this
+script drove from a route set by hand.
 """
 
 import argparse
@@ -36,6 +40,7 @@ import math
 import os
 import sys
 import time
+import uuid
 import xml.etree.ElementTree as ET
 from dataclasses import dataclass, field
 from typing import Dict, List, Optional, Tuple
@@ -55,6 +60,7 @@ BACKWARD_CLEAR = 6.0
 BOUNDARY_MARGIN = 0.3  # keep waypoints this far from a lanelet junction
 GOAL_MARGIN = 1.0      # and goals this far
 RESAMPLE = 0.1       # m between centreline samples
+EVENTS_TOPIC = '/lab3/route_events'
 
 
 class MapError(ValueError):
@@ -546,11 +552,26 @@ def main(argv=None) -> int:
         print(describe(loop_route(loop)))
         return 0
 
+    import json
+
     import rclpy
     from rclpy.node import Node
+    from rclpy.qos import DurabilityPolicy, QoSProfile, ReliabilityPolicy
+    from std_msgs.msg import String
     rclpy.init()
     node = Node('lab3_route')
     api = AdApi(node)
+    # latched with history: a recorder still discovering this publisher when the first
+    # leg is announced receives it anyway (measured: the first event lost otherwise)
+    events = node.create_publisher(String, EVENTS_TOPIC, QoSProfile(
+        depth=100, reliability=ReliabilityPolicy.RELIABLE,
+        durability=DurabilityPolicy.TRANSIENT_LOCAL))
+    run_id = uuid.uuid4().hex[:8]
+    api.wait_for(lambda: events.get_subscription_count() > 0, 2.0)
+
+    def announce(event, **fields):
+        events.publish(String(data=json.dumps({'event': event, 'run': run_id, **fields})))
+        api.spin(0.01)
     try:
         if not api.wait_for(lambda: api.pose() is not None, 15.0):
             print('error: no /localization/kinematic_state: is the stack running and localized?',
@@ -568,6 +589,8 @@ def main(argv=None) -> int:
                 if not ok:
                     print(f'error: the route was refused: {msg}', file=sys.stderr)
                     return 1
+                announce('leg_set', lap=lap, leg=i + 1, legs=len(route.legs),
+                         goal=[round(float(v), 4) for v in leg.goal])
                 print(f'  leg {i + 1}/{len(route.legs)} set'
                       + ('' if args.engage else '; engage from RViz or the web UI (or pass --engage)'))
                 if args.engage:
@@ -588,6 +611,7 @@ def main(argv=None) -> int:
                     print(f'error: leg {i + 1} of lap {lap} did not arrive in {args.timeout:.0f} s',
                           file=sys.stderr)
                     return 1
+                announce('arrived', lap=lap, leg=i + 1, legs=len(route.legs))
             print(f'lap {lap}: arrived')
         return 0
     except KeyboardInterrupt:

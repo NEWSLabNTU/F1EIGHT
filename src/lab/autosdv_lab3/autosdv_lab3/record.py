@@ -39,6 +39,10 @@ RUN_EXTRA = [
     '/api/operation_mode/state',
     '/control/command/control_cmd',
     cars.BOARD_POSE_RUN,
+    '/planning/mission_planning/route',   # each route's goal, to tell scripted from hand-set
+    '/initialpose',                       # a pose set in RViz
+    '/lab3/run_meta',                     # launch time and map hash (lab3_run_meta)
+    '/lab3/route_events',                 # the legs lab3_route set
 ]
 
 
@@ -109,6 +113,11 @@ def main(argv=None):
         print('drive: 10 s still facing the board, the room at <= 0.8 m/s closing the loop '
               'twice and passing the board slowly each time, back facing the board, 10 s '
               'still; then Ctrl-C')
+    else:
+        # the board pose that initializes the stack is not latched: a recorder started
+        # after INITIALIZED cannot show the board did it
+        print('run: start this before `just lab3 run`, so the bag holds the board '
+              'initialization; then `just lab3 route`; Ctrl-C after the last lap')
     proc = subprocess.Popen(cmd, start_new_session=True)
     stop = {'now': False}
     signal.signal(signal.SIGINT, lambda *_: stop.update(now=True))

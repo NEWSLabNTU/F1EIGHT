@@ -17,10 +17,39 @@ anywhere         just lab3 anchor BAG_glim/raw_map.pcd MAP --car car_b
                  just lab3 downsample MAP --voxel 0.1
                  (Vector Map Builder -> MAP/lanelet2_map.osm)
                  just lab3 check-lanelet MAP                 requirements + simulator lap
-week 2, hall     just lab3 run car_b MAP                     terminal 1
-                 just lab3 record --car car_b --team 3 --kind run --map MAP
+week 2, hall     just lab3 record --car car_b --team 3 --kind run --map MAP   terminal 2, FIRST
+                 just lab3 run car_b MAP                     terminal 1
                  just lab3 route MAP --engage --laps 2
+TA               just lab3 grade --map MAP --run RUN_BAG --checkpoints CP_BAG \
+                     --marks marks.yaml --sheet sheet.yaml [--fallback-map DIR]
 ```
+
+The run bag is started before the stack: the board pose that initializes it is not
+latched, so a bag that begins after INITIALIZED cannot show the board did it.
+
+## Week-2 grading (`lab3_grade`)
+
+The marks of the course plan's week-2 table, from the bags, on fixed lines (no TA
+reference run). The module docstring of `autosdv_lab3/grade.py` holds every line.
+
+| item | marks | from |
+|---|---|---|
+| board initialization | 5 | INITIALIZED <= 30 s after `/lab3/run_meta`'s launch time; no `/initialpose`; the first NDT pose within 0.5 m and 10 deg of the board's |
+| checkpoint accuracy | 15 | each mark's first stop of >= 3 s within 1 m: half position (0.10 m full, 0.40 m zero), half heading (3 deg full, 15 deg zero) |
+| autonomous laps | 15 | the first four legs `/lab3/route_events` announces, 3.75 each: arrived within 2.5 m of the goal, autonomous >= 90 % of the leg, no route set by hand, no takeover on the TA's sheet |
+| staying localized | 10 | over the graded legs, 2.5 each: no re-initialization; no NDT pose jump > 0.3 m beyond what the speed explains; NVTL >= the indoor gate >= 95 % of the time; median scan-to-map residual <= 0.10 m |
+| fallback map | -10 | `/lab3/run_meta`'s map hash is a `--fallback-map` folder's |
+
+What the stack adds to the bag for this: `lab3_run_meta` (in `lab3_run.launch.xml`)
+latches the launch time and the loaded map's hash; `lab3_route` announces each leg it
+sets and each arrival. The transmitter's manual switch is hardware and leaves no trace,
+so the TA's sheet lists those takeovers. An item the bag cannot decide (no run meta, a
+map hash that is neither map, a recorder started late) reads `—` and the total is left
+to the TA.
+
+The residual places each sampled scan (one a second, 3000 points) by the localization
+pose, `base_link` on the map's floor (z 0), and measures the nearest map point, capped
+at 1 m; a coarse voxel raises it, which is the trade the team chose.
 
 ## The map folder
 
